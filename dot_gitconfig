@@ -1,0 +1,34 @@
+[user]
+	name = vg101
+	email = virtualguard101@gmail.com
+[http]
+	proxy = 127.0.0.1:7897
+[https]
+	proxy = 127.0.0.1:7897
+[credential "https://github.com"]
+	provider = generic
+[color]
+	ui = auto
+[alias]
+	graph = log --all --graph --decorate --oneline
+[core]
+	editor = vim
+[merge]
+	tool = vscode
+[diff]
+	tool = vscode
+[init]
+	defaultBranch = main
+[mergetool]
+	keepBackup = false
+[lfs]
+	concurrenttransfers = 3
+[lfs "customtransfer.xet"]
+	path = git-xet
+	args = transfer
+	concurrent = true
+[filter "lfs"]
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+	clean = git-lfs clean -- %f
