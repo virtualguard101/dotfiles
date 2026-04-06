@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "wps-office": {
+      "command": "node",
+      "args": ["/home/virtualguard/vg101/app/wps-skills/wps-office-mcp/dist/index.js"]
+    }
+  }
+}
+
