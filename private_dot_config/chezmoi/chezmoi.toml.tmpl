@@ -1,0 +1,11 @@
+encryption = "age"
+
+[age]
+    # IMPORTANT: This is only the path to your private key.
+    # Keep the key file itself out of git and back it up separately.
+    identity = {{ joinPath .chezmoi.homeDir "vg101/secret/chezmoi_age_key.txt" | quote }}
+    recipient = "age15r3jnkzxal9mgu3pfngd4t67rwnpy7ftw0udt2cze93jvmnmu9cqvms9a5"
+
+[edit]
+    command = "code"
+    args = ["--wait"]
