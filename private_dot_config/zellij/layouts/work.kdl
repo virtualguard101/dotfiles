@@ -1,0 +1,9 @@
+layout {
+  tab name="main" split_direction="horizontal" {
+    pane size="40%" split_direction="vertical" {
+      pane size="50%" cwd="~/vg101/notebooks/wiki"
+      pane size="50%" cwd="~" command="htop"
+    }
+    pane size="60%" cwd="~/vg101"
+  }
+}
