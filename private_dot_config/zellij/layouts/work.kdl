@@ -1,9 +1,19 @@
 layout {
-  tab name="main" split_direction="horizontal" {
-    pane size="40%" split_direction="vertical" {
-      pane size="50%" cwd="~/vg101/notebooks/wiki"
-      pane size="50%" cwd="~" command="htop"
+  default_tab_template {
+    pane size=1 borderless=true {
+      plugin location="zellij:tab-bar"
     }
-    pane size="60%" cwd="~/vg101"
+    children
+    pane size=2 borderless=true {
+      plugin location="zellij:status-bar"
+    }
+  }
+
+  tab name="main" split_direction="vertical" {
+    pane size="50%" cwd="~/vg101"
+    pane size="50%" split_direction="horizontal" {
+      pane size="50%" cwd="~" command="htop"
+      pane size="50%" cwd="~/vg101/notebooks/wiki"
+    }
   }
 }
