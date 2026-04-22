@@ -1,0 +1,155 @@
+// 将键绑定放在此文件中以覆盖默认值
+[
+    {
+        "key": "ctrl+shift+r",
+        "command": "workbench.view.remote"
+    },
+    {
+        "key": "capslock",
+        "command": "extension.vim_escape",
+        "when": "editorTextFocus"
+    },
+    {
+        "key": "ctrl+shift+a",
+        "command": "workbench.view.extension.roo-cline-ActivityBar"
+    },
+    {
+        "key": "alt+x",
+        "command": "workbench.action.restartExtensionHost"
+    },
+    {
+        "key": "alt+t",
+        "command": "workbench.view.extension.todo-tree-container"
+    },
+    {
+        "key": "alt+l",
+        "command": "workbench.view.extension.leetcode"
+    },
+    {
+        "key": "alt+g",
+        "command": "workbench.view.extension.luogu"
+    },
+    {
+        "key": "alt+l",
+        "command": "workbench.view.extension.lcpr_bar"
+    },
+    {
+        "key": "alt+d",
+        "command": "workbench.view.extension.containersView"
+    },
+    {
+        "key": "alt+s",
+        "command": "save-as-root.saveFile"
+    },
+    {
+        "key": "alt+a",
+        "command": "extension.dailyAnime"
+    },
+    {
+        "key": "alt+l",
+        "command": "-extension.dailyAnime"
+    },
+    {
+        "key": "alt+i",
+        "command": "workbench.action.chat.open",
+        "when": "!chatSetupDisabled && !chatSetupHidden"
+    },
+    {
+        "key": "ctrl+alt+i",
+        "command": "-workbench.action.chat.open",
+        "when": "!chatSetupDisabled && !chatSetupHidden"
+    },
+    {
+        "key": "alt+left",
+        "command": "workbench.action.focusLeftGroup"
+    },
+    {
+        "key": "alt+right",
+        "command": "workbench.action.focusRightGroup"
+    },
+    {
+        "key": "alt+up",
+        "command": "workbench.action.focusAboveGroup"
+    },
+    {
+        "key": "alt+down",
+        "command": "workbench.action.focusBelowGroup"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "workbench.panel.chat",
+        "when": "workbench.panel.chat.view.copilot.active"
+    },
+    {
+        "key": "ctrl+alt+i",
+        "command": "-workbench.panel.chat",
+        "when": "workbench.panel.chat.view.copilot.active"
+    },
+    {
+        "key": "alt+c",
+        "command": "claude-code.runClaude"
+    },
+    {
+        "key": "shift+enter",
+        "command": "notebook.cell.insertMarkdownCellBelow",
+        "when": "config.notebook.globalToolbarShowLabel && notebookEditable && config.notebook.globalToolbarShowLabel != 'never' && config.notebook.insertToolbarLocation != 'betweenCells' && config.notebook.insertToolbarLocation != 'hidden'"
+    },
+    {
+        "key": "ctrl+enter",
+        "command": "notebook.cell.insertCodeCellBelow",
+        "when": "notebookEditable && config.notebook.insertToolbarLocation != 'betweenCells' && config.notebook.insertToolbarLocation != 'hidden'"
+    },
+    {
+        "key": "shift+meta+d",
+        "command": "notebook.clearAllCellsOutputs",
+        "when": "config.notebook.globalToolbar && notebookKernelCount > 0 || config.notebook.globalToolbar && notebookKernelSourceCount > 0"
+    },
+    {
+        "key": "shift+meta+enter",
+        "command": "notebook.execute",
+        "when": "config.notebook.globalToolbar && !notebookHasSomethingRunning || config.notebook.globalToolbar && notebookInterruptibleKernel && !notebookHasSomethingRunning || config.notebook.globalToolbar && !notebookHasSomethingRunning && !notebookInterruptibleKernel"
+    },
+    {
+        "key": "d d",
+        "command": "-notebook.cell.delete",
+        "when": "notebookEditorFocused && !inputFocus && !notebookOutputInputFocused"
+    },
+    {
+        "key": "alt+f",
+        "command": "editor.action.quickFix",
+        "when": "editorHasCodeActionsProvider && textInputFocus && !editorReadonly"
+    },
+    {
+        "key": "ctrl+.",
+        "command": "-editor.action.quickFix",
+        "when": "editorHasCodeActionsProvider && textInputFocus && !editorReadonly"
+    },
+    {
+        "key": "alt+f",
+        "command": "workbench.action.terminal.showQuickFixes",
+        "when": "terminalFocus"
+    },
+    {
+        "key": "ctrl+.",
+        "command": "-workbench.action.terminal.showQuickFixes",
+        "when": "terminalFocus"
+    },
+    {
+        "key": "alt+f",
+        "command": "problems.action.showQuickFixes",
+        "when": "problemFocus"
+    },
+    {
+        "key": "ctrl+.",
+        "command": "-problems.action.showQuickFixes",
+        "when": "problemFocus"
+    },
+    {
+        "key": "alt+h",
+        "command": "composer.showComposerHistory"
+    },
+    {
+        "key": "ctrl+alt+'",
+        "command": "-composer.showComposerHistory"
+    }
+]
