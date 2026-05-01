@@ -13,7 +13,7 @@ layout {
     pane size="50%" cwd="~/vg101"
     pane size="50%" split_direction="horizontal" {
       pane size="50%" cwd="~" command="htop"
-      pane size="50%" cwd="~/vg101/notebooks/wiki"
+      pane size="50%" cwd="~/vg101/notebooks/vglab"
     }
   }
 }
