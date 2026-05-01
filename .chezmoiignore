@@ -2,3 +2,4 @@
 ./bootstrap.sh
 ./bootstrap.sh
 ./convert_url_to_ssh.py
+archpkg.txt
