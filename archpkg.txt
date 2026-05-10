@@ -111,6 +111,7 @@ plasma-meta
 pnpm
 podman
 powershell-bin
+pre-commit
 pwndbg
 python-dbus
 python-docx
