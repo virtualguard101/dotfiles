@@ -62,6 +62,7 @@ grc
 grub
 gwenview
 htop
+inetutils
 jq
 jupyter-notebook
 just
@@ -69,6 +70,7 @@ keepassxc
 konsole
 kstars
 kubectl
+lark-cli-bin
 less
 lib32-vulkan-radeon
 libappindicator
@@ -83,6 +85,10 @@ localsend-bin
 logisim-evolution-bin
 lolcat
 mandoc
+mingw-w64-crt
+mingw-w64-gcc
+mingw-w64-headers
+mingw-w64-winpthreads
 mtools
 ncmdump
 neovim
@@ -112,6 +118,7 @@ pnpm
 podman
 powershell-bin
 pre-commit
+proxychains-ng
 pwndbg
 python-dbus
 python-docx
@@ -128,6 +135,7 @@ sl
 sof-firmware
 steam
 tailscale
+tcpdump
 tela-icon-theme-git
 telegram-desktop
 timeshift
