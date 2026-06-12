@@ -90,6 +90,7 @@ mingw-w64-gcc
 mingw-w64-headers
 mingw-w64-winpthreads
 mtools
+mysql
 ncmdump
 neovim
 net-tools
