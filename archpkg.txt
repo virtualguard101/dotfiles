@@ -26,6 +26,7 @@ consolas-font
 cpu-x
 cuda
 cursor-bin
+dbeaver
 discord
 distrobox
 docker
@@ -134,6 +135,7 @@ scons
 scrcpy-bin
 sl
 sof-firmware
+spirv-headers
 steam
 tailscale
 tcpdump
@@ -159,7 +161,15 @@ vim
 virtualbox
 virtualbox-guest-utils
 visual-studio-code-bin
+volk
+vulkan-extra-layers
+vulkan-extra-tools
+vulkan-headers
+vulkan-html-docs
+vulkan-profiles
 vulkan-radeon
+vulkan-utility-libraries
+vulkan-validation-layers
 wget
 wine
 winetricks
