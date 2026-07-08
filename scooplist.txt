@@ -1,27 +1,15 @@
 Installed apps:
 
-Name        Version  Source Updated             Info
-----        -------  ------ -------             ----
-7zip        26.00    main   2026-04-04 14:26:31     
-chezmoi     2.70.5   main   2026-07-07 01:13:33     
-clangd      22.1.0   main   2026-05-02 00:48:09     
-claude-code 2.1.92   main   2026-04-04 15:24:08     
-cmake       4.3.2    main   2026-05-12 23:03:23     
-dark        3.14.1   main   2026-04-16 23:11:47     
-docker      29.4.0   main   2026-04-11 01:23:43     
-gcc         15.2.0   main   2026-04-21 14:37:11     
-git         2.53.0.2 main   2026-04-04 15:24:46     
-innounp     2.67.6   main   2026-04-04 14:30:26     
-just        1.49.0   main   2026-04-08 21:01:56     
-mongodb     8.3.4    main   2026-06-29 14:21:35     
-mongosh     2.9.0    extras 2026-06-29 15:16:56     
-mysql       9.7.0    main   2026-04-28 14:06:09     
-mysql-shell 9.7.0    main   2026-04-28 14:12:37     
-nodejs      25.9.0   main   2026-04-04 15:36:52     
-openssl     3.6.1    main   2026-04-04 14:34:24     
-pnpm        10.33.0  main   2026-04-04 15:37:22     
-python      3.14.4   main   2026-04-16 23:12:37     
-tokei       12.1.2   main   2026-06-01 00:54:00     
-uv          0.11.3   main   2026-04-04 14:29:18     
+Name            Version       Source Updated             Info
+----            -------       ------ -------             ----
+7zip            26.02         main   2026-07-08 16:19:40     
+claude-code     2.1.204       main   2026-07-08 16:33:32     
+gcc             15.2.0        main   2026-07-08 16:34:19     
+mongodb         8.3.4         main   2026-07-08 16:35:46     
+mongodb-compass 1.49.8        extras 2026-07-08 17:01:29     
+mongosh         2.9.2         extras 2026-07-08 16:36:26     
+mysql           9.7.1         main   2026-07-08 16:37:24     
+mysql-shell     9.7.1         main   2026-07-08 16:43:10     
+vcredist2022    14.51.36247.0 extras 2026-07-08 16:36:51     
 
 
