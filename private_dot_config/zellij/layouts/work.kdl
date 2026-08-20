@@ -12,7 +12,7 @@ layout {
   tab name="main" split_direction="vertical" {
     pane size="50%" cwd="~/vg101"
     pane size="50%" split_direction="horizontal" {
-      pane size="50%" cwd="~" command="htop"
+      pane size="50%" cwd="~" command="btm"
       pane size="50%" cwd="~/vg101/vglab"
     }
   }

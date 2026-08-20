@@ -15,6 +15,8 @@ autojump
 base
 base-devel
 bbswitch-dkms
+bc
+bottom
 btrfs-progs
 chafa
 chezmoi
@@ -27,6 +29,7 @@ cpu-x
 cuda
 cursor-bin
 dbeaver
+digital
 discord
 distrobox
 docker
@@ -100,6 +103,7 @@ nginx
 nix
 nmap
 nodejs
+notion-app-electron
 noto-fonts-cjk
 noto-fonts-extra
 npm
@@ -131,13 +135,14 @@ qemu-system-aarch64
 radeon-profile-git
 rime-ice-git
 rime-pinyin-moegirl
+riscv-gnu-toolchain-bin
 scons
 scrcpy-bin
 sl
 sof-firmware
 spirv-headers
 steam
-tailscale
+syncthing
 tcpdump
 tela-icon-theme-git
 telegram-desktop
@@ -155,6 +160,7 @@ ttf-wps-fonts
 ufw
 unarchiver
 uv
+valgrind
 vcpkg
 ventoy-bin
 vim
