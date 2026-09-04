@@ -1,115 +1,135 @@
-   -    \    |    /    -    \    |                                                                                                                            -                                                                                                                         Name                                      Id                                        Version          Available  Source
------------------------------------------------------------------------------------------------------------------------
-Git                                       Git.Git                                   2.55.0.2                    winget
-GlassWire 3.9 (remove only)               GlassWire.GlassWire                       3.9.1102                    winget
-Mozilla Firefox (x64 zh-CN)               Mozilla.Firefox.zh-CN                     152.0.5                     winget
-Mozilla Maintenance Service               ARP\Machine\X64\MozillaMaintenanceService 152.0.4                     
-Wallpaper Engine:壁纸引擎                 ARP\Machine\X64\Steam App 431960          Unknown                     
-Clash Party                               Mihomo-Party.Mihomo-Party                 2.0.0                       winget
-ECHO NEXT 26.7.1                          ARP\Machine\X64\f804f62f-8a15-5847-bc17-… 26.7.1                      
-VMware Workstation                        ARP\Machine\X64\{6EC7759F-B700-4743-BB65… 17.6.4                      
-CMake                                     Kitware.CMake                             4.3.4                       winget
-Nushell                                   Nushell.Nushell                           0.113.1                     winget
-OpenSSL 4.0.1 (64-bit)                    ShiningLight.OpenSSL.Dev                  4.0.1                       winget
-Neovim                                    Neovim.Neovim                             0.12.3                      winget
-Microsoft Edge                            Microsoft.Edge                            150.0.4078.48               winget
-Steam                                     Valve.Steam                               2.10.91.91                  winget
-Microsoft Visual C++ v14 Redistributable… Microsoft.VCRedist.2015+.x64              14.51.36247.0               winget
-Microsoft Visual C++ v14 Redistributable… Microsoft.VCRedist.2015+.x86              14.51.36247.0               winget
-WakaTime 3.0.0                            Wakatime.DesktopWakatime                  3.0.0.1                     winget
-Just                                      Casey.Just                                1.55.1                      winget
-飞书                                      ByteDance.Feishu                          7.71.12                     winget
-clangd                                    LLVM.clangd                               22.1.6                      winget
-Microsoft OneDrive                        Microsoft.OneDrive                        26.108.0607.0002            winget
-Rustup: the Rust toolchain installer      Rustlang.Rustup                           1.29.0                      winget
-tokei                                     XAMPPRocky.Tokei                          12.1.2                      winget
-uv                                        astral-sh.uv                              0.11.26                     winget
-uTools 7.8.0                              Yuanli.uTools                             7.8.0                       winget
-chezmoi                                   twpayne.chezmoi                           2.70.5           2.71.0     winget
-PowerToys (Preview) x64                   XP89DCGQ3K6VLD                            0.100.2                     msstore
-Microsoft Visual Studio Code (User)       Microsoft.VisualStudioCode                1.127.0                     winget
-Cursor (User)                             Anysphere.Cursor                          3.10.20                     winget
-AMD Radeon Software                       MSIX\AdvancedMicroDevicesInc-2.AMDRadeon… 10.22.40043.0               
-Microsoft Clipchamp                       MSIX\Clipchamp.Clipchamp_4.5.10720.0_x64… 4.5.10720.0                 
-Dolby Access                              MSIX\DolbyLaboratories.DolbyAccess_3.27.… 3.27.11070.0                
-Dolby Vision Extensions                   MSIX\DolbyLaboratories.DolbyVisionAccess… 2.20503.802.0               
-AV1 Video Extension                       MSIX\Microsoft.AV1VideoExtension_2.0.7.0… 2.0.7.0                     
-AVC 编码器视频扩展                        MSIX\Microsoft.AVCEncoderVideoExtension_… 1.1.23.0                    
-Windows 应用程序兼容性增强                MSIX\Microsoft.ApplicationCompatibilityE… 1.2511.9.0                  
-资讯                                      MSIX\Microsoft.BingNews_4.55.62231.0_x64… 4.55.62231.0                
-Microsoft 必应                            MSIX\Microsoft.BingSearch_1.1.43.0_x64__… 1.1.43.0                    
-MSN 天气                                  MSIX\Microsoft.BingWeather_3.2.10.0_x64_… 3.2.10.0                    
-命令面板                                  MSIX\Microsoft.CommandPalette_0.11.11762… 0.11.11762.0                
-App Installer                             Microsoft.AppInstaller                    1.26.509.0       1.29.280.0 winget
-Xbox                                      MSIX\Microsoft.GamingApp_2505.900.9.0_x6… 2505.900.9.0                
-获取帮助                                  MSIX\Microsoft.GetHelp_10.2407.40222.0_x… 10.2407.40222.0             
-HEIF 图像扩展                             MSIX\Microsoft.HEIFImageExtension_1.2.36… 1.2.36.0                    
-来自设备制造商的 HEVC 视频扩展            MSIX\Microsoft.HEVCVideoExtension_2.5.10… 2.5.10.0                    
-中文(简体)本地体验包                      MSIX\Microsoft.LanguageExperiencePackzh-… 26100.161.258.0             
-MPEG-2 视频扩展                           MSIX\Microsoft.MPEG2VideoExtension_1.2.1… 1.2.13.0                    
-Microsoft Edge                            MSIX\Microsoft.MicrosoftEdge.Stable_150.… 150.0.4078.48               
-Microsoft 365 Copilot                     MSIX\Microsoft.MicrosoftOfficeHub_19.250… 19.2506.56051.0             
-Solitaire & Casual Games                  MSIX\Microsoft.MicrosoftSolitaireCollect… 4.25.4290.0                 
-Microsoft 便笺                            MSIX\Microsoft.MicrosoftStickyNotes_4.0.… 4.0.6105.0                  
-Microsoft .Net Native Framework Package … MSIX\Microsoft.NET.Native.Framework.2.2_… 2.2.29512.0                 
-Microsoft .Net Native Framework Package … MSIX\Microsoft.NET.Native.Framework.2.2_… 2.2.29512.0                 
-Microsoft .Net Native Runtime Package 2.2 Microsoft.DotNet.Native.Runtime           2.2.28604.0                 winget
-Microsoft .Net Native Runtime Package 2.2 Microsoft.DotNet.Native.Runtime           2.2.28604.0                 winget
-OneDrive                                  MSIX\Microsoft.OneDriveSync_26108.607.2.… 26108.607.2.0               
-Outlook for Windows                       MSIX\Microsoft.OutlookForWindows_1.2026.… 1.2026.602.400              
-画图                                      MSIX\Microsoft.Paint_11.2603.251.0_x64__… 11.2603.251.0               
-Power Automate                            MSIX\Microsoft.PowerAutomateDesktop_1.0.… 1.0.2046.0                  
-PowerToys FileLocksmith Context Menu      MSIX\Microsoft.PowerToys.FileLocksmithCo… 0.100.2.0                   
-PowerToys ImageResizer Context Menu       MSIX\Microsoft.PowerToys.ImageResizerCon… 0.100.2.0                   
-PowerToys PowerRename Context Menu        MSIX\Microsoft.PowerToys.PowerRenameCont… 0.100.2.0                   
-PowerToys.SparseApp                       MSIX\Microsoft.PowerToys.SparseApp_0.100… 0.100.2.0                   
-Raw Image Extension                       MSIX\Microsoft.RawImageExtension_2.5.7.0… 2.5.7.0                     
-截图工具                                  MSIX\Microsoft.ScreenSketch_11.2602.49.0… 11.2602.49.0                
-Windows 安全中心                          MSIX\Microsoft.SecHealthUI_1000.29554.10… 1000.29554.1001…            
-Microsoft Engagement Framework            MSIX\Microsoft.Services.Store.Engagement… 10.0.23012.0                
-Microsoft Engagement Framework            MSIX\Microsoft.Services.Store.Engagement… 10.0.23012.0                
-“开始体验”应用                            MSIX\Microsoft.StartExperiencesApp_1.151… 1.151.0.0                   
-Microsoft Store 体验主机                  MSIX\Microsoft.StorePurchaseApp_22605.14… 22605.1401.3.0              
-Microsoft To Do                           MSIX\Microsoft.Todos_0.176.7601.0_x64__8… 0.176.7601.0                
-Microsoft.UI.Xaml.2.8                     Microsoft.UI.Xaml.2.8                     8.2511.26001.0              winget
-Microsoft.UI.Xaml.2.8                     Microsoft.UI.Xaml.2.8                     8.2501.31001.0              winget
-Microsoft Visual C++ 2015 UWP Desktop Ru… Microsoft.VCLibs.Desktop.14               14.0.33728.0                winget
-Microsoft Visual C++ 2015 UWP Desktop Ru… Microsoft.VCLibs.Desktop.14               14.0.33728.0                winget
-Microsoft Visual C++ 2015 UWP Runtime Pa… Microsoft.VCLibs.14                       14.0.33519.0                winget
-Microsoft Visual C++ 2015 UWP Runtime Pa… Microsoft.VCLibs.14                       14.0.33519.0                winget
-VP9 视频扩展                              MSIX\Microsoft.VP9VideoExtensions_1.2.12… 1.2.12.0                    
-Visual Studio Code                        MSIX\Microsoft.VisualStudioCode_1.0.127.… 1.0.127.0                   
-Web 媒体扩展                              MSIX\Microsoft.WebMediaExtensions_2.1.26… 2.1.26.0                    
-WebP 映像扩展                             MSIX\Microsoft.WebpImageExtension_1.2.14… 1.2.14.0                    
-Widgets Platform Runtime                  MSIX\Microsoft.WidgetsPlatformRuntime_1.… 1.6.19.0                    
-开发人员主页                              MSIX\Microsoft.Windows.DevHome_0.1700.59… 0.1700.597.0                
-Microsoft 照片                            MSIX\Microsoft.Windows.Photos_2026.11060… 2026.11060.2004…            
-Windows 时钟                              MSIX\Microsoft.WindowsAlarms_1.1.61.0_x6… 1.1.61.0                    
-WindowsAppRuntime.1.6                     Microsoft.WindowsAppRuntime.1.6           6000.519.329.0              winget
-WindowsAppRuntime.1.6                     Microsoft.WindowsAppRuntime.1.6           6000.519.329.0              winget
-WindowsAppRuntime.1.7                     Microsoft.WindowsAppRuntime.1.7           7000.785.2325.0             winget
-WindowsAppRuntime.1.7                     Microsoft.WindowsAppRuntime.1.7           7000.785.2325.0             winget
-WindowsAppRuntime.1.8                     Microsoft.WindowsAppRuntime.1.8           8000.879.2017.0             winget
-WindowsAppRuntime.1.8                     Microsoft.WindowsAppRuntime.1.8           8000.879.2017.0             winget
-WindowsAppRuntime.2                       Microsoft.WindowsAppRuntime.2.1           2.2.0.0                     winget
-WindowsAppRuntime.2                       Microsoft.WindowsAppRuntime.2.1           2.2.0.0                     winget
-Windows 计算器                            MSIX\Microsoft.WindowsCalculator_11.2502… 11.2502.2.0                 
-Windows 相机                              MSIX\Microsoft.WindowsCamera_2025.2510.2… 2025.2510.2.0               
-反馈中心                                  MSIX\Microsoft.WindowsFeedbackHub_1.2401… 1.2401.20253.0              
-Windows 记事本                            MSIX\Microsoft.WindowsNotepad_11.2605.29… 11.2605.29.0                
-Windows 录音机                            MSIX\Microsoft.WindowsSoundRecorder_1.1.… 1.1.47.0                    
-Microsoft Store                           MSIX\Microsoft.WindowsStore_22605.1401.1… 22605.1401.13.0             
-Windows 终端                              Microsoft.WindowsTerminal                 1.24.11321.0                winget
-Windows Package Manager Source (winget) … MSIX\Microsoft.Winget.Source_2026.708.91… 2026.708.916.12             
-Xbox TCUI                                 MSIX\Microsoft.Xbox.TCUI_1.24.10001.0_x6… 1.24.10001.0                
-Game Bar                                  MSIX\Microsoft.XboxGamingOverlay_7.326.6… 7.326.6011.0                
-Xbox Identity Provider                    MSIX\Microsoft.XboxIdentityProvider_12.1… 12.130.16001.0              
-Game Speech Window                        MSIX\Microsoft.XboxSpeechToTextOverlay_1… 1.117.15001.0               
-手机连接                                  MSIX\Microsoft.YourPhone_0.26042.99.0_x6… 0.26042.99.0                
-Windows 媒体播放器                        MSIX\Microsoft.ZuneMusic_11.2510.7.0_x64… 11.2510.7.0                 
-快速助手                                  MSIX\MicrosoftCorporationII.QuickAssist_… 2.0.35.0                    
-WinAppRuntime.Main.1.8                    MSIX\MicrosoftCorporationII.WinAppRuntim… 8000.859.21.0               
-Windows Web Experience Pack               MSIX\MicrosoftWindows.Client.WebExperien… 526.15201.50.0              
-跨设备体验主机                            MSIX\MicrosoftWindows.CrossDevice_0.2605… 0.26052.99.0                
-Python 3.12                               9NCVDN91XZQP                              3.12.2800.0                 msstore
-SenarySmartAudio                          MSIX\SenaryTechnologyLimited.SenarySmart… 2.40.0.0                    
+搜索源时失败;结果将不包括在内： msstore
+名称                                                         ID                                                                                      版本               可用           源
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+AMD Radeon Software                                          MSIX\AdvancedMicroDevicesInc-2.AMDRadeonSoftware_10.22.40043.0_x64__0a9344xs7nr4m       10.22.40043.0                     
+AurallySound Song Master Pro 2.7.01                          ARP\Machine\X64\AurallySound Song Master Pro_is1                                        2.7.01                            
+AV1 Video Extension                                          MSIX\Microsoft.AV1VideoExtension_2.0.30.0_x64__8wekyb3d8bbwe                            2.0.30.0                          
+AVC 编码器视频扩展                                           MSIX\Microsoft.AVCEncoderVideoExtension_1.1.23.0_x64__8wekyb3d8bbwe                     1.1.23.0                          
+bottom                                                       Clement.bottom                                                                          0.14.9                            winget
+chezmoi                                                      twpayne.chezmoi                                                                         2.71.0             2.72.1         winget
+clangd                                                       LLVM.clangd                                                                             22.1.6                            winget
+Clash Party                                                  Mihomo-Party.Mihomo-Party                                                               2.0.2                             winget
+Clash Verge                                                  ClashVergeRev.ClashVergeRev                                                             2.5.2                             winget
+CMake                                                        Kitware.CMake                                                                           4.3.4              4.4.3          winget
+Cursor (User)                                                Anysphere.Cursor                                                                        3.18.9             3.19.7         winget
+Dolby Access                                                 MSIX\DolbyLaboratories.DolbyAccess_3.27.11680.0_x64__rz1tebttyb220                      3.27.11680.0                      
+Dolby Vision Extensions                                      MSIX\DolbyLaboratories.DolbyVisionAccess_2.20503.802.0_x64__rz1tebttyb220               2.20503.802.0                     
+ECHO NEXT 26.7.1                                             ARP\Machine\X64\f804f62f-8a15-5847-bc17-5041adbc6efe                                    26.7.1                            
+Game Bar                                                     MSIX\Microsoft.XboxGamingOverlay_7.326.8061.0_x64__8wekyb3d8bbwe                        7.326.8061.0                      
+Game Speech Window                                           MSIX\Microsoft.XboxSpeechToTextOverlay_1.117.15001.0_x64__8wekyb3d8bbwe                 1.117.15001.0                     
+Git                                                          Git.Git                                                                                 2.55.0.2           2.55.0.3       winget
+GlassWire 3.9 (remove only)                                  GlassWire.GlassWire                                                                     3.9.1102                          winget
+HEIF 图像扩展                                                MSIX\Microsoft.HEIFImageExtension_1.2.48.0_x64__8wekyb3d8bbwe                           1.2.48.0                          
+Just                                                         Casey.Just                                                                              1.55.1             1.58.0         winget
+ksystemsharehostzhCN                                         MSIX\ksystemsharehostzhCN_1.0.0.0_x86__km9wtz8rh8me0                                    1.0.0.0                           
+Microsoft .Net Native Framework Package 2.2                  MSIX\Microsoft.NET.Native.Framework.2.2_2.2.29512.0_x64__8wekyb3d8bbwe                  2.2.29512.0                       
+Microsoft .Net Native Framework Package 2.2                  MSIX\Microsoft.NET.Native.Framework.2.2_2.2.29512.0_x86__8wekyb3d8bbwe                  2.2.29512.0                       
+Microsoft .Net Native Runtime Package 2.2                    Microsoft.DotNet.Native.Runtime                                                         2.2.28604.0                       winget
+Microsoft .Net Native Runtime Package 2.2                    Microsoft.DotNet.Native.Runtime                                                         2.2.28604.0                       winget
+Microsoft 365 Copilot                                        Microsoft.365Copilot                                                                    19.2609.33021.0                   winget
+Microsoft Clipchamp                                          MSIX\Clipchamp.Clipchamp_4.5.10920.0_x64__yxz26nhyzhsrt                                 4.5.10920.0                       
+Microsoft Edge                                               Microsoft.Edge                                                                          152.0.4191.62                     winget
+Microsoft Edge                                               MSIX\Microsoft.MicrosoftEdge.Stable_152.0.4191.53_neutral__8wekyb3d8bbwe                152.0.4191.53                     
+Microsoft Engagement Framework                               MSIX\Microsoft.Services.Store.Engagement_10.0.23012.0_x64__8wekyb3d8bbwe                10.0.23012.0                      
+Microsoft Engagement Framework                               MSIX\Microsoft.Services.Store.Engagement_10.0.23012.0_x86__8wekyb3d8bbwe                10.0.23012.0                      
+Microsoft Nanami (Natural) - Japanese (Japan)                MSIX\MicrosoftWindows.Voice.ja-JP.Nanami.1_1.0.5.0_x64__cw5n1h2txyewy                   1.0.5.0                           
+Microsoft OneDrive                                           Microsoft.OneDrive                                                                      26.150.0804.0011                  winget
+Microsoft Store                                              MSIX\Microsoft.WindowsStore_22607.1401.8.0_x64__8wekyb3d8bbwe                           22607.1401.8.0                    
+Microsoft Store 体验主机                                     MSIX\Microsoft.StorePurchaseApp_22607.1401.4.0_x64__8wekyb3d8bbwe                       22607.1401.4.0                    
+Microsoft To Do                                              MSIX\Microsoft.Todos_0.176.7601.0_x64__8wekyb3d8bbwe                                    0.176.7601.0                      
+Microsoft Visual C++ 2015 UWP Desktop Runtime Package        Microsoft.VCLibs.Desktop.14                                                             14.0.33728.0                      winget
+Microsoft Visual C++ 2015 UWP Desktop Runtime Package        Microsoft.VCLibs.Desktop.14                                                             14.0.33728.0                      winget
+Microsoft Visual C++ 2015 UWP Runtime Package                Microsoft.VCLibs.14                                                                     14.0.33519.0                      winget
+Microsoft Visual C++ 2015 UWP Runtime Package                Microsoft.VCLibs.14                                                                     14.0.33519.0                      winget
+Microsoft Visual C++ v14 Redistributable (x64) - 14.51.36247 Microsoft.VCRedist.2015+.x64                                                            14.51.36247.0                     winget
+Microsoft Visual C++ v14 Redistributable (x86) - 14.51.36247 Microsoft.VCRedist.2015+.x86                                                            14.51.36247.0                     winget
+Microsoft Visual Studio Code (User)                          Microsoft.VisualStudioCode                                                              1.127.0            1.136.1        winget
+Microsoft 便笺                                               MSIX\Microsoft.MicrosoftStickyNotes_4.0.6105.0_x64__8wekyb3d8bbwe                       4.0.6105.0                        
+Microsoft 必应                                               MSIX\Microsoft.BingSearch_1.1.43.0_x64__8wekyb3d8bbwe                                   1.1.43.0                          
+Microsoft 照片                                               MSIX\Microsoft.Windows.Photos_2026.11080.24002.0_x64__8wekyb3d8bbwe                     2026.11080.24002.0                
+Microsoft.UI.Xaml.2.8                                        Microsoft.UI.Xaml.2.8                                                                   8.2511.26001.0                    winget
+Microsoft.UI.Xaml.2.8                                        Microsoft.UI.Xaml.2.8                                                                   8.2501.31001.0                    winget
+Mozilla Firefox (x64 zh-CN)                                  Mozilla.Firefox.zh-CN                                                                   154.0.1                           winget
+Mozilla Maintenance Service                                  ARP\Machine\X64\MozillaMaintenanceService                                               152.0.4                           
+MPEG-2 视频扩展                                              MSIX\Microsoft.MPEG2VideoExtension_1.2.32.0_x64__8wekyb3d8bbwe                          1.2.32.0                          
+MSN 天气                                                     MSIX\Microsoft.BingWeather_4.54.63045.0_x64__8wekyb3d8bbwe                              4.54.63045.0                      
+Neovim                                                       Neovim.Neovim                                                                           0.12.3             0.12.5         winget
+Nushell                                                      Nushell.Nushell                                                                         0.113.1            0.114.1        winget
+OneDrive                                                     MSIX\Microsoft.OneDriveSync_26150.804.11.0_neutral__8wekyb3d8bbwe                       26150.804.11.0                    
+OpenSSL 4.0.1 (64-bit)                                       ShiningLight.OpenSSL.Dev                                                                4.0.1              4.0.2          winget
+Outlook for Windows                                          Microsoft.Outlook                                                                       1.2026.602.400     1.2026.812.100 winget
+Power Automate                                               MSIX\Microsoft.PowerAutomateDesktop_1.0.2122.0_x64__8wekyb3d8bbwe                       1.0.2122.0                        
+PowerToys (Preview) x64                                      XP89DCGQ3K6VLD                                                                          0.100.2            0.101.2362.0   msstore
+PowerToys FileLocksmith Context Menu                         MSIX\Microsoft.PowerToys.FileLocksmithContextMenu_0.100.2.0_neutral__8wekyb3d8bbwe      0.100.2.0                         
+PowerToys ImageResizer Context Menu                          MSIX\Microsoft.PowerToys.ImageResizerContextMenu_0.100.2.0_neutral__8wekyb3d8bbwe       0.100.2.0                         
+PowerToys PowerRename Context Menu                           MSIX\Microsoft.PowerToys.PowerRenameContextMenu_0.100.2.0_neutral__8wekyb3d8bbwe        0.100.2.0                         
+PowerToys.SparseApp                                          MSIX\Microsoft.PowerToys.SparseApp_0.100.2.0_neutral__8wekyb3d8bbwe                     0.100.2.0                         
+Python 3.12                                                  9NCVDN91XZQP                                                                            3.12.2800.0                       msstore
+Rustup: the Rust toolchain installer                         Rustlang.Rustup                                                                         1.29.0             1.29.1         winget
+SenarySmartAudio                                             MSIX\SenaryTechnologyLimited.SenarySmartAudio_2.40.0.0_x64__dqz7eftfn33jw               2.40.0.0                          
+Solitaire & Casual Games                                     MSIX\Microsoft.MicrosoftSolitaireCollection_4.26.7290.0_x64__8wekyb3d8bbwe              4.26.7290.0                       
+Speech Pack - Japanese (Japan)                               MSIX\MicrosoftWindows.Speech.ja-JP.1_1.0.21.0_x64__cw5n1h2txyewy                        1.0.21.0                          
+Steam                                                        Valve.Steam                                                                             2.10.91.91                        winget
+Synthesizer V Studio 2 Pro 版本 2.2.1                        ARP\Machine\X64\SynthesizerVStudio2Pro_is1                                              2.2.1                             
+tokei                                                        XAMPPRocky.Tokei                                                                        12.1.2                            winget
+uTools 7.8.0                                                 Yuanli.uTools                                                                           7.8.0                             winget
+uv                                                           astral-sh.uv                                                                            0.11.26            0.12.10        winget
+Visual Studio Code                                           MSIX\Microsoft.VisualStudioCode_1.0.127.0_neutral__8wekyb3d8bbwe                        1.0.127.0                         
+VMware Workstation                                           ARP\Machine\X64\{6EC7759F-B700-4743-BB65-BD3ED905D545}                                  17.6.4                            
+VP9 视频扩展                                                 MSIX\Microsoft.VP9VideoExtensions_1.2.20.0_x64__8wekyb3d8bbwe                           1.2.20.0                          
+WakaTime 3.0.0                                               Wakatime.DesktopWakatime                                                                3.0.0.1                           winget
+Wallpaper Engine:壁纸引擎                                    ARP\Machine\X64\Steam App 431960                                                        Unknown                           
+Web 媒体扩展                                                 MSIX\Microsoft.WebMediaExtensions_2.1.51.0_x64__8wekyb3d8bbwe                           2.1.51.0                          
+WebP 映像扩展                                                MSIX\Microsoft.WebpImageExtension_1.2.31.0_x64__8wekyb3d8bbwe                           1.2.31.0                          
+Widgets Platform Runtime                                     MSIX\Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe                       1.6.19.0                          
+WinAppRuntime.Main.1.5                                       MSIX\MicrosoftCorporationII.WinAppRuntime.Main.1.5_5001.373.1736.0_x64__8wekyb3d8bbwe   5001.373.1736.0                   
+WinAppRuntime.Main.1.8                                       MSIX\MicrosoftCorporationII.WinAppRuntime.Main.1.8_8000.946.1701.0_x64__8wekyb3d8bbwe   8000.946.1701.0                   
+WinAppRuntime.Singleton                                      MSIX\MicrosoftCorporationII.WinAppRuntime.Singleton_8002.4.0.0_x64__8wekyb3d8bbwe       8002.4.0.0                        
+Windows App Runtime DDLM 5001.373.1736.0-x6                  MSIX\Microsoft.WinAppRuntime.DDLM.5001.373.1736.0-x6_5001.373.1736.0_x64__8wekyb3d8bbwe 5001.373.1736.0                   
+Windows App Runtime DDLM 5001.373.1736.0-x8                  MSIX\Microsoft.WinAppRuntime.DDLM.5001.373.1736.0-x8_5001.373.1736.0_x86__8wekyb3d8bbwe 5001.373.1736.0                   
+Windows Package Manager Source (winget) V2                   MSIX\Microsoft.Winget.Source_2026.905.806.29_neutral__8wekyb3d8bbwe                     2026.905.806.29                   
+Windows Web Experience Pack                                  MSIX\MicrosoftWindows.Client.WebExperience_526.21100.40.0_x64__cw5n1h2txyewy            526.21100.40.0                    
+Windows 媒体播放器                                           MSIX\Microsoft.ZuneMusic_11.2607.16.0_x64__8wekyb3d8bbwe                                11.2607.16.0                      
+Windows 安全中心                                             MSIX\Microsoft.SecHealthUI_1000.29628.1000.0_x64__8wekyb3d8bbwe                         1000.29628.1000.0                 
+Windows 应用程序兼容性增强                                   MSIX\Microsoft.ApplicationCompatibilityEnhancements_1.2511.9.0_x64__8wekyb3d8bbwe       1.2511.9.0                        
+Windows 录音机                                               MSIX\Microsoft.WindowsSoundRecorder_1.1.127.0_x64__8wekyb3d8bbwe                        1.1.127.0                         
+Windows 时钟                                                 MSIX\Microsoft.WindowsAlarms_1.1.158.0_x64__8wekyb3d8bbwe                               1.1.158.0                         
+Windows 相机                                                 MSIX\Microsoft.WindowsCamera_2026.2607.1.0_x64__8wekyb3d8bbwe                           2026.2607.1.0                     
+Windows 终端                                                 Microsoft.WindowsTerminal                                                               1.24.11911.0                      winget
+Windows 计算器                                               MSIX\Microsoft.WindowsCalculator_11.2607.0.0_x64__8wekyb3d8bbwe                         11.2607.0.0                       
+Windows 记事本                                               MSIX\Microsoft.WindowsNotepad_11.2607.14.0_x64__8wekyb3d8bbwe                           11.2607.14.0                      
+WindowsAppRuntime.1.5                                        Microsoft.WindowsAppRuntime.1.5                                                         1.5.9                             winget
+WindowsAppRuntime.1.5                                        Microsoft.WindowsAppRuntime.1.5                                                         1.5.9                             winget
+WindowsAppRuntime.1.6                                        Microsoft.WindowsAppRuntime.1.6                                                         1.6.9                             winget
+WindowsAppRuntime.1.7                                        Microsoft.WindowsAppRuntime.1.7                                                         1.7.9                             winget
+WindowsAppRuntime.1.7                                        Microsoft.WindowsAppRuntime.1.7                                                         1.7.9                             winget
+WindowsAppRuntime.1.8                                        Microsoft.WindowsAppRuntime.1.8                                                         > 1.8.10                          winget
+WindowsAppRuntime.1.8                                        Microsoft.WindowsAppRuntime.1.8                                                         > 1.8.10                          winget
+WindowsAppRuntime.2                                          Microsoft.WindowsAppRuntime.2                                                           2.4.0.0                           winget
+WindowsAppRuntime.2                                          Microsoft.WindowsAppRuntime.2                                                           2.4.0.0                           winget
+WindowsAppRuntime.2                                          Microsoft.WindowsAppRuntime.2                                                           2.2.0.0                           winget
+WPS Office (12.1.0.28505)                                    ARP\User\X64\Kingsoft Office                                                            12.1.0.28505                      
+wpsappext1                                                   MSIX\wpsappext1_1.0.0.2_neutral__km9wtz8rh8me0                                          1.0.0.2                           
+wpsappext2                                                   MSIX\wpsappext2_1.0.0.2_neutral__km9wtz8rh8me0                                          1.0.0.2                           
+wpsappext3                                                   MSIX\wpsappext3_1.0.0.2_neutral__km9wtz8rh8me0                                          1.0.0.2                           
+XBOX                                                         MSIX\Microsoft.GamingApp_2608.1001.17.0_x64__8wekyb3d8bbwe                              2608.1001.17.0                    
+Xbox Identity Provider                                       MSIX\Microsoft.XboxIdentityProvider_12.130.16001.0_x64__8wekyb3d8bbwe                   12.130.16001.0                    
+Xbox TCUI                                                    MSIX\Microsoft.Xbox.TCUI_1.24.10001.0_x64__8wekyb3d8bbwe                                1.24.10001.0                      
+“开始体验”应用                                               MSIX\Microsoft.StartExperiencesApp_1.380.2.0_x64__8wekyb3d8bbwe                         1.380.2.0                         
+中文(简体)本地体验包                                         MSIX\Microsoft.LanguageExperiencePackzh-CN_26100.163.263.0_neutral__8wekyb3d8bbwe       26100.163.263.0                   
+原始图像扩展                                                 MSIX\Microsoft.RawImageExtension_2.5.24.0_x64__8wekyb3d8bbwe                            2.5.24.0                          
+反馈中心                                                     MSIX\Microsoft.WindowsFeedbackHub_2.2608.301.0_x64__8wekyb3d8bbwe                       2.2608.301.0                      
+命令面板                                                     MSIX\Microsoft.CommandPalette_0.11.11762.0_x64__8wekyb3d8bbwe                           0.11.11762.0                      
+应用安装程序                                                 Microsoft.AppInstaller                                                                  1.29.290.0                        winget
+开发人员主页                                                 MSIX\Microsoft.Windows.DevHome_0.1700.597.0_x64__8wekyb3d8bbwe                          0.1700.597.0                      
+快速助手                                                     MSIX\MicrosoftCorporationII.QuickAssist_2.0.35.0_x64__8wekyb3d8bbwe                     2.0.35.0                          
+截图工具                                                     MSIX\Microsoft.ScreenSketch_11.2605.38.0_x64__8wekyb3d8bbwe                             11.2605.38.0                      
+手机连接                                                     MSIX\Microsoft.YourPhone_0.26071.164.0_x64__8wekyb3d8bbwe                               0.26071.164.0                     
+日本語 ローカル エクスペリエンス パック                      MSIX\Microsoft.LanguageExperiencePackja-JP_26100.174.273.0_neutral__8wekyb3d8bbwe       26100.174.273.0                   
+来自设备制造商的 HEVC 视频扩展                               MSIX\Microsoft.HEVCVideoExtension_2.5.33.0_x64__8wekyb3d8bbwe                           2.5.33.0                          
+画图                                                         MSIX\Microsoft.Paint_11.2605.81.0_x64__8wekyb3d8bbwe                                    11.2605.81.0                      
+移动设备                                                     MSIX\MicrosoftWindows.CrossDevice_0.26071.84.0_x64__cw5n1h2txyewy                       0.26071.84.0                      
+网易云音乐                                                   NetEase.CloudMusic                                                                      3.1.36.205322      3.1.39.205426  winget
+获取帮助                                                     MSIX\Microsoft.GetHelp_10.2409.42162.0_x64__8wekyb3d8bbwe                               10.2409.42162.0                   
+资讯                                                         MSIX\Microsoft.BingNews_4.56.21872.0_x64__8wekyb3d8bbwe                                 4.56.21872.0                      
+飞书                                                         ByteDance.Feishu                                                                        7.71.12            7.75.18        winget
