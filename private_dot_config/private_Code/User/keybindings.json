@@ -71,11 +71,6 @@
         "command": "workbench.action.focusBelowGroup"
     },
     {
-        "key": "ctrl+l",
-        "command": "workbench.panel.chat",
-        "when": "workbench.panel.chat.view.copilot.active"
-    },
-    {
         "key": "ctrl+alt+i",
         "command": "-workbench.panel.chat",
         "when": "workbench.panel.chat.view.copilot.active"
@@ -158,5 +153,13 @@
         "key": "ctrl+shift+,",
         "command": "aiCustomization.openManagementEditor",
         "when": "chatIsEnabled && view == 'workbench.panel.chat.view.copilot'"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "workbench.view.extension.claude-sidebar-secondary"
+    },
+    {
+        "key": "ctrl+x",
+        "command": "workbench.view.extension.codexSecondaryViewContainer"
     }
 ]
