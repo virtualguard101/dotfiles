@@ -5,11 +5,6 @@
         "command": "workbench.view.remote"
     },
     {
-        "key": "capslock",
-        "command": "extension.vim_escape",
-        "when": "editorTextFocus"
-    },
-    {
         "key": "ctrl+shift+a",
         "command": "workbench.view.extension.roo-cline-ActivityBar"
     },
@@ -143,5 +138,25 @@
         "key": "ctrl+.",
         "command": "-problems.action.showQuickFixes",
         "when": "problemFocus"
+    },
+    {
+        "key": "ctrl+/",
+        "command": "workbench.action.chat.openModelPicker",
+        "when": "chatIsEnabled && inChatInput"
+    },
+    {
+        "key": "ctrl+alt+.",
+        "command": "-workbench.action.chat.openModelPicker",
+        "when": "chatIsEnabled && inChatInput"
+    },
+    {
+        "key": "ctrl+shift+,",
+        "command": "-editor.action.inPlaceReplace.up",
+        "when": "editorTextFocus && !editorReadonly"
+    },
+    {
+        "key": "ctrl+shift+,",
+        "command": "aiCustomization.openManagementEditor",
+        "when": "chatIsEnabled && view == 'workbench.panel.chat.view.copilot'"
     }
 ]
