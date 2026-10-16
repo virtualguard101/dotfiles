@@ -6,9 +6,9 @@
     [".config/nvim".pull]
         args = ["--ff-only"]
 
-[".agents"]
-    type = "git-repo"
-    url = "git@github.com:virtualguard101/dotagents.git"
-    refreshPeriod = "24h"
-    [".agents".pull]
-        args = ["--ff-only"]
+# [".agents"]
+#     type = "git-repo"
+#     url = "git@github.com:virtualguard101/dotagents.git"
+#     refreshPeriod = "24h"
+#     [".agents".pull]
+#         args = ["--ff-only"]

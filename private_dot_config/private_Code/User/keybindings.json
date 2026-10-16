@@ -155,11 +155,35 @@
         "when": "chatIsEnabled && view == 'workbench.panel.chat.view.copilot'"
     },
     {
-        "key": "ctrl+l",
-        "command": "workbench.view.extension.claude-sidebar-secondary"
+        "key": "ctrl+shift+l",
+        "command": "workbench.view.extension.codexSecondaryViewContainer"
     },
     {
-        "key": "ctrl+x",
-        "command": "workbench.view.extension.codexSecondaryViewContainer"
+        "key": "ctrl+shift+m",
+        "command": "-workbench.actions.view.problems",
+        "when": "workbench.panel.markers.view.active"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "claude-vscode.blur",
+        "when": "!config.claudeCode.useTerminal && !editorTextFocus"
+    },
+    {
+        "key": "ctrl+escape",
+        "command": "-claude-vscode.blur",
+        "when": "!config.claudeCode.useTerminal && !editorTextFocus"
+    },
+    {
+        "key": "ctrl+escape",
+        "command": "-claude-vscode.focus",
+        "when": "editorTextFocus && !config.claudeCode.useTerminal"
+    },
+    {
+        "key": "ctrl+escape",
+        "command": "workbench.panel.chat"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "workbench.view.extension.claude-sidebar-secondary"
     }
 ]
