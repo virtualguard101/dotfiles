@@ -11,6 +11,7 @@
 	ui = auto
 [alias]
 	graph = log --all --graph --decorate --oneline
+	ida = !cd \"${GIT_PREFIX:-.}\" && \"$HOME/.local/share/ida-pro-9.5/tools/teams/git-ida\"
 [core]
 	editor = vim
 [merge]
