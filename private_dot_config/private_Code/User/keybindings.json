@@ -185,5 +185,9 @@
     {
         "key": "ctrl+l",
         "command": "workbench.view.extension.claude-sidebar-secondary"
+    },
+    {
+        "key": "ctrl+shift+d",
+        "command": "workbench.view.extension.dsh-panel"
     }
 ]
