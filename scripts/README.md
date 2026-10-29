@@ -1,20 +1,21 @@
 # scripts/
 
-本目录存放两个相互独立的维护脚本，均为 Arch Linux 编写，使用 Bash：
+本目录存放两个相互独立的维护脚本（Arch Linux，Bash），以及一个跨平台的提交检查脚本（Python）：
 
-| 脚本 | 职责 | 是否修改系统 |
+| 文件 | 职责 | 是否修改系统 |
 |---|---|---|
 | [`clean.sh`](clean.sh) | 清理 `~/.cache` 及本机已安装工具的包缓存、应用缓存；报告残留目录 | `run --apply` 时删除缓存 |
 | [`backup.sh`](backup.sh) | 基于 chezmoi 备份 `~` 与 `/etc`，敏感文件用 age 加密，提交前做安全检查 | `backup` 时写入 chezmoi 源目录 |
+| [`hooks/dotfiles_guard.py`](hooks/dotfiles_guard.py) | pre-commit / pre-push 检查：age 密文、必须加密的目标、密钥特征。Windows 与 Linux 通用，见[提交检查](#提交检查pre-commit) | 否（只删 pre-commit 自己遗留的 stash 补丁） |
 
-两者没有共享代码，可以单独复制、单独运行。`scripts/` 已写入 `.chezmoiignore`，不会被 `chezmoi apply` 部署到 `~`。
+`clean.sh` 与 `backup.sh` 互不依赖，可以单独复制、单独运行；`backup.sh` 的密钥识别调用 `hooks/dotfiles_guard.py`，与提交检查共用一套规则。`scripts/` 已写入 `.chezmoiignore`，不会被 `chezmoi apply` 部署到 `~`。
 
 共同约定：
 
 - **所有破坏性操作默认都是预览**：`clean.sh run` 需加 `--apply`，`backup.sh` 的 `audit`、`restore-etc` 需加 `--apply`。`backup` 例外，它直接写入源目录（可用 `-n` 预览），但不会自动 `git push`。
 - 输出到终端时带颜色；重定向到文件或管道时自动去掉颜色。
 - 退出码：`0` 成功，`1` 出错或检查未通过，`2` 用法错误。
-- 只支持 Linux。Windows checkout 需要另写 `.ps1` 入口，不要直接复用这两个脚本。
+- `clean.sh` 与 `backup.sh` 只支持 Linux。Windows checkout 需要另写 `.ps1` 入口，不要直接复用这两个脚本；提交检查则两端通用。
 
 ---
 
@@ -79,7 +80,7 @@
 | `cargo` | 删除 `$CARGO_HOME/registry/src` 和 `git/checkouts`；cargo 会从 `.crate` 自动重新解压 | 额外删除 `registry/cache` 和 `git/db` | cargo 正在运行 |
 | `nuget` | `dotnet nuget locals http-cache --clear`；没有 dotnet 时直接删除目录 | — | — |
 | `vcpkg` | 删除 `$VCPKG_ROOT/buildtrees` 与 `packages`；`installed/` 不受影响 | 额外删除 `downloads` | vcpkg 正在运行 |
-| `precommit` | `pre-commit gc` | `pre-commit clean` | — |
+| `precommit` | `pre-commit gc`，并删除 1 小时前遗留的 stash 补丁 `patch*`（可能含明文，见[提交检查](#机密性设计)） | `pre-commit clean` | — |
 | `lsp` | 删除 `~/.cache/typescript`（tsserver 类型获取缓存）与 `~/.cache/jedi` | — | tsserver、typingsInstaller、jedi-language-server 或 pylsp 正在运行 |
 | `wine` | 删除 `~/.cache/wine`（wine-mono、gecko 安装包）与 `~/.cache/winetricks` | — | — |
 | `kde` | 删除 `~/.cache/drkonqi/crashes`、`bookmarksrunner`、`kcrash-metadata`、`appstream`、`discover` | — | Discover 正在运行时保留 AppStream 缓存 |
@@ -204,7 +205,7 @@ journalctl --user -u clean.service     # 查看执行日志
 
 ### 前提
 
-- 已安装 `chezmoi`、`jq`、`git`、`age`。
+- 已安装 `chezmoi`、`jq`、`git`、`age`、`python3`（3.9 及以上）。
 - chezmoi 配置中设置了 `encryption = "age"`、`age.identity`（或 `age.identities`）与 `age.recipient`（或 `age.recipients`）。本仓库的模板见 `private_dot_config/chezmoi/chezmoi.toml.tmpl`。
 - **age 私钥必须放在源目录之外，并另行离线备份**（密码管理器、U 盘等）。私钥丢失后，仓库里的所有 `*.age` 文件都无法解密。
 - `.chezmoiignore` 中包含 `system/`。脚本每次运行都会检查这一行，缺失则直接退出，否则 `/etc` 的备份会被部署到 `~/system`。
@@ -224,7 +225,7 @@ git -C "$(chezmoi source-path)" push         # 确认 diff 后手动推送
 |---|---|
 | `status` | 只读。输出：加密配置摘要（接收者、身份文件是否可读）；`chezmoi status` 漂移；未托管的备份候选及其处理方式（plain / encrypt / 跳过）；`/etc` 备份目标；`/etc` 下未合并的 `.pacnew`/`.pacsave` 与历史备份文件；敏感文件权限审计。 |
 | `backup [-n] [--no-etc] [--commit]` | 执行备份，流程见下文。 |
-| `check` | 只运行安全检查，检查失败时退出码为 1。适合挂到 git pre-commit hook。 |
+| `check` | 只运行安全检查，检查失败时退出码为 1。提交时的自动检查由 pre-commit 负责，见[提交检查](#提交检查pre-commit)。 |
 | `audit [--apply]` | 检查敏感文件权限，`--apply` 时收紧：文件改为 600，目录改为 700。 |
 | `restore-etc [--apply] [/etc/路径…]` | 把 `system/` 解密到 tmpfs，与当前 `/etc` 对比并显示 diff；`--apply` 时用 `sudo install` 写回。可以只指定部分路径（目录会递归匹配）。 |
 
@@ -252,7 +253,7 @@ git -C "$(chezmoi source-path)" push         # 确认 diff 后手动推送
 
 1. 文件在 `HOME_SECRET` 或 `ETC_SECRET` 清单中。
 2. 对 `/etc` 文件：权限不是所有人可读（例如 600、640）。
-3. 文件内容匹配脚本内置的密钥特征：私钥 PEM 块、`AGE-SECRET-KEY-`，以及 GitHub、OpenAI/Anthropic、AWS、Slack、PyPI、npm、WakaTime、Google API 的 token 格式，还有通用的 `api_key/secret/token/password = 长串` 模式。
+3. 文件内容匹配 `hooks/dotfiles_guard.py` 中 `SECRET_RULES` 定义的密钥特征：私钥 PEM 块、`AGE-SECRET-KEY-`，以及 GitHub、OpenAI/Anthropic、AWS、Slack、PyPI、npm、WakaTime、Google API 的 token 格式，还有通用的 `api_key/secret/token/password = 长串` 模式。guard 出错时按“含密钥”处理，宁可多加密。
 4. 以 `chezmoi add --secrets error` 明文添加时，被 chezmoi 内置的 gitleaks 规则拦下。
 
 否则以明文存储。另外，内容中含有当前绝对家目录路径的 `~` 文件会被**跳过**并给出警告，建议改写成 chezmoi 模板（用 `{{ .chezmoi.homeDir }}` 代替写死的路径）后再手动添加。
@@ -278,24 +279,7 @@ root 才能读的文件会通过 `sudo cat` 读进暂存区，因此需要在交
 
 ### 安全检查（check）
 
-对 `git ls-files -co --exclude-standard`（已跟踪的文件，加上未被忽略的新文件）逐个检查：
-
-| 检查项 | 结果 |
-|---|---|
-| age 身份文件被 git 跟踪 | 失败 |
-| `*.age` 文件不以 `-----BEGIN AGE ENCRYPTED FILE-----` 或 `age-encryption.org/v1` 开头 | 失败 |
-| 明文文件匹配密钥特征 | 失败，并给出行号（不打印内容） |
-| 明文文件含绝对家目录路径 | 只警告 |
-
-接入 git pre-commit hook（hook 不会被 git 跟踪，需要在每台机器上各自创建一次）：
-
-```bash
-cat > "$(chezmoi source-path)/.git/hooks/pre-commit" <<'EOF'
-#!/usr/bin/env bash
-exec "$(git rev-parse --show-toplevel)/scripts/backup.sh" check
-EOF
-chmod +x "$(chezmoi source-path)/.git/hooks/pre-commit"
-```
+`check` 先确认 age 身份文件没有被 git 跟踪，再运行 `hooks/dotfiles_guard.py tree`：对 `git ls-files -co --exclude-standard`（已跟踪的文件，加上未被忽略的新文件）的工作区内容逐个检查，检查项与提交检查中的 `dotfiles-guard` 完全相同，见[检查内容](#检查内容)。
 
 ### 恢复
 
@@ -334,3 +318,155 @@ sudo pacman -S --needed - < archpkg.txt     # AUR 包需要改用 yay 或 paru
 - `/etc/tpm2-tss/fapi-profiles/*.json` 会被 chezmoi 的通用 API Key 规则误判为含密钥，因此以加密方式存储。这不影响使用。
 - 新文件第一次被 `backup` 加入后，就由 `re-add` 维护。如果之后从清单中删掉某个路径，还需要 `chezmoi forget` 才能停止托管。
 - `audit` 只检查已知位置：`HOME_SECRET`、`.pypirc`、`.netrc`、`.git-credentials`、`.ssh`、`.gnupg`、age 身份文件及其所在目录。
+
+---
+
+## 提交检查（pre-commit）
+
+仓库使用 [pre-commit](https://pre-commit.com) 框架在 `git commit` 与 `git push` 时自动检查，防止明文密钥进入仓库。它只依赖 Python 与 git，Windows 和 Linux 使用同一份配置。
+
+### 涉及的文件
+
+| 文件 | 是否跟踪 | 作用 |
+|---|---|---|
+| `.pre-commit-config.yaml` | 跟踪，两端共用 | hook 列表，所有远程 hook 都固定到具体版本 |
+| `.gitleaks.toml` | 跟踪，两端共用 | gitleaks 配置：沿用内置规则，补充 WakaTime 规则，跳过 `encrypted_*.age` 密文 |
+| `.gitattributes` | 跟踪，两端共用 | 统一 LF 换行（不受 Windows `core.autocrlf` 影响），`*.age`、`*.ptb` 不做换行转换 |
+| `.gitignore` | 跟踪，两端共用 | 忽略 `__pycache__/` |
+| `scripts/hooks/dotfiles_guard.py` | 跟踪，两端共用 | 本仓库专用规则，只用 Python 标准库 |
+| `.git/hooks/pre-commit`、`pre-push` | **不跟踪**，每台机器各自生成 | 由 `pre-commit install` 写入，内含本机 Python 的绝对路径 |
+| `$XDG_CACHE_HOME/pre-commit`（默认 `~/.cache/pre-commit`） | 不跟踪 | hook 环境缓存；Windows 上是 `%USERPROFILE%\.cache\pre-commit` |
+
+以 `.` 开头的源文件会被 chezmoi 忽略，`scripts/` 已在 `.chezmoiignore` 中，所以以上文件都不会被部署到 `~`。
+
+### 安装（每台机器一次）
+
+Linux（Arch）：
+
+```bash
+sudo pacman -S --needed pre-commit      # 或: uv tool install pre-commit / pipx install pre-commit
+cd "$(chezmoi source-path)"
+pre-commit install                      # 同时安装 pre-commit 与 pre-push 两个 hook
+pre-commit install-hooks                # 可选：预先构建环境（首次会下载 Go 并编译 gitleaks）
+```
+
+Windows（PowerShell）：
+
+```powershell
+# 任选一种方式安装 pre-commit
+uv tool install pre-commit              # 或: pipx install pre-commit
+Set-Location (chezmoi source-path)
+git config core.autocrlf false          # 可选；.gitattributes 已强制 LF，这一步只是避免警告
+pre-commit install
+pre-commit install-hooks
+```
+
+说明：
+
+- gitleaks 通过 pre-commit 的 `golang` 语言支持安装。机器上没有 Go 时，pre-commit 会自动下载一份到它的缓存目录，不需要另外安装 Go 或 gitleaks。
+- 第一次运行需要联网，用于克隆 hook 仓库、下载 Go 与 Go 模块；之后可以离线运行。
+- `pre-commit install` 生成的 `.git/hooks/*` 写有本机 Python 路径，不要在两个系统之间复制，也不要提交。
+
+### 检查内容
+
+`git commit` 时（pre-commit 阶段，只检查暂存区中的文件）：
+
+| hook | 来源 | 检查内容 | 不通过时 |
+|---|---|---|---|
+| `check-illegal-windows-names` | pre-commit-hooks v6.0.0 | `CON`、`AUX` 等保留名，`<>:"\|?*`，以点或空格结尾的路径 | 阻止 |
+| `check-case-conflict` | pre-commit-hooks | 只有大小写不同的路径（Windows 上会互相覆盖） | 阻止 |
+| `check-added-large-files` | pre-commit-hooks | 新增文件大于 1 MiB | 阻止 |
+| `check-merge-conflict` | pre-commit-hooks | 残留的冲突标记 | 阻止 |
+| `check-yaml`、`check-toml` | pre-commit-hooks | 语法错误（`.tmpl` 模板不检查） | 阻止 |
+| `gitleaks` | gitleaks v8.30.1 | 200 多种通用密钥规则，加上 `.gitleaks.toml` 中的自定义规则；输出中的密钥值显示为 `REDACTED` | 阻止 |
+| `prune-precommit-stash` | 本仓库 | 删除 1 小时前遗留的 stash 补丁，并把缓存目录权限收紧为 700（仅 Linux） | 从不阻止 |
+| `dotfiles-guard` | 本仓库 | 见下表 | 阻止（警告不阻止） |
+
+`git push` 时（pre-push 阶段）：
+
+| hook | 检查内容 |
+|---|---|
+| `dotfiles-guard-push` | 对**每一个**即将推送的提交，检查其新增或修改的文件。这能拦住用 `git commit --no-verify` 跳过检查的提交；即使后续提交删掉了密钥也一样，因为历史中的密钥同样会被推送出去 |
+| `check-added-large-files` | 上游清单把它声明在 pre-push 阶段也运行，同样能拦住跳过检查提交的大文件 |
+
+`dotfiles-guard` 的规则（`staged`、`push`、`tree` 三种模式相同）：
+
+| 规则 | 级别 | 说明 |
+|---|---|---|
+| `age-not-ciphertext` | 错误 | `*.age` 文件的开头不是 `-----BEGIN AGE ENCRYPTED FILE-----` 或 `age-encryption.org/v1` |
+| `age-armor-truncated` | 错误 | ASCII 封装的 age 文件缺少结束行 |
+| `age-without-encrypted-prefix` / `encrypted-prefix-without-age` | 错误 | chezmoi 的 `encrypted_` 前缀与 `.age` 后缀没有成对出现 |
+| `must-encrypt(<目标>)` | 错误 | 按 chezmoi 命名规则把源路径换算成目标路径（例如 `private_dot_ssh/private_id_ed25519` → `.ssh/id_ed25519`），目标属于必须加密的类别却没有加密。清单见脚本中的 `ENCRYPT_REQUIRED` 与 `ENCRYPT_EXEMPT` |
+| 各密钥规则名（如 `github-token`） | 错误 | 明文文件匹配 `SECRET_RULES`；`backup.sh` 用的是同一套规则 |
+| `absolute-home-path` | 警告 | 含 Linux、macOS 或 Windows（`C:\Users\<用户名>`）的绝对家目录路径，在另一台机器上无效 |
+
+`ENCRYPT_REQUIRED` 目前覆盖：`.ssh/*`（`*.pub` 与 `known_hosts*` 除外）、`.gnupg/*`、`.pypirc`、`.npmrc`、`.netrc`/`_netrc`、`.git-credentials`、`.docker/config.json`、gh 的 `hosts.yml`（Linux 与 Windows 路径）、`.wakatime.cfg`、`.aws/credentials`、`.kube/config`、rclone 配置、`*.pem`/`*.key`/`*.p12`/`*.pfx`、`id_rsa`/`id_ecdsa`/`id_ed25519`、`.env*`（`.env.example` 除外），以及 `system/` 下的 `/etc/shadow*`、`/etc/sudoers*`、`/etc/crypttab`、NetworkManager 连接、WireGuard、SSH 主机密钥、mihomo 配置。
+
+### 被拦下时怎么办
+
+输出只包含 `文件:行号` 和规则名，不会显示密钥本身。例如：
+
+```
+dotfiles guard (staged)..................................................Failed
+error:   dot_bashrc:19: [github-token]
+```
+
+按情况处理：
+
+| 情况 | 处理 |
+|---|---|
+| 敏感文件被明文添加了 | `git restore --staged <源文件>`，然后 `chezmoi forget <目标>`，再 `chezmoi add --encrypt <目标>` |
+| 明文配置里混进了一个 token | 把 token 移到加密文件或环境变量中；或者把整个文件改为加密托管 |
+| 误报 | 在该行末尾加注释 `gitleaks:allow`（gitleaks 与 guard 都认这个标记），或者修改 `dotfiles_guard.py` / `.gitleaks.toml` 的规则 |
+| 已用 `--no-verify` 提交但还没推送 | pre-push 会拦下。用 `git reset --soft <上一个干净的提交>` 重新整理后再提交 |
+| 已经推送 | 立刻**轮换（作废并重新生成）该凭据**。改写 git 历史无法撤回已经公开的内容 |
+
+临时跳过某个 hook（例如没有网络、无法安装 gitleaks 时）：
+
+```bash
+SKIP=gitleaks git commit -m "..."        # Linux：跳过指定 hook，其余照常运行
+```
+
+```powershell
+$env:SKIP = "gitleaks"; git commit -m "..."; Remove-Item Env:SKIP   # Windows PowerShell
+```
+
+不要用 `--no-verify` 跳过全部检查；即使用了，pre-push 也会再检查一次。
+
+### 手动运行
+
+```bash
+pre-commit run --all-files              # 对全仓库运行 pre-commit 阶段的所有 hook
+pre-commit run gitleaks --all-files     # 只运行某一个 hook
+pre-commit run --hook-stage pre-push --from-ref origin/archlinux --to-ref HEAD   # 模拟推送检查
+python scripts/hooks/dotfiles_guard.py tree           # 只运行本仓库规则（等同于 backup.sh check 的内容部分）
+pre-commit autoupdate                   # 升级远程 hook 版本；之后检查 diff 并在两台机器上分别重新运行
+```
+
+### 机密性设计
+
+- **不回显密钥**：gitleaks 使用 `--redact`；`dotfiles_guard.py` 只输出文件、行号和规则名。两者都不写报告文件。
+- **只读暂存区**：pre-commit 阶段读取的是 index 中的 blob，而不是工作区文件，所以“只暂存一部分”无法绕过检查；pre-push 阶段读取的是每个提交里的 blob。读出的内容只留在内存中。
+- **stash 补丁**：pre-commit 在运行 hook 前会把**未暂存**的改动保存为 `$PRE_COMMIT_HOME/patch*`，而且之后从不删除。如果当时工作区里有尚未加密的敏感内容，它会以明文留在这个补丁中。对应措施：`prune-precommit-stash` 每次提交时删除 1 小时前的补丁，并把目录权限设为 700（Linux）；`clean.sh run precommit` 也会删除它们。之所以保留最近 1 小时的补丁，是为了不影响正在进行的提交（pre-commit 需要用补丁恢复你的工作区）。因此在明文状态下提交后，当次的补丁最长会保留到下一次超过 1 小时后的提交。急需清除时可以运行：
+  ```bash
+  python scripts/hooks/dotfiles_guard.py prune-stash --max-age-minutes 0   # 确认当前没有正在进行的 git commit
+  ```
+- **密文不被扫描，但会被校验**：`.gitleaks.toml` 让 gitleaks 跳过 `encrypted_*.age`，避免对随机密文误报。guard 会单独确认这些文件确实是 age 密文，所以把明文改名为 `encrypted_x.age` 无法绕过检查。
+- **私钥不进仓库**：`AGE-SECRET-KEY-` 与 PEM 私钥块在任何明文文件中都会被拦下；`backup.sh check` 还会确认 chezmoi 配置的 age 身份文件没有被 git 跟踪。
+- **最后一道防线不在本地**：本地 hook 可以被卸载或跳过。如果仓库托管在 GitHub，建议在仓库设置中开启 *Secret scanning* 与 *Push protection*，在服务器端再拦一次。
+
+### 跨平台说明
+
+- 换行：`.gitattributes` 强制仓库内与检出后都使用 LF，Windows 上的 `core.autocrlf` 不影响。`*.age` 与 PowerToys 的 `*.ptb` 设为 `-text`，原样保存不做转换；`*.bat`、`*.cmd` 使用 CRLF。
+- 路径：guard 统一使用 `/` 处理路径，并识别 Windows 下的目标路径（如 `AppData/Roaming/GitHub CLI/hosts.yml`、`_netrc`）。
+- 控制台编码：guard 输出遇到当前控制台编码无法表示的字符时会转义，不会因此崩溃。
+- `check-illegal-windows-names` 与 `check-case-conflict` 在 Linux 上提前拦下 Windows 无法检出的路径。
+- **`windows` 分支**：它与 `archlinux` 是没有共同历史的独立分支，上面这些文件不会自动出现在那里。需要在 Windows 的 checkout 中从 `archlinux` 分支取出同一份文件（内容无需修改）：
+  ```powershell
+  git fetch origin
+  git checkout origin/archlinux -- .pre-commit-config.yaml .gitleaks.toml .gitattributes .gitignore scripts/hooks/dotfiles_guard.py
+  Add-Content .chezmoiignore "scripts/"    # windows 分支的 .chezmoiignore 中还没有这一行
+  git add --renormalize .                  # 按新的 .gitattributes 归一化已有文件；检查 git diff --cached 后再提交
+  pre-commit install
+  ```
+  以后修改这些文件时，两个分支要同步更新。

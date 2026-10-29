@@ -4,7 +4,8 @@
 #   status                       只读：加密配置、chezmoi 漂移、备份候选、/etc 目标与待处理项、权限
 #   backup [-n] [--no-etc] [--commit]
 #                                re-add 已托管文件 → 添加候选 → /etc 写入 system/ → 更新 archpkg.txt → check
-#   check                        只运行安全检查（明文密钥 / .age 格式 / 私钥位置），可作 pre-commit hook
+#   check                        只运行安全检查（明文密钥 / .age 格式 / 必须加密的目标 / 私钥位置），
+#                                规则与 pre-commit hook 共用 scripts/hooks/dotfiles_guard.py
 #   audit [--apply]              敏感文件权限检查，--apply 时收紧为 600/700
 #   restore-etc [--apply] [/etc/路径...]
 #                                从 system/ 解密到 tmpfs，与现有 /etc 对比，--apply 时 sudo 安装
@@ -83,24 +84,16 @@ TMP_PATHS=()
 cleanup() { (( ${#TMP_PATHS[@]} )) && rm -rf -- "${TMP_PATHS[@]}"; return 0; }
 trap cleanup EXIT
 
-# 明文密钥特征（ERE）。命中的文件只会被加密存储，命中仓库明文会阻止提交。
-PATTERNS=$(mktemp); TMP_PATHS+=("$PATTERNS")
-cat >"$PATTERNS" <<'EOF'
------BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----
-AGE-SECRET-KEY-1[0-9A-Z]{20,}
-(^|[^A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{30,}
-github_pat_[A-Za-z0-9_]{40,}
-(^|[^A-Za-z0-9_])sk-(ant-|proj-)?[A-Za-z0-9_-]{20,}
-(^|[^A-Za-z0-9])AKIA[0-9A-Z]{16}
-(^|[^A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}
-pypi-[A-Za-z0-9_-]{50,}
-(^|[^A-Za-z0-9])npm_[A-Za-z0-9]{36}
-_authToken[[:space:]]*=[[:space:]]*[^[:space:]$]{8,}
-waka_[0-9a-f-]{36}
-AIza[0-9A-Za-z_-]{35}
-([Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss]([Ww][Oo][Rr][Dd]|[Ww][Dd])?)["']?[[:space:]]*[:=][[:space:]]*["']?[A-Za-z0-9+/_.~-]{12,}
-EOF
-has_secret() { grep -qIE -f "$PATTERNS" -- "$1" 2>/dev/null; }
+# 密钥特征与 pre-commit hook 共用一份规则：scripts/hooks/dotfiles_guard.py
+GUARD="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/hooks/dotfiles_guard.py"
+[[ -f $GUARD ]] || { printf '✗ 缺少 %s\n' "$GUARD" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { printf '✗ 需要 python3\n' >&2; exit 1; }
+# guard scan：0 = 干净，1 = 命中，其他 = 出错。出错按命中处理（宁可多加密，不可漏加密）
+has_secret() {
+  local rc=0
+  python3 "$GUARD" scan -q -- "$1" || rc=$?
+  (( rc != 0 ))
+}
 
 # 文件或目录 → 其中的普通文件（跳过符号链接、大于 1MiB 的文件与 HOME_EXCLUDE）
 expand_files() {
@@ -362,30 +355,19 @@ backup_pkglist() {
   (( DRY )) || cp "$tmp" "$SRC/archpkg.txt"
 }
 
-# 安全检查：任何一项失败都返回非零
+# 安全检查：任何一项失败都返回非零。内容检查（age 密文 / 必须加密的目标 / 密钥特征）
+# 由 dotfiles_guard.py tree 完成，与 pre-commit hook 规则一致；这里额外检查私钥文件位置。
 gate() {
   section "安全检查"
-  local bad=0 f id hdr
+  local bad=0 id
   while IFS= read -r id; do
     if git -C "$SRC" ls-files --error-unmatch -- "$id" >/dev/null 2>&1; then
       err "age 私钥被 git 跟踪: $id"; bad=1
     fi
   done < <(age_identities)
-  while IFS= read -r -d '' f; do
-    [[ -f $SRC/$f ]] || continue
-    if [[ $f == *.age ]]; then
-      hdr=$(head -c 34 -- "$SRC/$f")
-      [[ $hdr == '-----BEGIN AGE ENCRYPTED FILE-----' || $hdr == age-encryption.org/v1* ]] ||
-        { err "不是有效的 age 密文: $f"; bad=1; }
-    elif has_secret "$SRC/$f"; then
-      err "明文文件疑似含密钥: $f（行号: $(grep -nIE -f "$PATTERNS" -- "$SRC/$f" | cut -d: -f1 | tr '\n' ' ')）"
-      bad=1
-    elif grep -qF -- "$HOME" "$SRC/$f" 2>/dev/null; then
-      warn "明文文件含绝对 home 路径（跨机器不可移植）: $f"
-    fi
-  done < <(git -C "$SRC" ls-files -z -co --exclude-standard)
+  (cd "$SRC" && python3 "$GUARD" tree) || bad=1
   (( bad )) && { err "安全检查未通过，不会提交"; return 1; }
-  ok "未发现明文密钥，所有 .age 文件格式正确"
+  ok "未发现明文密钥，所有 .age 文件格式正确，敏感目标均已加密"
 }
 
 cmd_check() {

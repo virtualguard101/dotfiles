@@ -1,0 +1,17 @@
+# 统一换行：仓库内一律 LF，Windows 检出也保持 LF（不受 core.autocrlf 影响）
+* text=auto eol=lf
+
+# age 密文：不做任何换行转换
+*.age -text
+
+# Windows 原生脚本需要 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制 / 应用私有格式：原样保存
+*.ptb -text
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.gpg binary

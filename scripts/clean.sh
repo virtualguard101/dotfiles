@@ -39,7 +39,7 @@ TARGETS=(
   "cargo|default|~/.cargo/registry/src 与 git/checkouts（--deep 额外 registry/cache）"
   "nuget|default|dotnet nuget locals http-cache --clear"
   "vcpkg|default|\$VCPKG_ROOT/buildtrees 与 packages（--deep 额外 downloads）"
-  "precommit|default|pre-commit gc（--deep: pre-commit clean）"
+  "precommit|default|pre-commit gc + 删除遗留的 stash 补丁 patch*（--deep: pre-commit clean）"
   "lsp|default|编辑器语言服务缓存 ~/.cache/typescript ~/.cache/jedi（语言服务运行时跳过）"
   "wine|default|wine-mono/gecko 安装包与 winetricks 下载缓存"
   "kde|default|DrKonqi 崩溃报告、KRunner 书签副本、Discover/AppStream 目录缓存"
@@ -329,7 +329,14 @@ clean_vcpkg() { local p; while IFS= read -r p; do [[ $p == '!'* ]] && warn "${p#
 # --- pre-commit
 avail_precommit() { have pre-commit && [[ -d ${PRE_COMMIT_HOME:-$C/pre-commit} ]]; }
 paths_precommit() { echo "${PRE_COMMIT_HOME:-$C/pre-commit}"; }
-clean_precommit() { if (( DEEP )); then run pre-commit clean; else run pre-commit gc; fi; }
+# pre-commit 把未暂存的改动存为 patch* 后从不删除，其中可能含明文；只删 1 小时前的，避免影响正在运行的提交
+clean_precommit() {
+  local home=${PRE_COMMIT_HOME:-$C/pre-commit} p
+  if (( DEEP )); then run pre-commit clean; return; fi
+  run pre-commit gc
+  while IFS= read -r p; do rm_paths "$p"; done \
+    < <(find "$home" -maxdepth 1 -type f -name 'patch*' -mmin +60 2>/dev/null || true)
+}
 
 # --- 语言服务缓存
 avail_lsp() { [[ -d $C/typescript || -d $C/jedi ]]; }
