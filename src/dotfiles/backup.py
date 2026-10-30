@@ -11,6 +11,7 @@ import json
 import os
 import re
 import stat
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -212,17 +213,63 @@ def cmd_status() -> int:
 # ---------------------------------------------------------------- backup
 
 class Runner:
-    """chezmoi modifying operations: adds --dry-run --verbose in dry-run mode."""
+    """chezmoi modifying operations. Dry-run adds --dry-run --verbose and captures the output, so
+    chezmoi never takes over the terminal, and diffs of .age files are summarized: ciphertext is
+    unreadable and differs on every encryption."""
 
     def __init__(self, dry: bool):
         self.flags = ["--dry-run", "--verbose"] if dry else []
         self.dry = dry
 
     def cz(self, *args: str) -> int:
-        return chez.cz_live(*self.flags, *args)
+        if not self.dry:
+            return chez.cz_live(*args)
+        r = chez.cz(*self.flags, *args)
+        text = summarize_diff(r.stdout)
+        if text.strip():
+            print(text.rstrip("\n"))
+        if r.stderr.strip():
+            print(r.stderr.rstrip("\n"), file=sys.stderr)
+        return r.returncode
 
     def cz_quiet(self, *args: str) -> sysinfo.Result:
         return chez.cz(*self.flags, *args)
+
+
+_DIFF_HEAD = re.compile(r"^diff --git a/(\S+) b/(\S+)$")
+
+
+def summarize_diff(text: str) -> str:
+    """Keep plaintext diff blocks; replace each .age block with a single line."""
+    out: list[str] = []
+    block: list[str] = []
+
+    def flush() -> None:
+        if not block:
+            return
+        m = _DIFF_HEAD.match(block[0])
+        if m and (m.group(1).endswith(".age") or m.group(2).endswith(".age")):
+            if any(line.startswith("new file mode") for line in block):
+                kind, path = "new", m.group(2)
+            elif any(line.startswith("deleted file mode") for line in block):
+                kind, path = "deleted", m.group(1)
+            else:
+                kind, path = "modified", m.group(2)
+            out.append(f"  {kind:<9}{path}  (encrypted; ciphertext not shown)")
+        else:
+            out.extend(block)
+        block.clear()
+
+    for line in text.splitlines():
+        if _DIFF_HEAD.match(line):
+            flush()
+            block.append(line)
+        elif block:
+            block.append(line)
+        else:
+            out.append(line)
+    flush()
+    return "\n".join(out) + ("\n" if out else "")
 
 
 def make_private(path: Path, dry: bool) -> None:
@@ -237,6 +284,42 @@ def make_private(path: Path, dry: bool) -> None:
             os.chmod(path, 0o600)
 
 
+_FILE_PREFIXES = ("create_", "modify_", "encrypted_", "private_", "readonly_", "empty_", "executable_")
+
+
+def has_private_attr(source_rel: str) -> bool:
+    """Whether a source file name carries chezmoi's private_ attribute (prefixes come in a fixed order)."""
+    name = source_rel.rsplit("/", 1)[-1]
+    for prefix in _FILE_PREFIXES:
+        if name.startswith(prefix):
+            if prefix == "private_":
+                return True
+            name = name[len(prefix):]
+    return False
+
+
+def private_drift() -> list[Path]:
+    """Managed private_ files whose live mode is looser than 600. re-add copies the live mode back
+    into the source, which would drop private_ and make new machines deploy the file as 644."""
+    if IS_WINDOWS:
+        return []
+    r = chez.cz("managed", "-i", "files", "-x", "externals,templates", "-p", "all")
+    if not r.ok:
+        raise ui.Abort(f"chezmoi managed failed: {r.stderr.strip()[:300]}")
+    out = []
+    for info in json.loads(r.stdout or "{}").values():
+        if not has_private_attr(info["sourceRelative"]):
+            continue
+        p = Path(info["absolute"])
+        try:
+            st = p.lstat()
+        except OSError:
+            continue
+        if stat.S_ISREG(st.st_mode) and stat.S_IMODE(st.st_mode) & 0o077:
+            out.append(p)
+    return out
+
+
 def backup_managed(run: Runner) -> None:
     ui.section("re-add managed files")
     for f in chez.managed(include="files", exclude="externals,encrypted,templates", absolute=True):
@@ -245,7 +328,20 @@ def backup_managed(run: Runner) -> None:
             ui.warn(f"plaintext managed file now matches a secret pattern; switching to encrypted: {rel_home(p)}")
             make_private(p, run.dry)
             run.cz("add", "--encrypt", "--", str(p))
-    if run.cz("re-add") != 0:
+    loose = private_drift()
+    for p in loose:
+        ui.info(f"  keep private_: {rel_home(p)}")
+        make_private(p, run.dry)
+    if run.dry and loose:
+        # nothing was tightened yet: leave these out so the preview shows re-add after tightening
+        skip = {str(p) for p in loose}
+        targets = [f for f in chez.managed(include="files", exclude="externals,templates", absolute=True)
+                   if f not in skip]
+        ui.dim("  (content changes of the files above are not previewed until their mode is fixed)")
+        rc = run.cz("re-add", "--", *targets) if targets else 0
+    else:
+        rc = run.cz("re-add")
+    if rc != 0:
         raise ui.Abort("chezmoi re-add failed")
     for t in template_drift():
         ui.warn(f"template target has local changes; merge them into the .tmpl by hand: {t}")

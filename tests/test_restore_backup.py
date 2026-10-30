@@ -60,3 +60,44 @@ def test_normalize_exports_are_stable():
 def test_cli_rejects_unknown_targets_and_steps(capsys):
     assert cli.main(["clean", "run", "no-such-target"]) == 2
     assert cli.main(["restore", "--only", "no-such-step"]) == 2
+
+
+@pytest.mark.parametrize("source, private", [
+    ("dot_agents/encrypted_private_ccs_config.sql.age", True),
+    ("encrypted_private_dot_zshrc.age", True),
+    ("private_dot_pypirc", True),
+    ("private_dot_config/fcitx5/profile", False),        # private_ on a parent dir only
+    ("encrypted_dot_zshrc.age", False),
+    ("executable_private_x", False),                     # prefixes have a fixed order: private_ comes first
+    ("dot_private_notes", False),
+])
+def test_has_private_attr(source, private):
+    assert backup.has_private_attr(source) is private
+
+
+def test_summarize_diff_hides_ciphertext_keeps_plaintext():
+    cipher = "-----BEGIN AGE ENCRYPTED FILE-----"
+    text = "\n".join([
+        "diff --git a/home/encrypted_private_dot_zshrc.age b/home/encrypted_private_dot_zshrc.age",
+        "deleted file mode 100644",
+        "--- a/home/encrypted_private_dot_zshrc.age",
+        "+++ /dev/null",
+        f"-{cipher}",
+        "diff --git a/home/encrypted_dot_zshrc.age b/home/encrypted_dot_zshrc.age",
+        "new file mode 100644",
+        f"+{cipher}",
+        "diff --git a/home/dot_x.age b/home/dot_x.age",
+        "index 1..2 100644",
+        f"+{cipher}",
+        "diff --git a/home/dot_bashrc b/home/dot_bashrc",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+    ])
+    out = backup.summarize_diff(text)
+    assert cipher not in out
+    assert "deleted  home/encrypted_private_dot_zshrc.age" in out
+    assert "new      home/encrypted_dot_zshrc.age" in out
+    assert "modified home/dot_x.age" in out
+    assert "-old\n+new" in out
+    assert backup.summarize_diff("") == ""

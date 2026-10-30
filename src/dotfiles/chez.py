@@ -42,7 +42,8 @@ def require_chezmoi() -> None:
 
 
 def base_args(os_override: str | None = None) -> list[str]:
-    args = ["chezmoi", "--source", str(repo())]
+    # --no-pager: chezmoi blocks forever when its pager quits before reading all output
+    args = ["chezmoi", "--no-pager", "--source", str(repo())]
     if os_override:
         args += ["--override-data", json.dumps({"chezmoi": {"os": os_override}})]
     return args
