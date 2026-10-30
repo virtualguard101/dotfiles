@@ -94,7 +94,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 2. **re-add 已托管文件**：明文托管的文件如果出现了密钥特征，先收紧为 600 并改为加密托管，再对全部托管文件执行 `chezmoi re-add`。
 
-3. **模板目标的漂移**：`re-add` 不处理模板（如 `.gitconfig.tmpl`）。有本地修改的模板目标会被列出，需要手动合并回 `.tmpl`。
+3. **模板目标的漂移**：`re-add` 不处理模板（如 `.gitconfig.tmpl`）。有本地修改的模板目标会被列出，需要手动合并回 `.tmpl`（[6.3](#63-需要手动合并的场景)）。
 
 4. **添加候选**：把本平台候选清单中尚未托管的文件加入 chezmoi，并登记到 `platforms.toml` 的当前平台。
 
@@ -391,7 +391,101 @@ uv run dotfiles guard prune-stash --max-age-minutes 0
 
 ---
 
-## 6. 开发与测试
+## 6. 兼容性问题
+
+本仓库直接克隆到 `~/.local/share/chezmoi`，即 chezmoi 的默认源目录，因此检出目录就是工作目录.
+
+`chezmoi init`、`apply`、`update` 按默认设置工作，日常同步就是 `git pull` + `chezmoi apply`。
+
+由于 `.chezmoiroot` 指定 `home/` 为源状态，仓库顶层的工具文件（`src/`、`tests/`、`Justfile` 等）永远不会被部署进 `~`。新机器也直接克隆到该路径（见 `bootstrap.sh`）；克隆到独立目录再从那里 apply 会留下两份会漂移的副本。
+
+### 6.1 传统 chezmoi 命令
+
+所有传统命令透明可用；chezmoi 通过 `.chezmoiroot` 解析真实源路径：
+
+| 命令 | 行为 |
+|---|---|
+| `chezmoi edit <目标>` | 打开 `home/` 下的源文件；加密文件自动解密编辑、保存时重新加密 |
+| `chezmoi edit --apply <目标>` | 编辑并一步部署 |
+| `chezmoi re-add` | 重新导入改动的明文目标、重新加密改动的加密目标（`dotfiles backup` 内部就是包的它） |
+| `chezmoi add <文件>` | 照常工作，但新目标必须登记到 `platforms.toml`（[3.3](#33-平台归属)）；`dotfiles check` 会强制校验 |
+| `chezmoi managed / diff / verify / forget` | 不受影响；`chezmoi source-path` 解析为 `~/.local/share/chezmoi/home` |
+
+两点注意：
+
+- `re-add` 不处理模板（`.tmpl`）；模板目标漂移时 `backup` 会列出，需要手动合并回 `.tmpl`——具体步骤见 [6.3](#63-需要手动合并的场景)。
+
+- 不要直接手改 `.age` 源文件——一律通过 `chezmoi edit`（[6.3](#63-需要手动合并的场景)）。
+
+### 6.2 拉取提交后的重新同步
+
+拉取（例如 `dev` 合并进 `main` 之后）不需要任何重新初始化——源目录没有变化。把真实系统同步到新的源状态：
+
+1. `git fetch && git pull`（或切换到 `main` 跟随共享分支）。
+
+2. `dotfiles backup -n`：检查漂移——上次 apply 之后本地改过的文件（apply 会覆盖它们）。要保留就用 `dotfiles backup --commit` 收回仓库，或直接改源文件。
+
+3. `dotfiles restore --apply --only dotfiles`：部署源状态；将被覆盖的文件先备份到 `~/.local/state/dotfiles/pre-apply-*`。
+
+4. 需要收紧权限时 `dotfiles audit --apply`，最后用 `dotfiles doctor` 与 `dotfiles check` 确认。
+
+第 2 步中"保留改动"还是"让 apply 覆盖"要逐个文件决定。下节给出文档中所有"手动合并"处的具体操作。
+
+### 6.3 需要手动合并的场景
+
+#### 明文目标漂移
+
+本地文件改过，想保留改动：
+
+```bash
+chezmoi diff ~/.config/foo/bar.conf   # 查看 apply 会改什么
+chezmoi add ~/.config/foo/bar.conf    # 把本地内容收回源状态
+uv run dotfiles check                 # 平台归属必须保持完整
+```
+
+`dotfiles backup` 会一次性对所有漂移的明文目标执行收回操作；先用 `backup -n` 预览会收回哪些内容。如果以源状态为准，则什么都不用做——apply 会覆盖本地文件（`restore` 会先把它备份到 `~/.local/state/dotfiles/pre-apply-*`）。
+
+#### 模板目标漂移
+
+例如 `~/.gitconfig`，由 `home/dot_gitconfig.tmpl` 渲染而来。`re-add` 与 `backup` 都跳过模板，本地改动必须手动并入 `.tmpl`。先从两侧看差异：
+
+```bash
+chezmoi diff ~/.gitconfig                        # 上次部署的状态 vs 本地文件
+chezmoi cat ~/.gitconfig | diff - ~/.gitconfig   # 当前模板渲染结果 vs 本地文件
+```
+
+逐块审视差异，把需要保留的本地改动抄进 `home/dot_gitconfig.tmpl`——与平台相关的改动用模板逻辑区分（参见 [3.3](#33-平台归属)）。然后部署并确认合并完整：
+
+```bash
+chezmoi apply ~/.gitconfig
+chezmoi cat ~/.gitconfig | diff - ~/.gitconfig   # 无输出 = 恢复同步
+```
+
+#### 加密目标漂移
+
+以 `~/.ssh/config`为例：
+
+```bash
+chezmoi edit ~/.ssh/config            # 解密到临时文件、打开 $EDITOR、保存时重新加密
+# 或者以本地文件为准时：
+chezmoi add --encrypt ~/.ssh/config   # 重新导入；encrypted_ 前缀保持不变
+```
+
+不要直接编辑 `.age` 源文件；`encrypted_` 前缀与 `.age` 后缀不成对时 `dotfiles check` 会报错（[5.2](#52-检查内容)）。
+
+#### 新增文件
+
+另见 [3.3](#33-平台归属)：
+
+```bash
+chezmoi add ~/.config/foo/bar.conf         # 敏感内容用 `chezmoi add --encrypt`
+# 然后在 platforms.toml 的 linux / windows / shared 中登记 ".config/foo"（或具体文件）
+uv run dotfiles check
+```
+
+---
+
+## 7. 开发与测试
 
 ```bash
 uv run pytest                     # 或 just test
@@ -406,7 +500,7 @@ uvx ruff check src tests
 chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windows"}}' managed
 ```
 
-## 7. 已知限制
+## 8. 已知限制
 
 - **Windows 上尚未实际运行过 Python 版本**：Windows 的清理目标、备份（scoop/winget 导出、ACL 审计）、恢复流程与 `bootstrap.ps1` 是从原 PowerShell 脚本移植或新写的，只在 Linux 上做过文件系统层面的测试与语法解析。原脚本可在提交 `a15c9b5` 中找到（`git show a15c9b5:scripts/clean.ps1`）。首次在 Windows 上使用时，先运行`doctor`、`clean scan`、`status`、`restore`（不加 `--apply`）确认结果。
 

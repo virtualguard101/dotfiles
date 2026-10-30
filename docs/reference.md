@@ -94,7 +94,7 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted, then `chezmoi re-add` runs for all managed files.
 
-3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`). Template targets with local changes are listed and must be merged back into the `.tmpl` by hand.
+3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`). Template targets with local changes are listed and must be merged back into the `.tmpl` by hand ([6.3](#63-cases-that-need-a-manual-merge)).
 
 4. **Add candidates**: unmanaged files from the current platform's candidate list are added to chezmoi and registered under the current platform in `platforms.toml`.
 
@@ -390,7 +390,101 @@ uv run dotfiles guard prune-stash --max-age-minutes 0
 
 ---
 
-## 6. Development and tests
+## 6. Compatibility notes
+
+This repo is cloned directly into `~/.local/share/chezmoi`, chezmoi's default source directory, so the checkout is the working directory.
+
+`chezmoi init`, `apply` and `update` work with default settings; daily sync is `git pull` + `chezmoi apply`.
+
+Because `.chezmoiroot` names `home/` as the source state, the tool files at the repo top (`src/`, `tests/`, `Justfile`, ...) are never deployed into `~`. Fresh machines clone straight into this path too (see `bootstrap.sh`); cloning to a separate directory and applying from there would leave two copies that drift.
+
+### 6.1 Traditional chezmoi commands
+
+All traditional commands work transparently; chezmoi resolves the real source paths through `.chezmoiroot`:
+
+| Command | Behavior |
+|---|---|
+| `chezmoi edit <target>` | opens the source file under `home/`; encrypted files are decrypted for editing and re-encrypted on save |
+| `chezmoi edit --apply <target>` | edit and deploy in one step |
+| `chezmoi re-add` | re-imports changed plaintext targets and re-encrypts changed encrypted ones (`dotfiles backup` wraps this) |
+| `chezmoi add <file>` | works as usual, but new targets must be registered in `platforms.toml` ([3.3](#33-platform-ownership)); `dotfiles check` enforces it |
+| `chezmoi managed / diff / verify / forget` | unaffected; `chezmoi source-path` resolves to `~/.local/share/chezmoi/home` |
+
+Two caveats:
+
+- `re-add` does not handle templates (`.tmpl`); when a template target drifts, `backup` lists it and the change must be merged back into the `.tmpl` by hand — exact steps in [6.3](#63-cases-that-need-a-manual-merge).
+
+- Never edit an `.age` source file by hand — always go through `chezmoi edit` ([6.3](#63-cases-that-need-a-manual-merge)).
+
+### 6.2 Re-syncing after pulling commits
+
+Pulling (e.g. after `dev` is merged into `main`) needs no re-initialization — the source directory does not change. To bring the real system back in sync with the new source state:
+
+1. `git fetch && git pull` (or switch to `main` to follow the shared branch).
+
+2. `dotfiles backup -n`: check for drift — live files modified since the last apply (apply would overwrite them). Keep wanted changes with `dotfiles backup --commit`, or edit the source files directly.
+
+3. `dotfiles restore --apply --only dotfiles`: deploys the source state; files about to be overwritten are backed up to `~/.local/state/dotfiles/pre-apply-*` first.
+
+4. `dotfiles audit --apply` if permissions need tightening, then `dotfiles doctor` and `dotfiles check` to confirm.
+
+In step 2, "keep the change" vs "let apply overwrite" is decided per file. The next section gives the exact steps for every place the docs say "merge by hand".
+
+### 6.3 Cases that need a manual merge
+
+#### Plaintext target drifted
+
+The live file changed and you want to keep the change:
+
+```bash
+chezmoi diff ~/.config/foo/bar.conf   # what apply would change
+chezmoi add ~/.config/foo/bar.conf    # fold the live content back into the source state
+uv run dotfiles check                 # platform ownership must stay complete
+```
+
+`dotfiles backup` folds back every drifted plaintext target at once; run `backup -n` first to preview what it would fold in. If instead the source should win, do nothing — apply overwrites the live file (`restore` backs it up to `~/.local/state/dotfiles/pre-apply-*` first).
+
+#### Template target drifted
+
+E.g. `~/.gitconfig`, rendered from `home/dot_gitconfig.tmpl`. `re-add` and `backup` both skip templates, so the live change must go into the `.tmpl` by hand. First look at the diff from both sides:
+
+```bash
+chezmoi diff ~/.gitconfig                        # last-applied state vs the live file
+chezmoi cat ~/.gitconfig | diff - ~/.gitconfig   # current template render vs the live file
+```
+
+Go through the diff hunk by hunk and copy the wanted live changes into `home/dot_gitconfig.tmpl` — wrap platform-dependent changes in template logic (see [3.3](#33-platform-ownership)). Then deploy and confirm the merge is complete:
+
+```bash
+chezmoi apply ~/.gitconfig
+chezmoi cat ~/.gitconfig | diff - ~/.gitconfig   # empty output = back in sync
+```
+
+#### Encrypted target drifted
+
+Taking `~/.ssh/config` as an example:
+
+```bash
+chezmoi edit ~/.ssh/config            # decrypts to a temp file, opens $EDITOR, re-encrypts on save
+# or, if the live file is authoritative:
+chezmoi add --encrypt ~/.ssh/config   # re-imports it; the encrypted_ prefix is kept
+```
+
+Never edit the `.age` source file itself; `dotfiles check` fails when the `encrypted_` prefix and the `.age` suffix stop coming in pairs ([5.2](#52-what-is-checked)).
+
+#### New file added
+
+See also [3.3](#33-platform-ownership):
+
+```bash
+chezmoi add ~/.config/foo/bar.conf         # or `chezmoi add --encrypt` for sensitive content
+# then register ".config/foo" (or the concrete file) in platforms.toml under linux / windows / shared
+uv run dotfiles check
+```
+
+---
+
+## 7. Development and tests
 
 ```bash
 uv run pytest                     # or just test
@@ -405,7 +499,7 @@ See what would deploy in the Windows view from Linux:
 chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windows"}}' managed
 ```
 
-## 7. Known limitations
+## 8. Known limitations
 
 - **The Python version has never actually run on Windows**: the Windows cleanup targets, backup (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the original PowerShell scripts (or written fresh) and are only tested at the filesystem level on Linux, plus syntax parsing. The original scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`, `status` and `restore` (without `--apply`) to confirm the results.
 

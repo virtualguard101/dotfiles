@@ -4,11 +4,6 @@
 Python 工具 `dotfiles`，用来做环境检测、重装后恢复、日常备份与缓存清理。两个平台共用同一个分支、
 同一套命令。
 
-> 仓库是**公开**的。所有敏感文件都以 age 加密后存放（`encrypted_*.age`），解密用的私钥**不在仓库中**，
-> 需要另行离线保存（U 盘 / 密码管理器）。私钥丢失后所有加密文件都无法恢复。
-
-英文文档：[README.md](README.md) · [docs/reference.md](docs/reference.md)
-
 ## 仓库布局
 
 ```
@@ -27,8 +22,7 @@ docs/reference.md         详细参考：各命令的行为、加密与平台归
 
 ## 重装后恢复
 
-准备: **离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，
-先在当前终端设置 `HTTPS_PROXY`。
+准备: **离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，先在当前终端设置 `HTTPS_PROXY`。
 
 ### Arch Linux
 
@@ -70,12 +64,9 @@ bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 win
 | `hooks` | 安装提交检查 hooks；仓库与 externals 拉取用 HTTPS、推送改为 SSH |
 | `verify` | `chezmoi verify`、安全检查、权限审计 |
 
-每一步执行前都会重新检测当前状态，已完成的步骤自动跳过；任何一步失败都会停下，解决后重跑同一条命令
-即可从那一步继续。装包、改 `/etc`、换 shell、登记公钥这类操作执行前会确认（`--yes` 跳过确认）。只想执行
-某几步时用 `--only`，例如 `--only key,config,dotfiles`；跳过某几步用 `--skip`。
+每一步执行前都会重新检测当前状态，已完成的步骤自动跳过；任何一步失败都会停下，解决后重跑同一条命令即可从那一步继续。装包、改 `/etc`、换 shell、登记公钥这类操作执行前会确认（`--yes` 跳过确认）。只想执行某几步时用 `--only`，例如 `--only key,config,dotfiles`；跳过某几步用 `--skip`。
 
-恢复完成后需要手动处理的事项会在输出中列出，通常包括：其他服务器上的 `authorized_keys`（新生成的 SSH
-公钥）、`packages/winget-unavailable.txt` 中不在 winget 源里的程序。
+恢复完成后需要手动处理的事项会在输出中列出，通常包括：其他服务器上的 `authorized_keys`（新生成的 SSH公钥）、`packages/winget-unavailable.txt` 中不在 winget 源里的程序。
 
 ## 日常使用
 
@@ -87,8 +78,7 @@ uv run dotfiles clean scan             # 查看可清理的缓存
 uv run dotfiles clean run --apply      # 清理 default 层
 ```
 
-装了 [just](https://github.com/casey/just) 时可以用短命令：`just doctor`、`just backup -n`、
-`just clean scan` 等，见 `just --list`。
+装了 [just](https://github.com/casey/just) 时可以用短命令：`just doctor`、`just backup -n`、`just clean scan` 等，见 `just --list`。
 
 | 命令 | 作用 |
 |---|---|

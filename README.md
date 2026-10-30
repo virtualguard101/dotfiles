@@ -2,10 +2,6 @@
 
 An Arch Linux and Windows config repository built on [chezmoi](https://www.chezmoi.io), plus a uv-managed Python tool `dotfiles` for environment checks, post-reinstall recovery, daily backups and cache cleanup. Both platforms share one branch and one set of commands.
 
-> The repo is **public**. All sensitive files are stored age-encrypted (`encrypted_*.age`); the
-> decryption key is **not** in the repo and must be backed up offline (USB drive / password
-> manager). If the key is lost, none of the encrypted files can be recovered.
-
 ## Repository layout
 
 ```
@@ -22,12 +18,12 @@ docs/reference.md         detailed reference: command behavior, encryption and p
                           cleanup targets, commit checks
 ```
 
-Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the
-home directory.
+Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.
 
 ## Post-reinstall recovery
 
-You need: the **offline-stored age key file** (`AGE-SECRET-KEY-1…`) and network access to GitHub.
+Prerequisites: the **offline-stored age key file** (`AGE-SECRET-KEY-1…`) and network access to GitHub.
+
 If you need a proxy, set `HTTPS_PROXY` in the current terminal first.
 
 ### Arch Linux
@@ -50,13 +46,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1            # p
 powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # execute
 ```
 
-Do not pipe straight into `curl … | bash` or `irm … | iex`: stdin is then not a terminal and you
-cannot type the key path interactively.
+Do not pipe straight into `curl … | bash` or `irm … | iex`: stdin is then not a terminal and you cannot type the key path interactively.
 
 ### Recovery Flow Overview
 
-bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) and clones the
-public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
+bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) and clones the public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
 `dotfiles restore`:
 
 | Step | What it does |
@@ -73,14 +67,14 @@ public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
 | `verify` | `chezmoi verify`, the security check, and the permission audit |
 
 Every step re-detects the current state before running; completed steps are skipped automatically.
-Any failure stops the flow — fix the problem and rerun the same command to continue from that step.
-Steps that install packages, modify `/etc`, change the shell or register keys ask for confirmation
-(`--yes` skips). To run only some steps use `--only`, e.g. `--only key,config,dotfiles`; to skip
-some use `--skip`.
 
-After recovery, the output lists items that need manual attention, usually: `authorized_keys` on
-your other servers (for the newly generated SSH keys) and the programs in
-`packages/winget-unavailable.txt` that are not in any winget source.
+Any failure stops the flow — fix the problem and rerun the same command to continue from that step.
+
+Steps that install packages, modify `/etc`, change the shell or register keys ask for confirmation (`--yes` skips).
+
+To run only some steps use `--only`, e.g. `--only key,config,dotfiles`; to skip some use `--skip`.
+
+After recovery, the output lists items that need manual attention, usually: `authorized_keys` on your other servers (for the newly generated SSH keys) and the programs in `packages/winget-unavailable.txt` that are not in any winget source.
 
 ## Daily use
 
@@ -92,8 +86,7 @@ uv run dotfiles clean scan             # see what caches can be cleaned
 uv run dotfiles clean run --apply      # clean the default tier
 ```
 
-With [just](https://github.com/casey/just) installed there are shortcuts: `just doctor`,
-`just backup -n`, `just clean scan`, etc.; see `just --list`.
+With [just](https://github.com/casey/just) installed there are shortcuts: `just doctor`, `just backup -n`, `just clean scan`, etc.; see `just --list`.
 
 | Command | What it does |
 |---|---|
@@ -106,8 +99,7 @@ With [just](https://github.com/casey/just) installed there are shortcuts: `just 
 | `system-restore [--apply] [/etc/path…]` | Linux: compare `system/` with the current `/etc` and install as needed |
 | `clean scan / list / run / leftovers` | cache cleanup; `run` previews by default, `--apply` executes |
 
-Every modifying command previews by default. Full details in
-[docs/reference.md](docs/reference.md).
+Every modifying command previews by default. Full details in [docs/reference.md](docs/reference.md).
 
 ## Security design
 
