@@ -1,13 +1,13 @@
-# 提交/推送检查。Windows 与 Linux 共用此文件；每台机器各自执行一次：
-#   pre-commit install        （按 default_install_hook_types 同时安装 pre-commit 与 pre-push）
-# 详见 scripts/README.md 的“提交检查”一节。
+# Commit/push checks. Windows and Linux share this file; run once per machine:
+#   pre-commit install        (installs both pre-commit and pre-push per default_install_hook_types)
+# See the "Commit checks (pre-commit)" section of docs/reference.md.
 minimum_pre_commit_version: "3.2.0"
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
 fail_fast: false
 
 repos:
-  # 跨平台卫生检查：只检查、不改写 dotfiles 内容
+  # cross-platform hygiene checks: inspect only, never rewrite dotfiles content
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -19,31 +19,32 @@ repos:
       - id: check-yaml
       - id: check-toml
 
-  # 通用密钥扫描（--redact：输出中不含密钥值）。pre-commit 会自动下载 Go 并构建
+  # general secret scan (--redact: values never appear in the output). pre-commit downloads
+  # Go and builds gitleaks automatically
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
       - id: gitleaks
 
-  # 本仓库专用规则：age 密文校验、必须加密的目标、自定义密钥特征
+  # repo-specific rules: age ciphertext validation, must-encrypt targets, secret patterns
   - repo: local
     hooks:
       - id: prune-precommit-stash
         name: prune pre-commit stash patches
-        entry: python scripts/hooks/dotfiles_guard.py prune-stash
+        entry: python src/dotfiles/guard.py prune-stash
         language: python
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
       - id: dotfiles-guard
         name: dotfiles guard (staged)
-        entry: python scripts/hooks/dotfiles_guard.py staged
+        entry: python src/dotfiles/guard.py staged
         language: python
         verbose: true
         stages: [pre-commit]
       - id: dotfiles-guard-push
         name: dotfiles guard (every pushed commit)
-        entry: python scripts/hooks/dotfiles_guard.py push
+        entry: python src/dotfiles/guard.py push
         language: python
         pass_filenames: false
         always_run: true

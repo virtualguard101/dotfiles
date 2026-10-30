@@ -1,0 +1,20 @@
+{{- /*
+  This template generates ~/.config/chezmoi/chezmoi.toml at `chezmoi init` (both platforms).
+  The age private key is not in the repo: `dotfiles restore` places it at
+  ~/.config/chezmoi/key.txt on a new machine; existing machines keep their old location
+  (the last candidate that exists, in order).
+*/ -}}
+{{- $identity := joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt" -}}
+{{- range list (joinPath .chezmoi.homeDir "secret" "chezmoi_age_key.txt") (joinPath .chezmoi.homeDir "vg101" "secret" "chezmoi_age_key.txt") -}}
+{{-   if stat . }}{{ $identity = . }}{{ end -}}
+{{- end -}}
+encryption = "age"
+
+[age]
+    # just the path of the key file; the key itself stays out of git and is backed up offline
+    identity = {{ $identity | quote }}
+    recipient = "age15r3jnkzxal9mgu3pfngd4t67rwnpy7ftw0udt2cze93jvmnmu9cqvms9a5"
+
+[edit]
+    command = "code"
+    args = ["--wait"]

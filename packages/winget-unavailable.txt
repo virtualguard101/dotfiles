@@ -1,0 +1,122 @@
+# winget export 无法导出的已安装程序（不在任何 winget 源中），需手动安装
+Adobe Audition 2026
+AI Megpoid SOLID for VOCALOID
+ASUS Hotplug Controller
+ASUS Monitor Control
+AurallySound Song Master 2.1.02
+AurallySound Song Master Pro 2.7.01
+AV1 Video Extension
+AVC Encoder Video Extension
+BaiduNetdiskService
+BongoCat version 1.14.0
+Cell to Singularity - Evolution Never Ends
+Command Palette
+Copilot
+CrypTool 2.1 (Stable Build 7997.1)
+DeepSeek Harness 0.2.0-rc.2
+Desktop Mate
+Dev Home
+Dolby Access
+Dolby Digital Plus decoder for PC OEMs
+FabFilter Total Bundle
+Feedback Hub
+FL Cloud Plugins version 1.8.0
+FL Studio 2024
+FL Studio ASIO
+Game Bar
+Game Speech Window
+Get Help
+Google Chrome
+HEIF Image Extension
+HEVC Video Extensions from Device Manufacturer
+IDA Professional 9.5
+In Falsus
+Intel® Graphics Software
+ksystemsharehostzhCN
+Microsoft .Net Native Framework Package 1.7
+Microsoft .Net Native Framework Package 2.1
+Microsoft .Net Native Framework Package 2.2
+Microsoft .Net Native Runtime Package 1.7
+Microsoft .Net Native Runtime Package 2.1
+Microsoft .NET SDK 10.0.402 (x64) from Visual Studio
+Microsoft Bing
+Microsoft Clipchamp
+Microsoft Edge
+Microsoft Engagement Framework
+Microsoft Nanami (Natural) - Japanese (Japan)
+Microsoft News
+Microsoft Photos
+Microsoft Sticky Notes
+Microsoft Store
+Microsoft To Do
+Microsoft Visual Studio Installer
+Mobile devices
+Mozilla Maintenance Service
+MPEG-2 Video Extension
+MSN Weather
+Npcap
+NVIDIA Control Panel
+NVIDIA FrameView SDK 1.4.10330.34644786
+NVIDIA HD 音频驱动程序 1.4.2.6
+NVIDIA 图形驱动程序 566.07
+NVIDIA 应用程序 10.0.3.163
+PACE License Support
+Paint
+Phone Link
+Power Automate
+PowerToys FileLocksmith Context Menu
+PowerToys ImageResizer Context Menu
+PowerToys PowerRename Context Menu
+PowerToys.SparseApp
+QQExtension
+Quick Assist
+Raw Image Extension
+Realtek Audio Control
+RUNNING WITH RIFLES
+S4U: 都市朋克2011与爱的重拳
+SimAppPro 1.16.112
+Snipping Tool
+Solitaire & Casual Games
+Speech Pack - Japanese (Japan)
+Start Experiences App
+Store Experience Host
+Synthesizer V Studio 2 Pro 版本 2.2.1
+ThunderboltTM Control Center
+Turing Complete
+USBPcap 1.5.4.0
+Visual Studio Code
+VMware Workstation
+VOCALOID6 Editor
+Voicebanks for VOCALOID
+VP9 Video Extensions
+vs_CoreEditorFonts
+Wallpaper Engine:壁纸引擎
+Web Media Extensions
+WebP Image Extension
+Weixin
+Widgets Platform Runtime
+Windows Application Compatibility Enhancements
+Windows Calculator
+Windows Camera
+Windows Clock
+Windows Media Player
+Windows Notepad
+Windows Package Manager Source (winget) V2
+Windows Security
+Windows Sound Recorder
+Windows Web Experience Pack
+wpsappext1
+wpsappext2
+wpsappext3
+XBOX
+Xbox Identity Provider
+Xbox TCUI
+Xshell 8
+百度网盘
+戴森球计划
+福建工程学院校园网认证客户端 V6.43
+火山的女儿
+迷你空管 Mini Airways
+日本語 ローカル エクスペリエンス パック
+指尖时光 1.0.3
+中文(简体)本地体验包

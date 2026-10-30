@@ -1,0 +1,29 @@
+{{- /*
+  Targets of the other platform are always ignored; ownership is declared in
+  .chezmoidata/platforms.toml. Parent directories of those targets are ignored too (unless they
+  also hold targets of this platform or shared ones) — otherwise the parent itself stays managed,
+  e.g. Windows' readonly_Documents/ would chmod ~/Documents read-only on Linux.
+*/ -}}
+{{- $os := .chezmoi.os -}}
+{{- $own := list -}}
+{{- range $platform, $targets := .platforms -}}
+{{-   if or (eq $platform "shared") (eq $platform $os) }}{{ $own = concat $own $targets }}{{ end -}}
+{{- end -}}
+{{- $ignored := dict -}}
+{{- range $platform, $targets := .platforms -}}
+{{-   if and (ne $platform "shared") (ne $platform $os) -}}
+{{-     range $target := $targets -}}
+{{-       $_ := set $ignored $target true -}}
+{{-       $parts := splitList "/" $target -}}
+{{-       range $i := until (sub (len $parts) 1 | int) -}}
+{{-         $parent := join "/" (slice $parts 0 (add $i 1)) -}}
+{{-         $needed := false -}}
+{{-         range $own }}{{ if or (eq . $parent) (hasPrefix (print $parent "/") .) }}{{ $needed = true }}{{ end }}{{ end -}}
+{{-         if not $needed }}{{ $_ := set $ignored $parent true }}{{ end -}}
+{{-       end -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- range $path := keys $ignored | sortAlpha }}
+{{ $path }}
+{{- end }}

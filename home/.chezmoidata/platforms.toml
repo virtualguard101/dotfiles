@@ -1,0 +1,38 @@
+# Each managed target (a path relative to ~; directory entries cover everything below) deploys
+# only on its own platform. .chezmoiignore derives its rules from this file, so `chezmoi add` /
+# `re-add` on one platform never reads or overwrites the other platform's source files.
+#
+# - `dotfiles backup` registers new targets under the current platform automatically
+# - `dotfiles check` requires every managed target to be listed exactly once
+# - targets deployed on both platforms (identical, or told apart by templates) go in shared
+[platforms]
+shared = [
+  ".gitconfig",
+]
+linux = [
+  ".agents/ccs_config.sql",
+  ".bashrc",
+  ".config/Code",
+  ".config/Cursor",
+  ".config/environment.d",
+  ".config/fcitx5",
+  ".config/fontconfig",
+  ".config/nvim",
+  ".config/zellij",
+  ".p10k.zsh",
+  ".pypirc",
+  ".ssh/config",
+  ".tmux.conf",
+  ".vimrc",
+  ".zimrc",
+  ".zshrc",
+  "tmux",
+]
+windows = [
+  ".claude/settings.json",
+  ".config/scoop",
+  ".docker/config.json",
+  ".wakatime.cfg",
+  "AppData",
+  "Documents/PowerToys",
+]

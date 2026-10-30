@@ -1,0 +1,18 @@
+{{- /*
+  Public repos are fetched over HTTPS so a fresh machine can clone before any SSH key exists.
+  The `hooks` step of `dotfiles restore` switches push URLs to SSH afterwards.
+  Platform ownership is constrained by .chezmoidata/platforms.toml the same way.
+*/ -}}
+[".config/nvim"]
+    type = "git-repo"
+    url = "https://github.com/virtualguard101/nvim.git"
+    refreshPeriod = "24h"
+    [".config/nvim".pull]
+        args = ["--ff-only"]
+
+# [".agents"]
+#     type = "git-repo"
+#     url = "https://github.com/virtualguard101/dotagents.git"
+#     refreshPeriod = "24h"
+#     [".agents".pull]
+#         args = ["--ff-only"]
