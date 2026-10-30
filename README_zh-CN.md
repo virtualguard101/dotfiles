@@ -27,7 +27,7 @@ docs/reference.md         详细参考：各命令的行为、加密与平台归
 
 ## 重装后恢复
 
-准备：**离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，
+准备: **离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，
 先在当前终端设置 `HTTPS_PROXY`。
 
 ### Arch Linux
@@ -52,7 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # �
 
 不要用 `curl … | bash` 或 `irm … | iex` 直接执行：那样标准输入不是终端，无法交互输入私钥路径。
 
-### 恢复流程做了什么
+### 恢复流程概览
 
 bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 winget），并通过 HTTPS 把仓库克隆到
 `~/.local/share/chezmoi`，其余都由 `dotfiles restore` 完成：
@@ -105,14 +105,14 @@ uv run dotfiles clean run --apply      # 清理 default 层
 
 ## 安全设计
 
-- **私钥不进仓库**：仓库中只有公钥；`check` 与提交检查会拦下任何明文私钥（`AGE-SECRET-KEY-`、PEM 私钥块）
-  以及被 git 跟踪的私钥文件。
-- **敏感文件一律加密**：备份时按清单、密钥特征扫描和 chezmoi 内置扫描三重判断是否加密；SSH 配置、凭据文件、
-  `sudoers` 等目标未加密时提交会被拒绝。加密托管的文件部署后权限为 600。
-- **提交与推送双重检查**：pre-commit 阶段检查暂存区，pre-push 阶段检查每一个待推送的提交（`--no-verify`
-  跳过的提交也会被拦下）。输出只有文件、行号和规则名，不显示密钥。
-- **平台隔离**：每个目标在 `platforms.toml` 中声明归属，另一平台的目标（以及只属于它的父目录）会被忽略，
-  一个平台上的备份不会改写另一平台的源文件。
+- **私钥不进仓库**：仓库中只有公钥；`check` 与提交检查会拦下任何明文私钥（`AGE-SECRET-KEY-`、PEM 私钥块）以及被 git 跟踪的私钥文件。
+
+- **敏感文件一律加密**：备份时按清单、密钥特征扫描和 chezmoi 内置扫描三重判断是否加密；SSH 配置、凭据文件、`sudoers` 等目标未加密时提交会被拒绝。加密托管的文件部署后权限为 600。
+
+- **提交与推送双重检查**：pre-commit 阶段检查暂存区，pre-push 阶段检查每一个待推送的提交（`--no-verify`跳过的提交也会被拦下）。输出只有文件、行号和规则名，不显示密钥。
+
+- **平台隔离**：每个目标在 `platforms.toml` 中声明归属，另一平台的目标（以及只属于它的父目录）会被忽略，一个平台上的备份不会改写另一平台的源文件。
+
 - **恢复不会静默破坏现有文件**：先预演解密，再备份将被覆盖的文件；与硬件绑定的 `/etc` 文件不会自动安装。
+
 - **临时明文只放在 tmpfs**：`/etc` 备份与恢复的暂存区位于 `$XDG_RUNTIME_DIR`，用完即删。
-- **服务器端兜底**：本地 hook 可以被卸载，建议在 GitHub 仓库设置中开启 Secret scanning 与 Push protection。

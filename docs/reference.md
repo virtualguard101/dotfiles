@@ -3,15 +3,14 @@
 Behavior, rules and tunables of the `dotfiles` commands. Quick start in the top-level
 [README.md](../README.md). Chinese version: [reference_zh-CN.md](reference_zh-CN.md).
 
-Run everything through uv: `uv run dotfiles <command>` (inside the repo), or
-`uv run --project ~/.local/share/chezmoi --frozen --no-dev dotfiles <command>` (anywhere). The tool
-depends only on the Python standard library; with `--no-dev` it never touches PyPI.
+Run everything through uv: `uv run dotfiles <command>` (inside the repo), or `uv run --project ~/.local/share/chezmoi --frozen --no-dev dotfiles <command>` (anywhere). The tool depends only on the Python standard library; with `--no-dev` it never touches PyPI.
 
 Conventions:
 
-- Modifying commands preview by default: `restore`, `clean run`, `audit`, `system-restore` need
-  `--apply`; `backup` writes to the repo directly (`-n` previews) but never pushes.
+- Modifying commands preview by default: `restore`, `clean run`, `audit`, `system-restore` need `--apply`; `backup` writes to the repo directly (`-n` previews) but never pushes.
+
 - Exit codes: `0` success, `1` failure or failed check, `2` usage error (unknown target, step, etc.).
+
 - Output is colored on a terminal; plain with `NO_COLOR` set or when redirected.
 
 ---
@@ -30,8 +29,7 @@ Read-only. Checks, in order:
 | Repo | branch, distance from upstream, uncommitted changes, whether hooks are installed, push URL |
 | Packages | how many manifest packages are missing; on Windows also how many programs need manual installs |
 
-Each item is ok / warn / fail / info; fail means a required condition is missing and the exit code
-is 1. `--json` prints structured results for scripts.
+Each item is ok / warn / fail / info; fail means a required condition is missing and the exit code is 1. `--json` prints structured results for scripts.
 
 ---
 
@@ -58,12 +56,12 @@ dotfiles restore [--apply] [--only steps,…] [--skip steps,…] [--key-file pat
 
 ### Execution semantics
 
-- Without `--apply`, only detection runs and the plan is printed. Later steps depend on earlier
-  results (e.g. the dotfiles step shows "blocked" without a key) — that is normal.
-- With `--apply`, steps run in order: those detected as "done" are skipped; the flow stops on
-  "blocked" or a failed step; after running, the step is detected again to confirm completion.
-- No state files: every judgment is based on the current system state, so reruns are always safe
-  and can resume from where a run stopped.
+- Without `--apply`, only detection runs and the plan is printed. Later steps depend on earlier results (e.g. the dotfiles step shows "blocked" without a key) — that is normal.
+
+- With `--apply`, steps run in order: those detected as "done" are skipped; the flow stops on "blocked" or a failed step; after running, the step is detected again to confirm completion.
+
+- No state files: every judgment is based on the current system state, so reruns are always safe and can resume from where a run stopped.
+
 - Steps that need confirmation are skipped on non-interactive terminals unless `--yes` is given.
 
 ### Private key location
@@ -71,22 +69,20 @@ dotfiles restore [--apply] [--only steps,…] [--skip steps,…] [--key-file pat
 `home/.chezmoi.toml.tmpl` picks the key path in this order, using the last one that exists:
 
 1. `~/.config/chezmoi/key.txt` (default; `restore` writes here on a new machine)
+
 2. `~/secret/chezmoi_age_key.txt` (old Windows location)
+
 3. `~/vg101/secret/chezmoi_age_key.txt` (old Linux location)
 
-Existing machines therefore never need to move their key. When written: Linux permissions 600
-(parent dir 700 if created); Windows drops inheritance and keeps only the user, SYSTEM and
-Administrators.
+Existing machines therefore never need to move their key. When written: Linux permissions 600(parent dir 700 if created); Windows drops inheritance and keeps only the user, SYSTEM and Administrators.
 
 ### Network and proxy
 
-- bootstrap clones the public repo over HTTPS, so no SSH key is needed yet; externals also use
-  HTTPS. The push URL is switched to SSH in the `hooks` step.
-- The deployed `~/.gitconfig` sets `http.proxy = 127.0.0.1:7897`. On a new machine where the proxy
-  app is not installed yet, the `externals` step detects the unreachable proxy and temporarily
-  overrides it to empty (direct connection) via `GIT_CONFIG_*` env vars, without touching any file.
-- If even a direct connection cannot reach GitHub, set `HTTPS_PROXY` in the terminal before running
-  bootstrap; uv follows it when downloading Python too.
+- bootstrap clones the public repo over HTTPS, so no SSH key is needed yet; externals also use HTTPS. The push URL is switched to SSH in the `hooks` step.
+
+- The deployed `~/.gitconfig` sets `http.proxy = 127.0.0.1:7897`. On a new machine where the proxy app is not installed yet, the `externals` step detects the unreachable proxy and temporarily overrides it to empty (direct connection) via `GIT_CONFIG_*` env vars, without touching any file.
+
+- If even a direct connection cannot reach GitHub, set `HTTPS_PROXY` in the terminal before running bootstrap; uv follows it when downloading Python too.
 
 ---
 
@@ -94,19 +90,20 @@ Administrators.
 
 ### 3.1 backup flow
 
-1. **Preflight**: age encryption enabled, recipient configured, private key present and not inside
-   the repo; on Windows, checks whether the Documents folder is redirected (e.g. to OneDrive).
-2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600
-   and switched to encrypted, then `chezmoi re-add` runs for all managed files.
-3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`).
-   Template targets with local changes are listed and must be merged back into the `.tmpl` by hand.
-4. **Add candidates**: unmanaged files from the current platform's candidate list are added to
-   chezmoi and registered under the current platform in `platforms.toml`.
+1. **Preflight**: age encryption enabled, recipient configured, private key present and not inside the repo; on Windows, checks whether the Documents folder is redirected (e.g. to OneDrive).
+
+2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted, then `chezmoi re-add` runs for all managed files.
+
+3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`). Template targets with local changes are listed and must be merged back into the `.tmpl` by hand.
+
+4. **Add candidates**: unmanaged files from the current platform's candidate list are added to chezmoi and registered under the current platform in `platforms.toml`.
+
 5. **/etc** (Linux, skipped with `--no-system`): see [3.6](#36-linux-etc).
-6. **Package manifests**: Linux writes `packages/archpkg.txt` (`pacman -Qqe`); Windows writes
-   `scoopfile.json`, `winget.json` (normalized so they only change when the package set changes)
-   and `winget-unavailable.txt`.
+
+6. **Package manifests**: Linux writes `packages/archpkg.txt` (`pacman -Qqe`); Windows writes `scoopfile.json`, `winget.json` (normalized so they only change when the package set changes) and `winget-unavailable.txt`.
+
 7. **Security check**: same as `check`; returns 1 and does not commit on failure.
+
 8. **Commit**: only with `--commit`; never pushes.
 
 ### 3.2 Candidate rules
@@ -128,15 +125,12 @@ for tracking; directories expand to regular files under 1 MiB), `secret` (always
 
 ### 3.3 Platform ownership
 
-`home/.chezmoidata/platforms.toml` declares an owner for every managed target: `shared`, `linux` or
-`windows`. Entries are paths relative to `~`; a directory entry covers everything below it.
+`home/.chezmoidata/platforms.toml` declares an owner for every managed target: `shared`, `linux` or `windows`. Entries are paths relative to `~`; a directory entry covers everything below it.
 
-- `.chezmoiignore` is a template: it ignores the other platform's entries, and their parent
-  directories that belong only to that platform. Linux, for example, ignores `Documents`
-  (otherwise Windows' `readonly_Documents/` would chmod `~/Documents` read-only) but not
-  `.config` (both platforms have targets in it).
-- Running `chezmoi add` on one platform for a target owned by the other only warns "ignoring"; it
-  never rewrites the other platform's source files.
+- `.chezmoiignore` is a template: it ignores the other platform's entries, and their parent directories that belong only to that platform. Linux, for example, ignores `Documents` (otherwise Windows' `readonly_Documents/` would chmod `~/Documents` read-only) but not `.config` (both platforms have targets in it).
+
+- Running `chezmoi add` on one platform for a target owned by the other only warns "ignoring"; it never rewrites the other platform's source files.
+
 - `check` requires every target managed in each platform's view to be covered by exactly one list.
 
 Manually adding a Linux-only file:
@@ -147,62 +141,49 @@ chezmoi add ~/.config/foo/bar.conf                 # or add --encrypt
 uv run dotfiles check
 ```
 
-Same-name targets needed on both platforms with different content: make it a template
-(e.g. distinguish inside `dot_gitconfig.tmpl` with `{{ if eq .chezmoi.os "windows" }}`) and
-register it in `shared`.
+Same-name targets needed on both platforms with different content: make it a template(e.g. distinguish inside `dot_gitconfig.tmpl` with `{{ if eq .chezmoi.os "windows" }}`) and register it in `shared`.
 
 ### 3.4 Encryption and templates
 
-- Encrypted source file names look like `encrypted_private_dot_zshrc.age`. `private_` makes the
-  deployed permissions 600; backup handles this automatically.
-- Encrypted files can be templates, but `re-add` does not handle templates. To share one ciphertext
-  across platforms, reference it from a template with `{{ include "…" | decrypt }}` (currently
-  unused).
+- Encrypted source file names look like `encrypted_private_dot_zshrc.age`. `private_` makes the deployed permissions 600; backup handles this automatically.
+
+- Encrypted files can be templates, but `re-add` does not handle templates. To share one ciphertext across platforms, reference it from a template with `{{ include "…" | decrypt }}` (currently unused).
 
 ### 3.5 check
 
 1. the chezmoi config's private key is not tracked by git;
-2. `guard tree`: runs the same checks as the commit checks over all tracked and unignored new
-   files, see [5](#5-commit-checks-pre-commit);
+
+2. `guard tree`: runs the same checks as the commit checks over all tracked and unignored new files, see [5](#5-commit-checks-pre-commit);
+
 3. platform ownership is complete.
 
 ### 3.6 Linux /etc
 
-`/etc` uses a separate chezmoi instance: the source dir is `system/` at the repo top, the
-destination is a staging area under `$XDG_RUNTIME_DIR` (tmpfs, deleted afterwards). Files only root
-can read are read in via `sudo cat`, so run it in an interactive terminal; without a terminal those
-files are skipped with a warning.
+`/etc` uses a separate chezmoi instance: the source dir is `system/` at the repo top, the destination is a staging area under `$XDG_RUNTIME_DIR` (tmpfs, deleted afterwards). Files only root can read are read in via `sudo cat`, so run it in an interactive terminal; without a terminal those files are skipped with a warning.
 
 Collected targets (`src/dotfiles/system_etc.py`):
 
 - package config files marked `[modified]` by pacman;
-- paths in `ETC_EXTRA` (directories contribute only files not owned by any package, e.g. custom
-  systemd units, pacman hooks);
-- paths in `ETC_SECRET`, always encrypted; files not world-readable and files matching secret
-  patterns are encrypted too;
-- everything in `ETC_EXCLUDE` is excluded: account databases, `machine-id`, SSH host keys,
-  `*.pacnew`, `*.bak`, etc.
+
+- paths in `ETC_EXTRA` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks);
+
+- paths in `ETC_SECRET`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
+
+- everything in `ETC_EXCLUDE` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.bak`, etc.
 
 Restore (`system-restore`, and restore's `system` step):
 
-- decrypts into the staging area and compares each file with `/etc`, showing diffs (encrypted
-  files only report that they differ, without content).
-- Files in `HARDWARE_BOUND` (`fstab`, `crypttab`, `default/grub`, `mkinitcpio.conf`,
-  `mkinitcpio.d/*`, `X11/xorg.conf.d/*`, `modprobe.d/*`) show diffs only and must be named
-  explicitly on the command line to install: a new system's disk UUIDs, encryption layout and
-  hardware usually differ.
-- `sudoers` and `sudoers.d/*` are validated with `visudo -cf` before installing; on failure they
-  are not installed.
-- Installs keep the target's current permissions; a nonexistent target uses the backup's
-  permissions with owner `root:root`. After changing boot or initramfs files, run
-  `grub-mkconfig -o /boot/grub/grub.cfg` or `mkinitcpio -P`.
+- decrypts into the staging area and compares each file with `/etc`, showing diffs (encrypted files only report that they differ, without content).
+
+- Files in `HARDWARE_BOUND` (`fstab`, `crypttab`, `default/grub`, `mkinitcpio.conf`, `mkinitcpio.d/*`, `X11/xorg.conf.d/*`, `modprobe.d/*`) show diffs only and must be named explicitly on the command line to install: a new system's disk UUIDs, encryption layout and hardware usually differ.
+
+- `sudoers` and `sudoers.d/*` are validated with `visudo -cf` before installing; on failure they are not installed.
+
+- Installs keep the target's current permissions; a nonexistent target uses the backup's permissions with owner `root:root`. After changing boot or initramfs files, run `grub-mkconfig -o /boot/grub/grub.cfg` or `mkinitcpio -P`.
 
 ### 3.7 audit
 
-Checks the always-encrypt list's files, `.pypirc`, `.netrc`, `.git-credentials`, `~/.ssh` (and the
-private keys inside), `~/.gnupg`, key files and their directories. Linux requires files 600 and
-dirs 700; Windows requires the ACL to contain only the user, SYSTEM and Administrators. Tightened
-with `--apply`.
+Checks the always-encrypt list's files, `.pypirc`, `.netrc`, `.git-credentials`, `~/.ssh` (and the private keys inside), `~/.gnupg`, key files and their directories. Linux requires files 600 and dirs 700; Windows requires the ACL to contain only the user, SYSTEM and Administrators. Tightened with `--apply`.
 
 ---
 
@@ -215,28 +196,23 @@ dotfiles clean run [--apply] [--deep] [-x target]… [target|default|opt|all]…
 dotfiles clean leftovers
 ```
 
-- `scan`: size and state per target (cleanable / skips / no data / n/a / unmeasured), large
-  directories in the cache roots covered by no target, the leftover report, and report-only items
-  (orphan packages, coredumps, WSL virtual disks, ...).
-- `run`: no targets means `default`; the `opt` tier must be named or selected via `opt` / `all`.
-  `-x` excludes targets, repeatable or comma-separated.
-- `leftovers`: leftover directories of uninstalled apps and long-unused Electron config dirs.
-  Report only, never deleted.
+- `scan`: size and state per target (cleanable / skips / no data / n/a / unmeasured), large directories in the cache roots covered by no target, the leftover report, and report-only items (orphan packages, coredumps, WSL virtual disks, ...).
+
+- `run`: no targets means `default`; the `opt` tier must be named or selected via `opt` / `all`. `-x` excludes targets, repeatable or comma-separated.
+
+- `leftovers`: leftover directories of uninstalled apps and long-unused Electron config dirs. Report only, never deleted.
 
 ### 4.1 Safety measures
 
-- Every deletion passes a scope assertion: the path must be absolute, lie under an allowed root
-  (Linux: the home dir and explicitly set tool dirs; Windows: the home dir, the scoop dir, the
-  Windows Update download dir), and must not be a protected directory itself (home, the XDG/AppData
-  roots, Documents, Desktop, Downloads, `.ssh`, this repo, ...). A failed assertion aborts the run.
+- Every deletion passes a scope assertion: the path must be absolute, lie under an allowed root (Linux: the home dir and explicitly set tool dirs; Windows: the home dir, the scoop dir, the Windows Update download dir), and must not be a protected directory itself (home, the XDG/AppData roots, Documents, Desktop, Downloads, `.ssh`, this repo, ...). A failed assertion aborts the run.
+
 - Deletions never follow symlinks or Windows reparse points; only the link itself is deleted.
-- Caches of running apps are skipped: Chromium/Electron's `SingletonLock` (Linux, PID inside is
-  checked) or `lockfile` (Windows, exclusive-open check), VS Code's `code.lock`, Firefox's `lock` /
-  `parent.lock`; without a lock file the process name is matched.
-- Tool-native cleanup commands are preferred (`uv cache prune`, `npm cache clean`,
-  `pnpm store prune`, ...); directories are deleted only when no command exists.
-- Offline data is never touched: Electron/browser Service Worker, IndexedDB, Local Storage;
-  installed tools (uv tools, rustup, VS Code extensions); KDE's ksycoca and `*.kcache`.
+
+- Caches of running apps are skipped: Chromium/Electron's `SingletonLock` (Linux, PID inside is checked) or `lockfile` (Windows, exclusive-open check), VS Code's `code.lock`, Firefox's `lock` / `parent.lock`; without a lock file the process name is matched.
+
+- Tool-native cleanup commands are preferred (`uv cache prune`, `npm cache clean`, `pnpm store prune`, ...); directories are deleted only when no command exists.
+
+- Offline data is never touched: Electron/browser Service Worker, IndexedDB, Local Storage; installed tools (uv tools, rustup, VS Code extensions); KDE's ksycoca and `*.kcache`.
 
 ### 4.2 Targets shared by both platforms
 
@@ -303,8 +279,7 @@ dotfiles clean leftovers
 | `PACCACHE_KEEP` | 1 | versions kept per package by `pacman` |
 | `UNCOVERED_MIN_MB` | 10 (Linux) / 100 (Windows) | minimum size for `scan` to list uncovered items |
 
-Tool-specific location variables are honored too: `XDG_*`, `CARGO_HOME`, `VCPKG_ROOT`,
-`GRADLE_USER_HOME`, `PRE_COMMIT_HOME`, `BUN_INSTALL`, `NUGET_HTTP_CACHE_PATH`, `NUGET_PACKAGES`,
+Tool-specific location variables are honored too: `XDG_*`, `CARGO_HOME`, `VCPKG_ROOT`, `GRADLE_USER_HOME`, `PRE_COMMIT_HOME`, `BUN_INSTALL`, `NUGET_HTTP_CACHE_PATH`, `NUGET_PACKAGES`,
 `SCOOP`, etc.
 
 ### 4.6 Periodic runs (Linux, optional)
@@ -339,16 +314,13 @@ WantedBy=timers.target
 systemctl --user daemon-reload && systemctl --user enable --now cache-clean.timer
 ```
 
-The default tier needs no sudo; running apps are skipped automatically. If uv is not on the systemd
-user session's PATH, replace `uv` with its absolute path.
+The default tier needs no sudo; running apps are skipped automatically. If uv is not on the systemd user session's PATH, replace `uv` with its absolute path.
 
 ---
 
 ## 5. Commit checks (pre-commit)
 
-The repo uses [pre-commit](https://pre-commit.com) to run checks automatically at `git commit` and
-`git push`, keeping plaintext secrets out. It needs only Python and git; both platforms share one
-config. restore's `hooks` step installs it; manual install:
+The repo uses [pre-commit](https://pre-commit.com) to run checks automatically at `git commit` and `git push`, keeping plaintext secrets out. It needs only Python and git; both platforms share one config. restore's `hooks` step installs it; manual install:
 
 ```bash
 uv tool install pre-commit        # or pacman -S pre-commit
@@ -356,9 +328,7 @@ pre-commit install                # installs both pre-commit and pre-push
 pre-commit install-hooks          # optional: pre-build the envs (first run downloads Go and builds gitleaks)
 ```
 
-`.git/hooks/*` contain this machine's Python path; they are generated per machine — do not copy or
-commit them. Building gitleaks the first time needs the Go module proxy; set `HTTPS_PROXY` briefly
-if a direct connection fails.
+`.git/hooks/*` contain this machine's Python path; they are generated per machine — do not copy or commit them. Building gitleaks the first time needs the Go module proxy; set `HTTPS_PROXY` briefly if a direct connection fails.
 
 ### 5.1 Files involved
 
@@ -382,14 +352,9 @@ At `git commit` (the staged set only):
 | `prune-precommit-stash` | deletes stash patches older than 1 hour and tightens the cache dir to 700 (never blocks) |
 | `dotfiles-guard` | see the table below |
 
-At `git push`, `dotfiles-guard-push` checks the files added or modified by **every** commit about
-to be pushed, so commits made with `--no-verify` are caught too — even when a later commit removes
-the secret.
+At `git push`, `dotfiles-guard-push` checks the files added or modified by **every** commit about to be pushed, so commits made with `--no-verify` are caught too — even when a later commit removes the secret.
 
-The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Deployment targets
-follow chezmoi rules: files under the dir named by `.chezmoiroot` (e.g. `home/`) map to `~` targets,
-`system/` maps to system paths, and the rest (tool code, package manifests) are not deployment
-targets but are secret-scanned all the same.
+The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Deployment targets follow chezmoi rules: files under the dir named by `.chezmoiroot` (e.g. `home/`) map to `~` targets, `system/` maps to system paths, and the rest (tool code, package manifests) are not deployment targets but are secret-scanned all the same.
 
 | Rule | Level | Meaning |
 |---|---|---|
@@ -399,12 +364,7 @@ targets but are secret-scanned all the same.
 | secret rule names (e.g. `github-token`) | error | plaintext matching `SECRET_RULES`; `backup` uses the same rules to decide on encryption |
 | `absolute-home-path` | warning | contains an absolute home path, invalid on another machine |
 
-`ENCRYPT_REQUIRED` covers: `.ssh/*` (except `*.pub`, `known_hosts*`), `.gnupg/*`, `.pypirc`,
-`.npmrc`, `.netrc`/`_netrc`, `.git-credentials`, `.docker/config.json`, gh's `hosts.yml`,
-`.wakatime.cfg`, `.aws/credentials`, `.kube/config`, rclone configs, `*.pem`/`*.key`/`*.p12`/
-`*.pfx`, `id_rsa`/`id_ecdsa`/`id_ed25519`, `.env*` (except `.env.example`), plus `/etc/shadow*`,
-`/etc/sudoers*`, `/etc/crypttab`, NetworkManager connections, WireGuard, SSH host keys and the
-mihomo config under `system/`.
+`ENCRYPT_REQUIRED` covers: `.ssh/*` (except `*.pub`, `known_hosts*`), `.gnupg/*`, `.pypirc`, `.npmrc`, `.netrc`/`_netrc`, `.git-credentials`, `.docker/config.json`, gh's `hosts.yml`, `.wakatime.cfg`, `.aws/credentials`, `.kube/config`, rclone configs, `*.pem`/`*.key`/`*.p12`/ `*.pfx`, `id_rsa`/`id_ecdsa`/`id_ed25519`, `.env*` (except `.env.example`), plus `/etc/shadow*`, `/etc/sudoers*`, `/etc/crypttab`, NetworkManager connections, WireGuard, SSH host keys and the mihomo config under `system/`.
 
 ### 5.3 When blocked
 
@@ -418,16 +378,11 @@ Output contains only `file:line` and the rule name.
 | committed with `--no-verify`, not yet pushed | pre-push will catch it; `git reset --soft <last clean commit>` and redo |
 | already pushed | **rotate that credential immediately**; rewriting git history cannot un-publish it |
 
-Temporarily skip one hook: Linux `SKIP=gitleaks git commit …`; Windows
-`$env:SKIP = "gitleaks"; git commit …; Remove-Item Env:SKIP`.
+Temporarily skip one hook: Linux `SKIP=gitleaks git commit …`; Windows `$env:SKIP = "gitleaks"; git commit …; Remove-Item Env:SKIP`.
 
 ### 5.4 Stash patches
 
-Before running hooks, pre-commit saves **unstaged** changes as `$PRE_COMMIT_HOME/patch*` and never
-deletes them; if the worktree held unencrypted sensitive content at that moment, it stays in the
-patch as plaintext. `prune-precommit-stash` deletes patches older than 1 hour at every commit (the
-newest patch is left for the commit in progress to restore the worktree), and
-`clean run precommit` deletes them too. To purge right now (confirm no commit is in progress):
+Before running hooks, pre-commit saves **unstaged** changes as `$PRE_COMMIT_HOME/patch*` and never deletes them; if the worktree held unencrypted sensitive content at that moment, it stays in the patch as plaintext. `prune-precommit-stash` deletes patches older than 1 hour at every commit (the newest patch is left for the commit in progress to restore the worktree), and `clean run precommit` deletes them too. To purge right now (confirm no commit is in progress):
 
 ```bash
 uv run dotfiles guard prune-stash --max-age-minutes 0
@@ -442,9 +397,7 @@ uv run pytest                     # or just test
 uvx ruff check src tests
 ```
 
-Tests never touch the real system: the Windows cleanup targets' filesystem logic runs on any
-platform by pointing `%LOCALAPPDATA%` etc. at temp dirs; platform ownership tests render the other
-platform's view with `chezmoi --override-data '{"chezmoi":{"os":"windows"}}'`.
+Tests never touch the real system: the Windows cleanup targets' filesystem logic runs on any platform by pointing `%LOCALAPPDATA%` etc. at temp dirs; platform ownership tests render the other platform's view with `chezmoi --override-data '{"chezmoi":{"os":"windows"}}'`.
 
 See what would deploy in the Windows view from Linux:
 
@@ -454,19 +407,10 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 ## 7. Known limitations
 
-- **The Python version has never actually run on Windows**: the Windows cleanup targets, backup
-  (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the
-  original PowerShell scripts (or written fresh) and are only tested at the filesystem level on
-  Linux, plus syntax parsing. The original scripts are in commit `a15c9b5`
-  (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`,
-  `status` and `restore` (without `--apply`) to confirm the results.
-- **scoop is not installed automatically**: its official install method is a remote script, which
-  this tool will not run for you; restore stops with instructions when scoop is missing.
-- **Third-party repos like archlinuxcn**: on a new system, before `/etc/pacman.conf` is restored and
-  the matching keyring installed, their packages are listed as "AUR or unknown". Handle those as
-  restore instructs, then rerun `--only packages`.
-- **Same-name targets with different content on the two platforms** (e.g. `.wakatime.cfg`,
-  `.docker/config.json`) are currently managed by Windows only; when Linux needs one, turn it into
-  a per-platform template and register it in `shared`.
-- **`[https] proxy` in `.gitconfig`** is not a git-recognized setting (git only knows `http.proxy`,
-  which covers HTTPS anyway) and can be deleted.
+- **The Python version has never actually run on Windows**: the Windows cleanup targets, backup (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the original PowerShell scripts (or written fresh) and are only tested at the filesystem level on Linux, plus syntax parsing. The original scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`, `status` and `restore` (without `--apply`) to confirm the results.
+
+- **scoop is not installed automatically**: its official install method is a remote script, which this tool will not run for you; restore stops with instructions when scoop is missing.
+
+- **Third-party repos like archlinuxcn**: on a new system, before `/etc/pacman.conf` is restored and the matching keyring installed, their packages are listed as "AUR or unknown". Handle those as restore instructs, then rerun `--only packages`.
+
+- **Same-name targets with different content on the two platforms** (e.g. `.wakatime.cfg`, `.docker/config.json`) are currently managed by Windows only; when Linux needs one, turn it into a per-platform template and register it in `shared`.

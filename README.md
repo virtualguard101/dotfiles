@@ -1,14 +1,10 @@
 # dotfiles
 
-An Arch Linux and Windows config repository built on [chezmoi](https://www.chezmoi.io), plus a
-uv-managed Python tool `dotfiles` for environment checks, post-reinstall recovery, daily backups
-and cache cleanup. Both platforms share one branch and one set of commands.
+An Arch Linux and Windows config repository built on [chezmoi](https://www.chezmoi.io), plus a uv-managed Python tool `dotfiles` for environment checks, post-reinstall recovery, daily backups and cache cleanup. Both platforms share one branch and one set of commands.
 
 > The repo is **public**. All sensitive files are stored age-encrypted (`encrypted_*.age`); the
 > decryption key is **not** in the repo and must be backed up offline (USB drive / password
 > manager). If the key is lost, none of the encrypted files can be recovered.
-
-Chinese documentation: [README_zh-CN.md](README_zh-CN.md) · [docs/reference_zh-CN.md](docs/reference_zh-CN.md)
 
 ## Repository layout
 
@@ -57,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # e
 Do not pipe straight into `curl … | bash` or `irm … | iex`: stdin is then not a terminal and you
 cannot type the key path interactively.
 
-### What the recovery flow does
+### Recovery Flow Overview
 
 bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) and clones the
 public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
@@ -115,23 +111,14 @@ Every modifying command previews by default. Full details in
 
 ## Security design
 
-- **The private key never enters the repo**: only the public key is stored; `check` and the commit
-  checks block any plaintext private key (`AGE-SECRET-KEY-`, PEM private key blocks) and any
-  git-tracked key file.
-- **Sensitive files are always encrypted**: at backup time the decision to encrypt is made by three
-  layers — the manifest lists, the secret-pattern scan, and chezmoi's built-in scan. Commits are
-  rejected when SSH configs, credential files, `sudoers` etc. are not encrypted. Encrypted files
-  deploy with 600 permissions.
-- **Double checks at commit and push**: the pre-commit stage inspects the index; the pre-push stage
-  inspects every commit about to be pushed (commits made with `--no-verify` are caught too). Output
-  contains only file, line number and rule name — never the secret.
-- **Platform isolation**: every target declares its owner in `platforms.toml`; the other platform's
-  targets (and their exclusive parent directories) are ignored, so a backup on one platform never
-  overwrites the other platform's source files.
-- **Recovery never silently destroys existing files**: decryption is rehearsed first, then files
-  about to be overwritten are backed up; hardware-bound `/etc` files are never installed
-  automatically.
-- **Transient plaintext only on tmpfs**: staging for the `/etc` backup and restore lives in
-  `$XDG_RUNTIME_DIR` and is deleted afterwards.
-- **Server-side backstop**: local hooks can be uninstalled; enable Secret scanning and Push
-  protection in the GitHub repo settings as well.
+- **The private key never enters the repo**: only the public key is stored; `check` and the commit checks block any plaintext private key (`AGE-SECRET-KEY-`, PEM private key blocks) and any git-tracked key file.
+
+- **Sensitive files are always encrypted**: at backup time the decision to encrypt is made by three layers — the manifest lists, the secret-pattern scan, and chezmoi's built-in scan. Commits are rejected when SSH configs, credential files, `sudoers` etc. are not encrypted. Encrypted files deploy with 600 permissions.
+
+- **Double checks at commit and push**: the pre-commit stage inspects the index; the pre-push stage inspects every commit about to be pushed (commits made with `--no-verify` are caught too). Output contains only file, line number and rule name — never the secret.
+
+- **Platform isolation**: every target declares its owner in `platforms.toml`; the other platform's targets (and their exclusive parent directories) are ignored, so a backup on one platform never overwrites the other platform's source files.
+
+- **Recovery never silently destroys existing files**: decryption is rehearsed first, then files about to be overwritten are backed up; hardware-bound `/etc` files are never installed automatically.
+
+- **Transient plaintext only on tmpfs**: staging for the `/etc` backup and restore lives in `$XDG_RUNTIME_DIR` and is deleted afterwards.
