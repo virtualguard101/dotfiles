@@ -1,0 +1,45 @@
+// 将键绑定放在此文件中以覆盖默认值
+[
+    {
+        "key": "ctrl+alt+g",
+        "command": "workbench.view.extension.codegeex-sidebar"
+    },
+    {
+        "key": "ctrl+alt+d",
+        "command": "workbench.view.extension.dockerView"
+    },
+    {
+        "key": "ctrl+shift+r",
+        "command": "workbench.view.remote"
+    },
+    {
+        "key": "ctrl+shift+a",
+        "command": "workbench.view.extension.roo-cline-ActivityBar"
+    },
+    {
+        "key": "ctrl+shift+,",
+        "command": "-editor.action.inPlaceReplace.up",
+        "when": "editorTextFocus && !editorReadonly"
+    },
+    {
+        "key": "ctrl+shift+,",
+        "command": "aiCustomization.openManagementEditor",
+        "when": "chatIsEnabled && view == 'workbench.panel.chat.view.copilot'"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "workbench.view.extension.claude-sidebar-secondary"
+    },
+    {
+        "key": "ctrl+shift+l",
+        "command": "workbench.view.extension.codexSecondaryViewContainer"
+    },
+    {
+        "key": "ctrl+shift+d",
+        "command": "workbench.view.extension.dsh-panel"
+    },
+    {
+        "key": "alt+x",
+        "command": "workbench.action.restartExtensionHost"
+    }
+]

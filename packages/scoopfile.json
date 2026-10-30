@@ -1,0 +1,58 @@
+{
+  "buckets": [
+    {
+      "Name": "extras",
+      "Source": "https://github.com/ScoopInstaller/Extras"
+    },
+    {
+      "Name": "java",
+      "Source": "https://github.com/ScoopInstaller/Java"
+    },
+    {
+      "Name": "main",
+      "Source": "https://github.com/ScoopInstaller/Main.git"
+    }
+  ],
+  "apps": [
+    {
+      "Name": "7zip",
+      "Source": "main",
+      "Info": ""
+    },
+    {
+      "Name": "claude-code",
+      "Source": "main",
+      "Info": ""
+    },
+    {
+      "Name": "gcc",
+      "Source": "main",
+      "Info": ""
+    },
+    {
+      "Name": "gdb",
+      "Source": "main",
+      "Info": ""
+    },
+    {
+      "Name": "maven",
+      "Source": "main",
+      "Info": ""
+    },
+    {
+      "Name": "mingw",
+      "Source": "main",
+      "Info": "32bit"
+    },
+    {
+      "Name": "openjdk",
+      "Source": "java",
+      "Info": ""
+    },
+    {
+      "Name": "pnpm",
+      "Source": "main",
+      "Info": ""
+    }
+  ]
+}

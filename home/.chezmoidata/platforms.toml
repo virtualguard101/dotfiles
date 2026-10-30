@@ -29,4 +29,10 @@ linux = [
   "tmux",
 ]
 windows = [
+  ".claude/settings.json",
+  ".config/scoop",
+  ".docker/config.json",
+  ".wakatime.cfg",
+  "AppData",
+  "Documents/PowerToys",
 ]

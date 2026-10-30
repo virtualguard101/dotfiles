@@ -1,0 +1,241 @@
+{
+  "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
+  "Sources": [
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "Alibaba.Quark"
+        },
+        {
+          "PackageIdentifier": "Anjok07.UltimateVocalRemover"
+        },
+        {
+          "PackageIdentifier": "Apple.Bonjour"
+        },
+        {
+          "PackageIdentifier": "astral-sh.uv"
+        },
+        {
+          "PackageIdentifier": "Baidu.BaiduNetdisk"
+        },
+        {
+          "PackageIdentifier": "ByteDance.Feishu"
+        },
+        {
+          "PackageIdentifier": "Casey.Just"
+        },
+        {
+          "PackageIdentifier": "CreativeTechnology.OpenAL"
+        },
+        {
+          "PackageIdentifier": "Docker.DockerDesktop"
+        },
+        {
+          "PackageIdentifier": "Docker.sbx"
+        },
+        {
+          "PackageIdentifier": "farion1231.CC-Switch"
+        },
+        {
+          "PackageIdentifier": "Git.Git"
+        },
+        {
+          "PackageIdentifier": "GlassWire.GlassWire"
+        },
+        {
+          "PackageIdentifier": "GoLang.Go"
+        },
+        {
+          "PackageIdentifier": "Gyan.FFmpeg.Shared"
+        },
+        {
+          "PackageIdentifier": "JGraph.Draw"
+        },
+        {
+          "PackageIdentifier": "Kitware.CMake"
+        },
+        {
+          "PackageIdentifier": "LLVM.clangd"
+        },
+        {
+          "PackageIdentifier": "logisim-evolution.logisim-evolution"
+        },
+        {
+          "PackageIdentifier": "MichaelTippach.ASIO4ALL"
+        },
+        {
+          "PackageIdentifier": "Microsoft.365Copilot"
+        },
+        {
+          "PackageIdentifier": "Microsoft.AppInstaller"
+        },
+        {
+          "PackageIdentifier": "Microsoft.CLRTypesSQLServer.2019"
+        },
+        {
+          "PackageIdentifier": "Microsoft.DotNet.DesktopRuntime.6"
+        },
+        {
+          "PackageIdentifier": "Microsoft.DotNet.Native.Runtime"
+        },
+        {
+          "PackageIdentifier": "Microsoft.Edge"
+        },
+        {
+          "PackageIdentifier": "Microsoft.OneDrive"
+        },
+        {
+          "PackageIdentifier": "Microsoft.Outlook"
+        },
+        {
+          "PackageIdentifier": "Microsoft.UI.Xaml.2.8"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCLibs.14"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCLibs.Desktop.14"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2008.x64"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2008.x86"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2015+.x86"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudio.Community"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudioCode"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsAppRuntime.1.6"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsAppRuntime.1.7"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsAppRuntime.1.8"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsAppRuntime.2"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsTerminal"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WSL"
+        },
+        {
+          "PackageIdentifier": "Mihomo-Party.Mihomo-Party"
+        },
+        {
+          "PackageIdentifier": "MongoDB.Compass.Full"
+        },
+        {
+          "PackageIdentifier": "MongoDB.Shell"
+        },
+        {
+          "PackageIdentifier": "Mozilla.Firefox.zh-CN"
+        },
+        {
+          "PackageIdentifier": "Neovim.Neovim"
+        },
+        {
+          "PackageIdentifier": "NetEase.CloudMusic"
+        },
+        {
+          "PackageIdentifier": "Notion.Notion"
+        },
+        {
+          "PackageIdentifier": "Nushell.Nushell"
+        },
+        {
+          "PackageIdentifier": "Nvidia.PhysX"
+        },
+        {
+          "PackageIdentifier": "OpenJS.NodeJS"
+        },
+        {
+          "PackageIdentifier": "Oracle.JDK.17"
+        },
+        {
+          "PackageIdentifier": "Oracle.MySQL"
+        },
+        {
+          "PackageIdentifier": "PremiumSoft.NavicatPremium"
+        },
+        {
+          "PackageIdentifier": "Ruihu.Apifox"
+        },
+        {
+          "PackageIdentifier": "Rustlang.Rustup"
+        },
+        {
+          "PackageIdentifier": "Tencent.QQ.NT"
+        },
+        {
+          "PackageIdentifier": "Tencent.TencentMeeting"
+        },
+        {
+          "PackageIdentifier": "Tencent.WeChat.Universal"
+        },
+        {
+          "PackageIdentifier": "twpayne.chezmoi"
+        },
+        {
+          "PackageIdentifier": "Valve.Steam"
+        },
+        {
+          "PackageIdentifier": "voidtools.Everything"
+        },
+        {
+          "PackageIdentifier": "Wakatime.DesktopWakatime"
+        },
+        {
+          "PackageIdentifier": "WiresharkFoundation.Wireshark"
+        },
+        {
+          "PackageIdentifier": "XAMPPRocky.Tokei"
+        },
+        {
+          "PackageIdentifier": "Yuanli.uTools"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://cdn.winget.microsoft.com/cache",
+        "Identifier": "Microsoft.Winget.Source_8wekyb3d8bbwe",
+        "Name": "winget",
+        "Type": "Microsoft.PreIndexed.Package"
+      }
+    },
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "9N5CGL8FTTT3"
+        },
+        {
+          "PackageIdentifier": "9NCVDN91XZQP"
+        },
+        {
+          "PackageIdentifier": "XP89DCGQ3K6VLD"
+        },
+        {
+          "PackageIdentifier": "XPDFBF0G6M2W2C"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://storeedgefd.dsx.mp.microsoft.com/v9.0",
+        "Identifier": "StoreEdgeFD",
+        "Name": "msstore",
+        "Type": "Microsoft.Rest"
+      }
+    }
+  ]
+}

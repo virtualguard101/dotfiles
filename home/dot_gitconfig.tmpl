@@ -1,5 +1,5 @@
 [user]
-	name = vg101
+	name = {{ if eq .chezmoi.os "windows" }}virtualguard101{{ else }}vg101{{ end }}
 	email = virtualguard101@gmail.com
 [http]
 	proxy = 127.0.0.1:7897
@@ -11,7 +11,11 @@
 	ui = auto
 [alias]
 	graph = log --all --graph --decorate --oneline
-	ida = !cd \"${GIT_PREFIX:-.}\" && \"/home/virtualguard/.local/share/ida-pro-9.5/tools/teams/git-ida\"
+{{- if eq .chezmoi.os "windows" }}
+	ida = !cd \"${GIT_PREFIX:-.}\" && \"C:/Program Files/IDA Professional 9.5/tools/teams/git-ida.exe\"
+{{- else }}
+	ida = !cd \"${GIT_PREFIX:-.}\" && \"{{ .chezmoi.homeDir }}/.local/share/ida-pro-9.5/tools/teams/git-ida\"
+{{- end }}
 [core]
 	editor = vim
 [merge]
@@ -33,3 +37,7 @@
 	process = git-lfs filter-process
 	required = true
 	clean = git-lfs clean -- %f
+{{- if eq .chezmoi.os "windows" }}
+[safe]
+	directory = *
+{{- end }}
