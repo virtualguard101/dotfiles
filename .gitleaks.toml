@@ -1,0 +1,19 @@
+# gitleaks 配置：沿用内置规则，补充本仓库需要的规则与豁免。
+# pre-commit 中的 gitleaks hook 会自动读取仓库根目录下的本文件。
+title = "dotfiles"
+
+[extend]
+useDefault = true
+
+# WakaTime API key（内置规则未覆盖）
+[[rules]]
+id = "wakatime-api-key"
+description = "WakaTime API key"
+regex = '''waka_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+keywords = ["waka_"]
+
+# age 密文是随机 base64，不扫描；dotfiles_guard 会单独校验这些文件确实是密文，
+# 所以把明文改名为 .age 无法借此绕过检查。
+[[allowlists]]
+description = "age ciphertext"
+paths = ['''(^|/)encrypted_[^/]*\.age$''']

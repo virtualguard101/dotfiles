@@ -1,2 +1,5 @@
-scooplist.txt
-wingetlist.txt
+# 不部署到 ~ 的源文件
+scripts/
+scoopfile.json
+winget.json
+winget-unavailable.txt
