@@ -20,6 +20,18 @@ docs/reference.md         detailed reference: command behavior, encryption and p
 
 Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.
 
+## Design Principles
+
+- **chezmoi does the file work, the Python tool decides policy**: every transfer between `~` and the source state (attribute prefixes, encryption, template rendering, ignore rules) goes through chezmoi. `dotfiles` decides which files to pass, whether to encrypt them and whether the result may be committed, then calls chezmoi to do it. The tool itself writes only `platforms.toml` and the manifests in `packages/`.
+
+- **The source state is the backup list**: whatever exists under `home/` is managed, and `backup` re-adds all of it. The `track` / `secret` lists in `src/dotfiles/backup.py` only discover new files; `platforms.toml` only says on which platform each managed target deploys.
+
+- **Each command works in one direction**: `backup` only copies `~` into the repo, and `restore` / `chezmoi apply` only copy the repo into `~`. `backup` never deploys, never deletes from the source state (stop managing a target with `chezmoi forget` and remove its `platforms.toml` entry), never merges templates (it only reports their drift) and never pushes.
+
+- **Plain chezmoi stays first-class**: `chezmoi add`, `re-add` and `edit` produce the same source files as `backup`. Missing steps (an unregistered target, a sensitive file added in plaintext) are caught by `dotfiles check` and the commit hooks, which enforce the rules whichever path made the change.
+
+- **Out of scope by design**: externals such as `~/.config/nvim` (separate git repos), the other platform's targets (invisible to chezmoi on this platform), and SSH private keys (regenerated per machine by `restore`).
+
 ## Post-reinstall recovery
 
 Prerequisites: the **offline-stored age key file** (`AGE-SECRET-KEY-1…`) and network access to GitHub.

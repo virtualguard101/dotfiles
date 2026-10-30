@@ -20,6 +20,18 @@ docs/reference.md         详细参考：各命令的行为、加密与平台归
 
 根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。
 
+## 设计原则
+
+- **chezmoi 负责文件读写，Python 工具负责决策**：`~` 与源状态之间的所有转换（属性前缀、加密、模板渲染、忽略规则）都由 chezmoi 完成。`dotfiles` 决定交给 chezmoi 哪些文件、要不要加密、结果能不能提交，然后调用 chezmoi 执行。工具自己只写 `platforms.toml` 和 `packages/` 下的软件包清单。
+
+- **源状态就是备份清单**：`home/` 下有的就是托管的，`backup` 会对它们全部执行 re-add。`src/dotfiles/backup.py` 里的 `track` / `secret` 清单只用来发现新文件；`platforms.toml` 只规定每个托管目标在哪个平台部署。
+
+- **每个命令只有一个方向**：`backup` 只把 `~` 写进仓库，`restore` / `chezmoi apply` 只把仓库写进 `~`。`backup` 从不部署，从不从源状态删除（停止托管用 `chezmoi forget`，并删掉 `platforms.toml` 里的对应条目），从不合并模板（只报告漂移），也从不推送。
+
+- **原生 chezmoi 用法同样适用**：`chezmoi add`、`re-add`、`edit` 产生的源文件和 `backup` 产生的完全一样。漏掉的步骤（目标没登记、敏感文件被明文添加）会被 `dotfiles check` 和提交 hook 拦下，不管改动是从哪条路径来的，规则都由它们执行。
+
+- **有意不纳入范围**：externals，例如 `~/.config/nvim`（独立的 git 仓库）；另一平台的目标（在当前平台上 chezmoi 看不到它们）；SSH 私钥（由 `restore` 在每台机器上重新生成）。
+
 ## 重装后恢复
 
 准备: **离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，先在当前终端设置 `HTTPS_PROXY`。
