@@ -4,8 +4,8 @@
 子命令：
   staged [路径...]     pre-commit 阶段：检查暂存区（index）中的内容；不给路径时检查全部暂存文件
   push                 pre-push 阶段：逐个检查将被推送的每个提交新增/修改的文件
-  tree                 检查工作区内所有已跟踪及未忽略的新文件（backup.sh check 使用）
-  scan [-q] 文件...    只做密钥特征扫描，命中返回 1（backup.sh 判断是否需要加密）
+  tree                 检查工作区内所有已跟踪及未忽略的新文件（dotfiles check 使用）
+  scan [-q] 文件...    只做密钥特征扫描，命中返回 1（dotfiles backup 判断是否需要加密）
   prune-stash          删除 pre-commit 遗留的 stash 补丁并收紧其目录权限
 
 检查项：
@@ -14,6 +14,10 @@
   policy    敏感目标（SSH、凭据文件、/etc/sudoers 等）必须以 encrypted_*.age 形式存储
   warn      含绝对家目录路径（不阻止提交）
 
+部署目标按 chezmoi 规则换算：仓库根目录 .chezmoiroot 指定的目录（如 home/）下是 ~ 的目标，
+system/ 下是系统路径（/etc/...），其余文件（工具代码、软件包清单）不是部署目标，只做密钥扫描。
+
+本文件既是 dotfiles 包的模块，也会被 pre-commit 直接执行，因此只能依赖标准库。
 输出只包含 文件:行号 与规则名，永远不打印命中的内容。
 行内含 "gitleaks:allow" 或 "pragma: allowlist secret" 时跳过该行的 secret 检查。
 """
@@ -28,7 +32,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterator
 
 # ---------------------------------------------------------------- 规则
 
@@ -81,7 +85,8 @@ FILE_PREFIXES = ("encrypted_", "private_", "readonly_", "empty_", "executable_",
                  "modify_", "remove_", "symlink_", "run_", "once_", "onchange_", "before_",
                  "after_", "literal_")
 DIR_PREFIXES = ("remove_", "external_", "exact_", "private_", "readonly_", "literal_")
-NON_TARGET_TOP = ("scripts",)   # .chezmoiignore 中的目录，不参与 policy 检查
+LEGACY_NON_TARGET_TOP = ("scripts",)   # 没有 .chezmoiroot 的旧布局中被忽略的工具目录
+SYSTEM_TOP = "system"                   # /etc 等系统配置的源目录（独立 chezmoi 实例）
 
 # ---------------------------------------------------------------- 输出
 
@@ -160,16 +165,38 @@ def _strip_attrs(comp: str, prefixes: tuple[str, ...]) -> tuple[str, bool]:
             return comp, False
 
 
-def target_of(source: str) -> str | None:
-    """chezmoi 源路径 → 目标路径（~ 相对，或 system/ 下转为 /...）；非目标文件返回 None。"""
+_SOURCE_ROOT: str | None = None
+
+
+def source_root() -> str:
+    """仓库根目录下 .chezmoiroot 的内容（如 "home"）；没有时为空串（旧布局）。"""
+    global _SOURCE_ROOT
+    if _SOURCE_ROOT is None:
+        try:
+            top = git("rev-parse", "--show-toplevel").decode().strip()
+            _SOURCE_ROOT = Path(top, ".chezmoiroot").read_text(encoding="utf-8").strip().strip("/")
+        except (OSError, subprocess.CalledProcessError):
+            _SOURCE_ROOT = ""
+    return _SOURCE_ROOT
+
+
+def target_of(source: str, root: str | None = None) -> str | None:
+    """chezmoi 源路径（相对仓库根）→ 目标路径（~ 相对，或 system/ 下转为 /...）；非目标文件返回 None。"""
+    root = source_root() if root is None else root
     parts = source.split("/")
-    if parts[0].startswith(".") or parts[0] in NON_TARGET_TOP:
-        return None
-    system = parts[0] == "system"
+    system = parts[0] == SYSTEM_TOP
     if system:
         parts = parts[1:]
-        if not parts:
+    elif root:
+        root_parts = root.split("/")
+        if parts[:len(root_parts)] != root_parts:
             return None
+        parts = parts[len(root_parts):]
+    elif parts[0] in LEGACY_NON_TARGET_TOP:
+        return None
+    # chezmoi 忽略源状态中以 . 开头的条目（.chezmoiignore、.chezmoidata 等是它自己的配置）
+    if not parts or any(p.startswith(".") for p in parts):
+        return None
     out = []
     for i, comp in enumerate(parts):
         last = i == len(parts) - 1
@@ -255,7 +282,7 @@ def report(findings: list[Finding], hint: bool = True) -> int:
         print(
             "\n检测到未加密的敏感内容（输出中不含具体值）。处理方式：\n"
             "  - 敏感文件改用加密托管: chezmoi forget <目标>，再 chezmoi add --encrypt <目标>\n"
-            "  - 若为误报，在该行加注释 gitleaks:allow，或调整 scripts/hooks/dotfiles_guard.py 的规则\n"
+            "  - 若为误报，在该行加注释 gitleaks:allow，或调整 src/dotfiles/guard.py 的规则\n"
             "  - 已提交但未推送: git reset --soft HEAD~1 后重新处理；已推送则必须轮换该凭据"
         )
     return 1 if errors else 0

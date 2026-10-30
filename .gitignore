@@ -1,3 +1,7 @@
-# Python 字节码（运行 scripts/hooks 下的脚本时可能生成）
+# Python（uv 在仓库根目录创建 .venv；每台机器各自生成，不提交）
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+dist/
+*.egg-info/

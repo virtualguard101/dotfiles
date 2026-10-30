@@ -1,9 +1,28 @@
-{{- /* 其他平台的目标一律忽略；归属见 .chezmoidata/platforms.toml */ -}}
+{{- /*
+  其他平台的目标一律忽略；归属见 .chezmoidata/platforms.toml。
+  同时忽略这些目标的父目录（只要其下没有本平台或 shared 的目标），否则父目录本身仍被托管，
+  例如 Windows 的 readonly_Documents/ 会在 Linux 上把 ~/Documents 改成只读。
+*/ -}}
 {{- $os := .chezmoi.os -}}
+{{- $own := list -}}
+{{- range $platform, $targets := .platforms -}}
+{{-   if or (eq $platform "shared") (eq $platform $os) }}{{ $own = concat $own $targets }}{{ end -}}
+{{- end -}}
+{{- $ignored := dict -}}
 {{- range $platform, $targets := .platforms -}}
 {{-   if and (ne $platform "shared") (ne $platform $os) -}}
-{{-     range $targets }}
-{{ . }}
+{{-     range $target := $targets -}}
+{{-       $_ := set $ignored $target true -}}
+{{-       $parts := splitList "/" $target -}}
+{{-       range $i := until (sub (len $parts) 1 | int) -}}
+{{-         $parent := join "/" (slice $parts 0 (add $i 1)) -}}
+{{-         $needed := false -}}
+{{-         range $own }}{{ if or (eq . $parent) (hasPrefix (print $parent "/") .) }}{{ $needed = true }}{{ end }}{{ end -}}
+{{-         if not $needed }}{{ $_ := set $ignored $parent true }}{{ end -}}
+{{-       end -}}
 {{-     end -}}
 {{-   end -}}
+{{- end -}}
+{{- range $path := keys $ignored | sortAlpha }}
+{{ $path }}
 {{- end }}

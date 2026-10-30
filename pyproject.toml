@@ -1,0 +1,24 @@
+[project]
+name = "dotfiles"
+version = "0.1.0"
+description = "基于 chezmoi 的跨平台 dotfiles 维护：环境检测、重装恢复、备份与缓存清理"
+readme = "README.md"
+authors = [
+    { name = "vg101", email = "virtualguard101@gmail.com" }
+]
+requires-python = ">=3.12"
+# 运行时只用标准库：新机器上 uv 只需下载 Python 解释器，不依赖 PyPI
+dependencies = []
+
+[project.scripts]
+dotfiles = "dotfiles.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
