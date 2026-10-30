@@ -1,0 +1,9 @@
+{{- /* 其他平台的目标一律忽略；归属见 .chezmoidata/platforms.toml */ -}}
+{{- $os := .chezmoi.os -}}
+{{- range $platform, $targets := .platforms -}}
+{{-   if and (ne $platform "shared") (ne $platform $os) -}}
+{{-     range $targets }}
+{{ . }}
+{{-     end -}}
+{{-   end -}}
+{{- end }}

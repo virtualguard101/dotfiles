@@ -1,0 +1,32 @@
+# 每个托管目标（相对 ~ 的路径；目录覆盖其下所有文件）只在所属平台部署。
+# .chezmoiignore 据此忽略其他平台的目标：在一个平台上执行 chezmoi add / re-add 时，
+# 不会读写另一平台的源文件。
+#
+# - `dotfiles backup` 新增目标时自动登记到当前平台
+# - `dotfiles check` 要求每个托管目标都在且只在一个列表中
+# - 两端都部署、内容相同或用模板区分的目标放在 shared
+[platforms]
+shared = [
+  ".gitconfig",
+]
+linux = [
+  ".agents/ccs_config.sql",
+  ".bashrc",
+  ".config/Code",
+  ".config/Cursor",
+  ".config/environment.d",
+  ".config/fcitx5",
+  ".config/fontconfig",
+  ".config/nvim",
+  ".config/zellij",
+  ".p10k.zsh",
+  ".pypirc",
+  ".ssh/config",
+  ".tmux.conf",
+  ".vimrc",
+  ".zimrc",
+  ".zshrc",
+  "tmux",
+]
+windows = [
+]

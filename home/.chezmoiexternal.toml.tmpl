@@ -1,0 +1,18 @@
+{{- /*
+  公开仓库用 HTTPS 拉取：新机器上还没有 SSH 密钥也能克隆。
+  需要推送时由 `dotfiles restore` 的 hooks 步骤把 pushurl 设为 SSH。
+  平台归属同样受 .chezmoidata/platforms.toml 约束。
+*/ -}}
+[".config/nvim"]
+    type = "git-repo"
+    url = "https://github.com/virtualguard101/nvim.git"
+    refreshPeriod = "24h"
+    [".config/nvim".pull]
+        args = ["--ff-only"]
+
+# [".agents"]
+#     type = "git-repo"
+#     url = "https://github.com/virtualguard101/dotagents.git"
+#     refreshPeriod = "24h"
+#     [".agents".pull]
+#         args = ["--ff-only"]
