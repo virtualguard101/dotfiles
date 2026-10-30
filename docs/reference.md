@@ -92,7 +92,7 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 1. **Preflight**: age encryption enabled, recipient configured, private key present and not inside the repo; on Windows, checks whether the Documents folder is redirected (e.g. to OneDrive).
 
-2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted, then `chezmoi re-add` runs for all managed files.
+2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted, then `chezmoi re-add` runs for all managed files. Managed files whose source carries `private_` but whose live mode is looser (e.g. a tool rewrote them as 644) are tightened to 600 first — `re-add` copies the live mode back into the source and would otherwise drop `private_`. With `-n`, chezmoi's output is captured (it never opens a pager) and `.age` diffs are shown as one line each, since ciphertext is unreadable.
 
 3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`). Template targets with local changes are listed and must be merged back into the `.tmpl` by hand ([6.3](#63-cases-that-need-a-manual-merge)).
 
