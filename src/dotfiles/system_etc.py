@@ -21,6 +21,8 @@ ETC_EXTRA = [
     "/etc/pacman.d/hooks", "/etc/systemd/system", "/etc/systemd/journald.conf.d",
     "/etc/systemd/logind.conf.d", "/etc/modprobe.d", "/etc/sysctl.d", "/etc/udev/rules.d",
     "/etc/X11/xorg.conf.d", "/etc/NetworkManager/conf.d", "/etc/environment.d",
+    # drop-in dirs for local settings that would otherwise edit package files (and cause .pacnew)
+    "/etc/profile.d", "/etc/ssh/sshd_config.d",
 ]
 # /etc paths that are always encrypted (usually root-readable, needs sudo)
 ETC_SECRET = [

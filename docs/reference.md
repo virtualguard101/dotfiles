@@ -165,7 +165,7 @@ Collected targets (`src/dotfiles/system_etc.py`):
 
 - package config files marked `[modified]` by pacman;
 
-- paths in `ETC_EXTRA` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks);
+- paths in `ETC_EXTRA` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
 
 - paths in `ETC_SECRET`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
 

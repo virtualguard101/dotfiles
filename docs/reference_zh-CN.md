@@ -163,7 +163,7 @@ uv run dotfiles check
 
 - pacman 标记为 `[modified]` 的软件包配置文件；
 
-- `ETC_EXTRA` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook）；
+- `ETC_EXTRA` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
 
 - `ETC_SECRET` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密；
 
