@@ -16,6 +16,7 @@ packages/                 软件包清单：archpkg.txt / scoopfile.json / winge
 src/dotfiles/             Python 工具（只用标准库）
 bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
+docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
 ```
 
 根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。

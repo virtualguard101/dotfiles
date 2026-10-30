@@ -16,6 +16,7 @@ bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and
                           then hands over to dotfiles restore
 docs/reference.md         detailed reference: command behavior, encryption and platform rules,
                           cleanup targets, commit checks
+docs/workflows.md         branch roles and which path each kind of change takes
 ```
 
 Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.
