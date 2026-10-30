@@ -1,13 +1,13 @@
 [project]
 name = "dotfiles"
 version = "0.1.0"
-description = "基于 chezmoi 的跨平台 dotfiles 维护：环境检测、重装恢复、备份与缓存清理"
+description = "Cross-platform dotfiles maintenance on chezmoi: environment checks, post-reinstall recovery, backup and cache cleanup"
 readme = "README.md"
 authors = [
     { name = "vg101", email = "virtualguard101@gmail.com" }
 ]
 requires-python = ">=3.12"
-# 运行时只用标准库：新机器上 uv 只需下载 Python 解释器，不依赖 PyPI
+# Runtime needs only the standard library: on a new machine uv just downloads the Python interpreter, no PyPI access
 dependencies = []
 
 [project.scripts]

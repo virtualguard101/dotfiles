@@ -1,5 +1,6 @@
-"""Windows 清理目标的文件系统逻辑：把 %LOCALAPPDATA% 等指向临时目录，在任何平台上都能运行。
-不覆盖进程检测、文件锁、管理员权限与外部命令（这些需要在 Windows 上实际验证）。"""
+"""Filesystem logic of the Windows cleanup targets: %LOCALAPPDATA% etc. are pointed at temp
+directories so the tests run on any platform. Process detection, file locks, admin rights and
+external commands are not covered (those need real Windows)."""
 import os
 import time
 from pathlib import Path
@@ -48,7 +49,7 @@ def test_temp_keeps_recent_and_dirs_with_recent_children(env):
     (temp / "new.tmp").write_text("x")
     busy = temp / "olddir"
     busy.mkdir()
-    (busy / "fresh").write_text("x")      # 子文件是新的：整个目录保留
+    (busy / "fresh").write_text("x")      # a child file is new: keep the whole dir
     old(busy)
     stale = temp / "staledir"
     stale.mkdir()
@@ -83,7 +84,7 @@ def test_electron_and_vscode_family(env):
     app = roaming / "SomeApp"
     (app / "Partitions" / "p1" / "Code Cache").mkdir(parents=True)
     (app / "GPUCache").mkdir()
-    (app / "IndexedDB").mkdir()      # 离线数据，不碰
+    (app / "IndexedDB").mkdir()      # offline data, untouched
     (roaming / "NotElectron" / "data").mkdir(parents=True)
     rel = {p.relative_to(roaming).as_posix() for p in by_id("electron").paths(ctx())}
     assert rel == {"Code/Cache", "Code/CachedData", "SomeApp/GPUCache", "SomeApp/Partitions/p1/Code Cache"}
@@ -111,4 +112,4 @@ def test_deleter_scope_on_windows_layout(env):
     d = clean.make_ctx(win, dry=True, deep=False).deleter
     d.assert_deletable(home / "AppData" / "Local" / "Temp" / "x")
     with pytest.raises(ui.Abort):
-        d.assert_deletable(home / "AppData" / "Local")        # 受保护目录本身
+        d.assert_deletable(home / "AppData" / "Local")        # a protected directory itself

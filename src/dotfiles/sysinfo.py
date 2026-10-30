@@ -1,4 +1,5 @@
-"""平台检测、标准目录、外部命令与进程查询。Windows 专属的调用都在运行时按平台分支。"""
+"""Platform detection, standard directories, external commands and process queries.
+Windows-specific calls are branched at runtime."""
 from __future__ import annotations
 
 import csv
@@ -18,7 +19,7 @@ IS_LINUX = sys.platform.startswith("linux")
 OS_NAME = "windows" if IS_WINDOWS else ("linux" if IS_LINUX else sys.platform)
 
 
-# ---------------------------------------------------------------- 目录
+# ---------------------------------------------------------------- directories
 
 def home() -> Path:
     return Path.home()
@@ -54,7 +55,7 @@ def appdata() -> Path:
 
 
 def runtime_dir() -> Path:
-    """放临时明文的目录：Linux 用 tmpfs 上仅本人可访问的 $XDG_RUNTIME_DIR。"""
+    """Where transient plaintext goes: Linux uses the user-only $XDG_RUNTIME_DIR (tmpfs)."""
     value = os.environ.get("XDG_RUNTIME_DIR")
     if value and Path(value).is_dir():
         return Path(value)
@@ -63,10 +64,11 @@ def runtime_dir() -> Path:
     return Path(tempfile.gettempdir())
 
 
-# ---------------------------------------------------------------- 外部命令
+# ---------------------------------------------------------------- external commands
 
 def which(name: str) -> str | None:
-    """解析可执行文件的完整路径。Windows 上依赖 PATHEXT，因此能找到 npm.cmd 一类 shim，而不会选中 .ps1。"""
+    """Resolve an executable's full path. On Windows this honors PATHEXT, so it finds shims like
+    npm.cmd but never picks a .ps1."""
     return shutil.which(name)
 
 
@@ -96,7 +98,8 @@ class Result:
 
 def run(cmd: Sequence[str], *, input: str | None = None, env: dict[str, str] | None = None,
         cwd: str | os.PathLike | None = None, timeout: float | None = None) -> Result:
-    """运行命令并捕获输出（按 UTF-8 解码，失败时退回本地编码）。命令不存在时返回 127，不抛异常。"""
+    """Run a command capturing output (decoded as UTF-8, falling back to the local codec).
+    Returns 127 when the command does not exist instead of raising."""
     exe = which(cmd[0])
     if exe is None:
         return Result(127, "", f"{cmd[0]}: command not found")
@@ -114,7 +117,7 @@ def run(cmd: Sequence[str], *, input: str | None = None, env: dict[str, str] | N
 
 def run_live(cmd: Sequence[str], *, env: dict[str, str] | None = None,
              cwd: str | os.PathLike | None = None) -> int:
-    """运行命令并直接继承终端（交互式命令、长时间输出的命令）。"""
+    """Run a command inheriting the terminal (interactive commands, long output)."""
     exe = which(cmd[0])
     if exe is None:
         return 127
@@ -127,7 +130,7 @@ def run_live(cmd: Sequence[str], *, env: dict[str, str] | None = None,
 
 
 def query(cmd: Sequence[str]) -> str | None:
-    """取命令输出的第一行非空内容；失败返回 None。"""
+    """First non-empty line of a command's output; None on failure."""
     r = run(cmd, timeout=60)
     if not r.ok:
         return None
@@ -143,13 +146,13 @@ def version_of(tool: str) -> str | None:
     return line[:80] if line else None
 
 
-# ---------------------------------------------------------------- 进程
+# ---------------------------------------------------------------- processes
 
 @dataclass(frozen=True)
 class Proc:
     pid: int
-    name: str          # 不含 .exe 的小写进程名
-    exe: str = ""      # Linux：/proc/<pid>/exe 的目标
+    name: str          # lowercase process name without .exe
+    exe: str = ""      # Linux: target of /proc/<pid>/exe
     argv: tuple[str, ...] = ()
 
 
@@ -189,7 +192,7 @@ def _windows_processes() -> list[Proc]:
 
 @cache
 def processes() -> tuple[Proc, ...]:
-    """当前用户的进程快照（一次运行内缓存）。"""
+    """Snapshot of the current user's processes (cached for one run)."""
     try:
         return tuple(_windows_processes() if IS_WINDOWS else _linux_processes())
     except OSError:
@@ -197,7 +200,7 @@ def processes() -> tuple[Proc, ...]:
 
 
 def proc_running(names: Iterable[str]) -> bool:
-    """按进程名（不区分大小写，不含 .exe）判断是否在运行。"""
+    """Whether any process matches by name (case-insensitive, without .exe)."""
     wanted = {n.lower().removesuffix(".exe") for n in names}
     return any(p.name in wanted for p in processes())
 
@@ -231,7 +234,8 @@ def _posix_kill0(pid: int) -> bool:
 
 
 def file_locked(path: Path) -> bool:
-    """Windows：文件是否被其他进程独占打开（Chromium 的 lockfile、Firefox 的 parent.lock）。其他平台恒为 False。"""
+    """Windows: whether another process has the file opened exclusively (Chromium's lockfile,
+    Firefox's parent.lock). Always False on other platforms."""
     if not IS_WINDOWS or not path.is_file():
         return False
     import ctypes
@@ -259,13 +263,13 @@ def is_admin() -> bool:
 
 
 def powershell(script: str, timeout: float = 120) -> Result:
-    """Windows：以 -NoProfile 运行一段 PowerShell，输出强制 UTF-8。"""
+    """Windows: run a PowerShell snippet with -NoProfile, forcing UTF-8 output."""
     exe = "pwsh" if have("pwsh") else "powershell"
     prefix = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
     return run([exe, "-NoProfile", "-NonInteractive", "-Command", prefix + script], timeout=timeout)
 
 
-# ---------------------------------------------------------------- 系统信息
+# ---------------------------------------------------------------- system info
 
 @cache
 def os_release() -> dict[str, str]:

@@ -1,7 +1,9 @@
-"""dotfiles 备份：基于 chezmoi，敏感文件用 age 加密；两端共用流程，候选清单与软件包导出按平台区分。
+"""dotfiles backup via chezmoi; sensitive files are age-encrypted. The flow is shared by both
+platforms; candidate lists and package exports differ per platform.
 
-backup 流程：预检 → re-add 已托管文件（明文出现密钥则转为加密）→ 添加候选（登记平台归属）
-          → 系统配置（Linux /etc）→ 软件包清单 → check → 可选提交
+backup flow: preflight -> re-add managed files (plaintext with secrets is switched to encrypted)
+          -> add candidates (registered in platforms.toml) -> system config (Linux /etc)
+          -> package manifests -> check -> optional commit
 """
 from __future__ import annotations
 
@@ -19,8 +21,8 @@ from dotfiles.sysinfo import IS_WINDOWS, home
 
 @dataclass
 class Profile:
-    track: list[str]                    # 推荐托管的配置（相对 ~，用 /；目录展开为其中的普通文件）
-    secret: list[str]                   # 一律加密的配置
+    track: list[str]                    # configs recommended for tracking (relative to ~, with /; directories expand to regular files)
+    secret: list[str]                   # always encrypted
     exclude: list[str] = field(default_factory=lambda: ["*.tbcache", "*.lock", "*.log", "*.bak", "*~", "*_history"])
 
 
@@ -55,7 +57,7 @@ def profile() -> Profile:
     return WINDOWS if IS_WINDOWS else LINUX
 
 
-# ---------------------------------------------------------------- 工具函数
+# ---------------------------------------------------------------- helpers
 
 def rel_home(path: Path) -> str:
     try:
@@ -65,7 +67,7 @@ def rel_home(path: Path) -> str:
 
 
 def expand(rel: str, prof: Profile) -> list[Path]:
-    """相对 ~ 的文件或目录 → 其中的普通文件（跳过链接、大于 1MiB 的文件与 exclude 模式）。"""
+    """File or directory relative to ~ -> the regular files inside (skips links, files >= 1MiB and exclude patterns)."""
     p = home() / rel
     if not os.path.lexists(p) or os.path.islink(p):
         return []
@@ -85,7 +87,7 @@ def expand(rel: str, prof: Profile) -> list[Path]:
 
 
 def _home_path_rx() -> re.Pattern[str]:
-    """绝对家目录路径：当前家目录的字面值，以及 Windows 的盘符形式、JSON 转义形式与 /c/Users 形式。"""
+    """Absolute home paths: the literal current home, plus Windows drive-letter, JSON-escaped and /c/Users forms."""
     leaf = re.escape(home().name)
     literal = re.escape(str(home()))
     return re.compile(rf"(?i)(?:{literal}(?![\w.-])|(?:[a-z]:|/[a-z])(?:\\\\|\\|/)users(?:\\\\|\\|/){leaf}(?![\w.-]))")
@@ -99,7 +101,7 @@ def has_home_path(path: Path) -> bool:
 
 
 def has_secret(path: Path) -> bool:
-    """出错时按“含密钥”处理：宁可多加密，不可漏加密。"""
+    """Errors are treated as "contains secrets": prefer over-encrypting over missing one."""
     try:
         return guard.cmd_scan([str(path)], quiet=True) != 0
     except Exception:
@@ -111,37 +113,37 @@ def _write_utf8(path: Path, text: str) -> None:
         fh.write(text)
 
 
-# ---------------------------------------------------------------- 预检
+# ---------------------------------------------------------------- preflight
 
 def preflight() -> dict:
     chez.require_chezmoi()
     config = chez.dump_config()
     if config.get("encryption") != "age":
-        raise ui.Abort('chezmoi 未启用 age 加密（运行 dotfiles restore --only config）')
+        raise ui.Abort('chezmoi age encryption is not enabled (run dotfiles restore --only config)')
     if not chez.age_recipients(config):
-        raise ui.Abort("chezmoi 配置缺少 age.recipient")
+        raise ui.Abort("chezmoi config is missing age.recipient")
     ids = chez.age_identities(config)
     if not ids:
-        raise ui.Abort("chezmoi 配置缺少 age.identity")
+        raise ui.Abort("chezmoi config is missing age.identity")
     repo = os.path.normcase(str(chez.repo()))
     for i in ids:
         if not i.is_file():
-            raise ui.Abort(f"age 身份文件不存在: {i}（运行 dotfiles restore --only key）")
+            raise ui.Abort(f"age identity file does not exist: {i} (run dotfiles restore --only key)")
         if os.path.normcase(str(i.resolve())).startswith(repo + os.sep):
-            raise ui.Abort(f"age 私钥位于仓库内，会被提交: {i}")
+            raise ui.Abort(f"age private key lives inside the repo and would be committed: {i}")
     if set(chez.age_recipients(config)) != set(chez.template_recipients()):
-        ui.warn("chezmoi 配置中的 recipient 与仓库模板不一致，运行 dotfiles restore --only config 重新生成")
+        ui.warn("recipient in the chezmoi config differs from the repo template; run dotfiles restore --only config")
     if IS_WINDOWS:
         docs = sysinfo.powershell("[Environment]::GetFolderPath('MyDocuments')").stdout.strip()
         if docs and os.path.normcase(docs) != os.path.normcase(str(home() / "Documents")):
-            ui.warn(f"“文档”被重定向到 {docs}，chezmoi 中 Documents/ 下的目标与实际位置不一致")
+            ui.warn(f"the Documents folder is redirected to {docs}; targets under Documents/ do not match the real location")
     return config
 
 
 # ---------------------------------------------------------------- status
 
 def template_drift() -> list[str]:
-    """模板目标的本地修改：re-add 不处理模板，需要手动合并回 .tmpl。"""
+    """Local modifications to template targets: re-add does not handle templates, so merge them back into .tmpl by hand."""
     templates = set(chez.managed(include="templates"))
     out = []
     for line in chez.cz_lines("status", "--exclude", "externals"):
@@ -154,19 +156,19 @@ def template_drift() -> list[str]:
 def cmd_status() -> int:
     config = preflight()
     prof = profile()
-    ui.section("加密配置")
-    ui.info(f"仓库:     {chez.repo()}")
-    ui.info(f"接收者:   {', '.join(chez.age_recipients(config))}")
+    ui.section("Encryption config")
+    ui.info(f"repo:       {chez.repo()}")
+    ui.info(f"recipient:  {', '.join(chez.age_recipients(config))}")
     for i in chez.age_identities(config):
-        ui.info(f"身份文件: {i}（{'存在' if i.is_file() else '不存在'}）")
+        ui.info(f"identity:   {i} ({'present' if i.is_file() else 'missing'})")
 
-    ui.section("chezmoi 漂移（chezmoi status）")
+    ui.section("chezmoi drift (chezmoi status)")
     r = chez.cz("status")
-    ui.info(r.stdout.rstrip() or "（无）")
+    ui.info(r.stdout.rstrip() or "(none)")
     for t in template_drift():
-        ui.warn(f"模板目标有本地修改，re-add 不会处理，需手动合并到 .tmpl: {t}")
+        ui.warn(f"template target has local changes that re-add will not touch; merge them into the .tmpl by hand: {t}")
 
-    ui.section("备份候选（未托管）")
+    ui.section("Backup candidates (unmanaged)")
     managed = {os.path.normcase(p) for p in chez.managed(include="files,symlinks", absolute=True)}
     platforms = chez.load_platforms()
     any_ = False
@@ -178,39 +180,39 @@ def cmd_status() -> int:
                 target = rel_home(f)
                 owner = chez.owner_of(target, platforms)
                 if owner not in (None, "shared", sysinfo.OS_NAME):
-                    flag = f"归属 {owner}→跳过"
+                    flag = f"owned by {owner}->skip"
                 else:
                     flag = "encrypt" if kind == "secret" or has_secret(f) else "plain"
                     if has_home_path(f):
-                        flag += ",含绝对 home 路径→跳过"
+                        flag += ",absolute home path->skip"
                 ui.info(f"  {ui.pad(target, 60)}{flag}")
                 any_ = True
     if not any_:
-        ui.ok("无")
+        ui.ok("none")
 
-    ui.section("软件包清单")
+    ui.section("Package manifests")
     for name in package_files():
         p = chez.packages_dir() / name
         if p.is_file():
-            ui.info(f"  {ui.pad(name, 24)}{len(p.read_text(encoding='utf-8').splitlines())} 行")
+            ui.info(f"  {ui.pad(name, 24)}{len(p.read_text(encoding='utf-8').splitlines())} lines")
         else:
-            ui.warn(f"{name} 尚未生成（backup 时生成）")
+            ui.warn(f"{name} not generated yet (created by backup)")
 
     if sysinfo.IS_LINUX:
         from dotfiles import system_etc
         system_etc.status()
 
-    ui.section("权限审计")
+    ui.section("Permission audit")
     audit(apply=False)
     ui.info()
-    ui.info("下一步: dotfiles backup -n 预览备份；dotfiles audit --apply 收紧权限")
+    ui.info("next: dotfiles backup -n to preview a backup; dotfiles audit --apply to tighten permissions")
     return 0
 
 
 # ---------------------------------------------------------------- backup
 
 class Runner:
-    """chezmoi 修改操作：dry-run 时加 --dry-run --verbose。"""
+    """chezmoi modifying operations: adds --dry-run --verbose in dry-run mode."""
 
     def __init__(self, dry: bool):
         self.flags = ["--dry-run", "--verbose"] if dry else []
@@ -224,29 +226,30 @@ class Runner:
 
 
 def make_private(path: Path, dry: bool) -> None:
-    """加密托管前把文件收紧为 600，使 chezmoi 记录 private_ 属性，部署到新机器时同样是 600。"""
+    """Tighten a file to 600 before encrypted tracking so chezmoi records the private_ attribute
+    and deploys it as 600 on new machines too."""
     if IS_WINDOWS:
         return
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode & 0o077:
-        ui.info(f"        权限 {mode:o} → 600")
+        ui.info(f"        mode {mode:o} -> 600")
         if not dry:
             os.chmod(path, 0o600)
 
 
 def backup_managed(run: Runner) -> None:
-    ui.section("已托管文件 re-add")
+    ui.section("re-add managed files")
     for f in chez.managed(include="files", exclude="externals,encrypted,templates", absolute=True):
         p = Path(f)
         if p.is_file() and has_secret(p):
-            ui.warn(f"明文托管文件出现密钥特征，转为加密: {rel_home(p)}")
+            ui.warn(f"plaintext managed file now matches a secret pattern; switching to encrypted: {rel_home(p)}")
             make_private(p, run.dry)
             run.cz("add", "--encrypt", "--", str(p))
     if run.cz("re-add") != 0:
-        raise ui.Abort("chezmoi re-add 失败")
+        raise ui.Abort("chezmoi re-add failed")
     for t in template_drift():
-        ui.warn(f"模板目标有本地修改，需手动合并到 .tmpl: {t}")
-    ui.ok("re-add 完成")
+        ui.warn(f"template target has local changes; merge them into the .tmpl by hand: {t}")
+    ui.ok("re-add done")
 
 
 def add_candidate(run: Runner, f: Path, kind: str, managed: set[str]) -> None:
@@ -255,36 +258,36 @@ def add_candidate(run: Runner, f: Path, kind: str, managed: set[str]) -> None:
     target = rel_home(f)
     owner = chez.owner_of(target)
     if owner not in (None, "shared", sysinfo.OS_NAME):
-        ui.warn(f"跳过（归属 {owner}；两端都需要时改为模板并登记到 shared）: {target}")
+        ui.warn(f"skip (owned by {owner}; if both platforms need it, make it a template and register it as shared): {target}")
         return
     if has_home_path(f):
-        ui.warn(f"跳过（含绝对 home 路径，建议改为模板 {{{{ .chezmoi.homeDir }}}}）: {target}")
+        ui.warn(f"skip (contains an absolute home path; consider a template with {{{{ .chezmoi.homeDir }}}}): {target}")
         return
     if kind == "secret" or has_secret(f):
-        ui.info(f"  加密  {target}")
+        ui.info(f"  encrypt  {target}")
         make_private(f, run.dry)
         rc = run.cz("add", "--encrypt", "--", str(f))
     else:
         r = run.cz_quiet("add", "--secrets", "error", "--", str(f))
         if not r.ok:
-            ui.warn(f"chezmoi 密钥扫描命中，改为加密: {target}")
+            ui.warn(f"chezmoi secret scan hit; switching to encrypted: {target}")
             make_private(f, run.dry)
             rc = run.cz("add", "--encrypt", "--", str(f))
         else:
-            ui.info(f"  明文  {target}")
+            ui.info(f"  plain    {target}")
             rc = 0
     if rc != 0:
-        ui.warn(f"chezmoi add 失败: {target}")
+        ui.warn(f"chezmoi add failed: {target}")
         return
     if not run.dry and not chez.is_managed(f):
-        ui.warn(f"未被托管（.chezmoiignore 忽略了它？）: {target}")
+        ui.warn(f"not managed (ignored by .chezmoiignore?): {target}")
         return
     if chez.register_platform(target, sysinfo.OS_NAME, run.dry):
-        ui.info(f"        登记平台归属: {sysinfo.OS_NAME}")
+        ui.info(f"        registered platform owner: {sysinfo.OS_NAME}")
 
 
 def backup_candidates(run: Runner) -> None:
-    ui.section("添加候选配置")
+    ui.section("Add candidate configs")
     prof = profile()
     managed = {os.path.normcase(p) for p in chez.managed(include="files,symlinks", absolute=True)}
     for kind, rels in (("secret", prof.secret), ("auto", prof.track)):
@@ -293,14 +296,15 @@ def backup_candidates(run: Runner) -> None:
                 add_candidate(run, f, kind, managed)
 
 
-# ---------------------------------------------------------------- 软件包清单
+# ---------------------------------------------------------------- package manifests
 
 def package_files() -> list[str]:
     return ["scoopfile.json", "winget.json", "winget-unavailable.txt"] if IS_WINDOWS else ["archpkg.txt"]
 
 
 def normalize_export(kind: str, data: dict) -> str:
-    """归一化导出结果，使清单只在软件包增减时变化：scoop 去掉 Updated 等每次都变的字段，winget 去掉 CreationDate。"""
+    """Normalize exports so manifests only change when packages change: drop scoop fields that
+    change every run (Updated, ...), drop winget's CreationDate."""
     key = str.lower
     if kind == "scoop":
         apps = []
@@ -335,14 +339,14 @@ def update_pkg_file(name: str, kind: str, new: str, dry: bool) -> None:
     path = chez.packages_dir() / name
     old = path.read_text(encoding="utf-8").replace("\r\n", "\n") if path.is_file() else ""
     if old == new:
-        ui.ok(f"{name} 无变化")
+        ui.ok(f"{name}: no changes")
         return
     before, after = _names(old, kind), _names(new, kind)
     diff = [f"  -{n}" for n in before if n not in after] + [f"  +{n}" for n in after if n not in before]
     if not old:
-        diff = [f"  （新建，{len(after)} 项）"]
+        diff = [f"  (new file, {len(after)} packages)"]
     ui.info(f"{name}:")
-    for line in diff or ["  软件包不变，元数据有更新"]:
+    for line in diff or ["  package set unchanged, metadata updated"]:
         ui.info(line)
     if not dry:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -350,7 +354,7 @@ def update_pkg_file(name: str, kind: str, new: str, dry: bool) -> None:
 
 
 def backup_packages(dry: bool) -> None:
-    ui.section("软件包清单")
+    ui.section("Package manifests")
     if not IS_WINDOWS:
         if sysinfo.have("pacman"):
             update_pkg_file("archpkg.txt", "arch", sysinfo.run(["pacman", "-Qqe"]).stdout, dry)
@@ -360,22 +364,23 @@ def backup_packages(dry: bool) -> None:
         try:
             update_pkg_file("scoopfile.json", "scoop", normalize_export("scoop", json.loads(r.stdout)), dry)
         except (ValueError, KeyError) as e:
-            ui.warn(f"scoop export 失败（退出码 {r.returncode}）: {e}")
+            ui.warn(f"scoop export failed (exit {r.returncode}): {e}")
     if sysinfo.have("winget"):
         with tempfile.TemporaryDirectory() as tmp:
             raw = Path(tmp) / "winget.json"
             r = sysinfo.run(["winget", "export", "-o", str(raw), "--accept-source-agreements",
                              "--disable-interactivity"], timeout=600)
             if not raw.is_file():
-                ui.warn(f"winget export 失败（退出码 {r.returncode}）")
+                ui.warn(f"winget export failed (exit {r.returncode})")
                 return
             data = json.loads(raw.read_text(encoding="utf-8-sig"))
         update_pkg_file("winget.json", "winget", normalize_export("winget", data), dry)
         unavailable = sorted(set(re.findall(r"not available from any source:\s*(.+?)\s*$", r.stdout, re.M)))
-        text = "# winget export 无法导出的已安装程序（不在任何 winget 源中），需手动安装\n" + "".join(f"{u}\n" for u in unavailable)
+        text = ("# Installed programs winget export could not export (not in any winget source); install manually\n"
+                + "".join(f"{u}\n" for u in unavailable))
         path = chez.packages_dir() / "winget-unavailable.txt"
         if (path.read_text(encoding="utf-8") if path.is_file() else "") != text:
-            ui.info(f"winget-unavailable.txt: {len(unavailable)} 项")
+            ui.info(f"winget-unavailable.txt: {len(unavailable)} entries")
             if not dry:
                 _write_utf8(path, text)
 
@@ -383,11 +388,11 @@ def backup_packages(dry: bool) -> None:
 # ---------------------------------------------------------------- check
 
 def gate() -> bool:
-    ui.section("安全检查")
+    ui.section("Security check")
     bad = False
     for i in chez.age_identities():
         if chez.tracked(i):
-            ui.err(f"age 私钥被 git 跟踪: {i}")
+            ui.err(f"age private key is tracked by git: {i}")
             bad = True
     cwd = os.getcwd()
     try:
@@ -398,13 +403,13 @@ def gate() -> bool:
         os.chdir(cwd)
     problems = chez.check_platforms()
     for p in problems:
-        ui.err(f"平台归属: {p}")
+        ui.err(f"platform ownership: {p}")
     if problems:
         bad = True
     if bad:
-        ui.err("安全检查未通过，不会提交")
+        ui.err("security check failed; nothing will be committed")
         return False
-    ui.ok("未发现明文密钥，.age 文件格式正确，敏感目标均已加密，平台归属完整")
+    ui.ok("no plaintext secrets, .age files are valid ciphertext, sensitive targets encrypted, platform ownership complete")
     return True
 
 
@@ -423,22 +428,22 @@ def cmd_backup(dry: bool, with_system: bool, commit: bool) -> int:
         system_etc.backup(run)
     backup_packages(dry)
     passed = gate()
-    ui.section("仓库状态")
-    ui.info(chez.git("status", "--short").stdout.rstrip() or "（无变更）")
+    ui.section("Repo status")
+    ui.info(chez.git("status", "--short").stdout.rstrip() or "(no changes)")
     if not passed:
         return 1
     if commit and not dry:
         chez.git("add", "-A")
         if chez.git("diff", "--cached", "--quiet").ok:
-            ui.ok("无变更可提交")
+            ui.ok("nothing to commit")
             return 0
         from datetime import date
         msg = f"backup: sync {sysinfo.OS_NAME} dotfiles ({date.today().isoformat()})"
         if sysinfo.run_live(["git", "-C", str(chez.repo()), "commit", "-q", "-m", msg]) != 0:
-            raise ui.Abort("git commit 失败（pre-commit 检查未通过？）")
-        ui.ok(f"已提交 {chez.git('log', '-1', '--format=%h').stdout.strip()}（未推送，确认后 git push）")
+            raise ui.Abort("git commit failed (pre-commit check did not pass?)")
+        ui.ok(f"committed {chez.git('log', '-1', '--format=%h').stdout.strip()} (not pushed; run git push when ready)")
     ui.info()
-    ui.info("提醒：age 私钥不在仓库中，请另行离线备份（密码管理器 / U 盘）：")
+    ui.info("reminder: the age private key is not in the repo; back it up offline (password manager / USB drive):")
     for i in chez.age_identities():
         ui.info(f"  {i}")
     return 0
@@ -451,7 +456,7 @@ class _Audit:
 
 
 def _audit_targets() -> list[tuple[Path, bool]]:
-    """(路径, 是否目录)：一律加密的配置、凭据文件、~/.ssh、~/.gnupg、age 身份文件及其目录。"""
+    """(path, is_dir): always-encrypted configs, credential files, ~/.ssh, ~/.gnupg, age identity files and their dirs."""
     h = home()
     out: list[tuple[Path, bool]] = []
     for rel in [*profile().secret, ".pypirc", ".netrc", ".git-credentials", ".ssh/config"]:
@@ -476,13 +481,13 @@ def _audit_posix(path: Path, is_dir: bool, apply: bool) -> None:
     want = 0o700 if is_dir else 0o600
     cur = stat.S_IMODE(os.lstat(path).st_mode)
     if cur & ~want & 0o777:
-        ui.info(f"  {ui.pad(fsutil_tilde(path), 50)}{cur:o} → {want:o}")
+        ui.info(f"  {ui.pad(tilde(path), 50)}{cur:o} -> {want:o}")
         _Audit.hits += 1
         if apply:
             os.chmod(path, want)
 
 
-def fsutil_tilde(path: Path) -> str:
+def tilde(path: Path) -> str:
     from dotfiles.fsutil import tilde
     return tilde(path)
 
@@ -497,7 +502,7 @@ def current_sid() -> str:
 
 
 def restrict_acl(path: Path, is_dir: bool) -> bool:
-    """Windows：去掉继承，只允许当前用户、SYSTEM、Administrators 访问。"""
+    """Windows: drop inheritance; only the current user, SYSTEM and Administrators keep access."""
     inh = "(OI)(CI)" if is_dir else ""
     sids = [current_sid(), *_ALLOWED_SIDS_EXTRA]
     args = ["icacls", str(path), "/inheritance:r"]
@@ -520,10 +525,10 @@ def _audit_windows(path: Path, is_dir: bool, apply: bool) -> None:
     extra = sorted(sids - allowed)
     if not extra:
         return
-    ui.info(f"  {ui.pad(fsutil_tilde(path), 50)}额外可访问: {', '.join(extra)}")
+    ui.info(f"  {ui.pad(tilde(path), 50)}also accessible by: {', '.join(extra)}")
     _Audit.hits += 1
     if apply and not restrict_acl(path, is_dir):
-        ui.warn(f"icacls 失败: {path}")
+        ui.warn(f"icacls failed: {path}")
 
 
 def audit(apply: bool) -> None:
@@ -531,14 +536,14 @@ def audit(apply: bool) -> None:
     for path, is_dir in _audit_targets():
         (_audit_windows if IS_WINDOWS else _audit_posix)(path, is_dir, apply)
     if _Audit.hits == 0:
-        ui.ok("敏感文件权限正常")
+        ui.ok("sensitive file permissions are fine")
     elif not apply:
-        ui.info(f"共 {_Audit.hits} 项权限过宽，dotfiles audit --apply 收紧")
+        ui.info(f"{_Audit.hits} items have overly wide permissions; run dotfiles audit --apply to tighten them")
     else:
-        ui.ok(f"已收紧 {_Audit.hits} 项权限")
+        ui.ok(f"tightened {_Audit.hits} items")
 
 
 def cmd_audit(apply: bool) -> int:
-    ui.section("权限审计")
+    ui.section("Permission audit")
     audit(apply)
     return 0

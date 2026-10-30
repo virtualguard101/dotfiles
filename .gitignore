@@ -1,4 +1,4 @@
-# Python（uv 在仓库根目录创建 .venv；每台机器各自生成，不提交）
+# Python (uv creates .venv at the repo top; generated per machine, never committed)
 .venv/
 __pycache__/
 *.pyc

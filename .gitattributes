@@ -1,14 +1,14 @@
-# 统一换行：仓库内一律 LF，Windows 检出也保持 LF（不受 core.autocrlf 影响）
+# Line endings: LF everywhere in the repo and on Windows checkouts too (core.autocrlf has no effect)
 * text=auto eol=lf
 
-# age 密文：不做任何换行转换
+# age ciphertext: never convert line endings
 *.age -text
 
-# Windows 原生脚本需要 CRLF
+# Windows-native scripts need CRLF
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
-# 二进制 / 应用私有格式：原样保存
+# Binary / app-private formats: stored as-is
 *.ptb -text
 *.png binary
 *.jpg binary

@@ -1,5 +1,6 @@
-"""Linux 系统配置（/etc）的备份与恢复：独立的 chezmoi 实例，源目录为仓库根目录下的 system/，
-目标为 tmpfs 上的暂存区（$XDG_RUNTIME_DIR，退出时删除）。"""
+"""Backup and restore for Linux system config (/etc): a separate chezmoi instance whose source
+dir is system/ at the repo top and whose destination is a staging area on tmpfs ($XDG_RUNTIME_DIR,
+removed afterwards)."""
 from __future__ import annotations
 
 import os
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from dotfiles import chez, sysinfo, ui
 
-# 显式纳入的 /etc 文件或目录（目录中只取不属于任何软件包的文件）
+# /etc files or directories included explicitly (directories contribute only files not owned by any package)
 ETC_EXTRA = [
     "/etc/docker/daemon.json", "/etc/timeshift/timeshift.json",
     "/etc/sddm.conf", "/etc/sddm.conf.d", "/etc/mkinitcpio.d/linux-zen.preset",
@@ -21,18 +22,18 @@ ETC_EXTRA = [
     "/etc/systemd/logind.conf.d", "/etc/modprobe.d", "/etc/sysctl.d", "/etc/udev/rules.d",
     "/etc/X11/xorg.conf.d", "/etc/NetworkManager/conf.d", "/etc/environment.d",
 ]
-# 一律加密的 /etc 路径（通常 root 可读，需要 sudo）
+# /etc paths that are always encrypted (usually root-readable, needs sudo)
 ETC_SECRET = [
     "/etc/NetworkManager/system-connections", "/etc/crypttab", "/etc/sudoers", "/etc/sudoers.d",
     "/etc/mihomo/config.yaml", "/etc/wireguard",
 ]
-# 不备份：账户数据库、主机密钥、自动生成的文件，恢复它们弊大于利
+# Never backed up: account databases, host keys, generated files; restoring them does more harm than good
 ETC_EXCLUDE = [
     "/etc/passwd", "/etc/group", "/etc/shadow", "/etc/gshadow", "/etc/subuid", "/etc/subgid",
     "/etc/machine-id", "/etc/resolv.conf", "/etc/ssh/ssh_host_*",
     "*.pacnew", "*.pacsave", "*.bak", "*.bak.*", "*~",
 ]
-# 恢复时与硬件 / 磁盘布局绑定的文件：只显示差异，必须显式点名才安装
+# Bound to hardware / disk layout on restore: show the diff only, install only when named explicitly
 HARDWARE_BOUND = [
     "/etc/fstab", "/etc/crypttab", "/etc/default/grub", "/etc/mkinitcpio.conf", "/etc/mkinitcpio.d/*",
     "/etc/X11/xorg.conf.d/*", "/etc/modprobe.d/*",
@@ -66,7 +67,7 @@ def _owned_by_packages() -> set[str]:
 
 
 def _modified_package_files() -> list[str]:
-    """被用户修改过的软件包配置文件（pacman 的 [modified] 标记）。"""
+    """Package config files modified by the user (pacman's [modified] mark)."""
     if not sysinfo.have("pacman"):
         return []
     r = sysinfo.run(["pacman", "-Qii"], env={"LC_ALL": "C"})
@@ -82,7 +83,7 @@ def _files_under(path: str) -> list[str]:
             return sorted(str(f) for f in p.rglob("*") if f.is_file() and not f.is_symlink() and f.stat().st_size < 1024 * 1024)
         if Sudo.ensure():
             return sorted(sysinfo.run(["sudo", "find", path, "-type", "f", "-size", "-1024k"]).stdout.split("\n")[:-1])
-        ui.warn(f"无法列出 {path}（需要 sudo）")
+        ui.warn(f"cannot list {path} (needs sudo)")
         return []
     if not p.exists() and Sudo.ensure() and sysinfo.run(["sudo", "test", "-f", path]).ok:
         return [path]
@@ -90,7 +91,7 @@ def _files_under(path: str) -> list[str]:
 
 
 def collect_targets() -> dict[str, str]:
-    """路径 → plain | secret。"""
+    """path -> plain | secret."""
     owned = _owned_by_packages()
     out: dict[str, str] = {}
     for f in _modified_package_files():
@@ -110,17 +111,17 @@ def collect_targets() -> dict[str, str]:
 
 
 def status() -> None:
-    ui.section("/etc 备份目标")
+    ui.section("/etc backup targets")
     for path, kind in collect_targets().items():
         ui.info(f"  {ui.pad(path, 56)}{kind}")
-    ui.section("/etc 待处理项")
-    ui.info("pacnew / pacsave（用 pacdiff 合并）：")
+    ui.section("/etc pending items")
+    ui.info("pacnew / pacsave (merge with pacdiff):")
     for dirpath, _, files in sorted(os.walk("/etc", onerror=lambda e: None)):
         for name in sorted(files):
             if name.endswith((".pacnew", ".pacsave")):
                 ui.info(f"  {os.path.join(dirpath, name)}")
     if sysinfo.have("etckeeper") and not Path("/etc/.git").exists():
-        ui.info("etckeeper 已安装但未初始化：/etc 已由 system/ 备份，可考虑卸载 etckeeper 以免重复")
+        ui.info("etckeeper is installed but not initialized: /etc is backed up in system/; consider removing etckeeper to avoid duplication")
 
 
 class _Stage:
@@ -148,7 +149,7 @@ class _Stage:
 
 
 def backup(run) -> None:
-    ui.section("/etc → system/（独立 chezmoi 实例）")
+    ui.section("/etc -> system/ (separate chezmoi instance)")
     Sudo.prompt = True
     chez.system_source_dir().mkdir(exist_ok=True)
     from dotfiles.backup import has_secret
@@ -167,48 +168,48 @@ def backup(run) -> None:
                 try:
                     data = sysinfo.run(["sudo", "cat", "--", path])
                     if not data.ok:
-                        ui.warn(f"读取失败: {path}")
+                        ui.warn(f"failed to read: {path}")
                         continue
                     dst.write_text(data.stdout, encoding="utf-8")
                 finally:
                     os.umask(old)
             else:
-                ui.warn(f"跳过（无读权限且无 sudo）: {path}")
+                ui.warn(f"skipped (no read permission and no sudo): {path}")
                 continue
             os.chmod(dst, mode)
-            # 非全局可读的 /etc 文件同样视为敏感
+            # /etc files that are not world-readable count as sensitive too
             encrypt = kind == "secret" or not (mode & 0o004) or has_secret(dst)
             flags = run.flags
             if encrypt:
-                ui.info(f"  加密  {path}")
+                ui.info(f"  encrypt  {path}")
                 stage.cz(*flags, "add", "--encrypt", "--", str(dst))
             else:
                 r = stage.cz(*flags, "add", "--secrets", "error", "--", str(dst))
                 if r.ok:
-                    ui.info(f"  明文  {path}")
+                    ui.info(f"  plain    {path}")
                 else:
-                    ui.warn(f"chezmoi 密钥扫描命中，改为加密: {path}")
+                    ui.warn(f"chezmoi secret scan hit; switching to encrypted: {path}")
                     stage.cz(*flags, "add", "--encrypt", "--", str(dst))
             n += 1
-    ui.ok(f"/etc 共处理 {n} 个文件（暂存区位于 tmpfs，已删除）")
+    ui.ok(f"processed {n} /etc files (staging area was on tmpfs; now removed)")
 
 
 def cmd_restore(apply: bool, filters: list[str]) -> int:
     src = chez.system_source_dir() / "etc"
     if not src.is_dir():
-        raise ui.Abort("system/etc 不存在：尚未在 Linux 上运行过 dotfiles backup（不带 --no-system）")
+        raise ui.Abort("system/etc does not exist: dotfiles backup (without --no-system) has not run on Linux yet")
     from dotfiles.backup import preflight
 
     preflight()
     Sudo.prompt = True
     rsudo = ["sudo"] if Sudo.ensure() else []
     if apply and not rsudo:
-        raise ui.Abort("安装到 /etc 需要 sudo")
+        raise ui.Abort("installing into /etc needs sudo")
     changed = held = 0
     with _Stage() as stage:
         r = stage.cz("apply", "--force", "--no-tty")
         if not r.ok:
-            raise ui.Abort(f"解密 system/ 失败: {r.stderr.strip()[:300]}")
+            raise ui.Abort(f"failed to decrypt system/: {r.stderr.strip()[:300]}")
         encrypted = {p for p in stage.cz("managed", "-i", "encrypted", "-p", "absolute").stdout.splitlines()}
         for f in sorted(p for p in stage.dir.rglob("*") if p.is_file()):
             target = "/" + f.relative_to(stage.dir).as_posix()
@@ -219,26 +220,26 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
             changed += 1
             ui.section(target)
             if str(f) in encrypted:
-                ui.info("（加密文件，不在终端显示内容差异）")
+                ui.info("(encrypted file; the content diff is not shown in the terminal)")
             else:
-                ui.info(sysinfo.run([*rsudo, "diff", "-u", "--label", target, "--label", "备份", "--", target, str(f)]).stdout.rstrip())
+                ui.info(sysinfo.run([*rsudo, "diff", "-u", "--label", target, "--label", "backup", "--", target, str(f)]).stdout.rstrip())
             if _match(target, HARDWARE_BOUND) and target not in filters:
-                ui.note("与硬件/磁盘布局绑定：只显示差异；确认后用 dotfiles system-restore --apply " + target + " 安装")
+                ui.note("bound to hardware/disk layout: diff only; to install, run dotfiles system-restore --apply " + target)
                 held += 1
                 continue
             if _match(target, SUDOERS) and not sysinfo.run([*rsudo, "visudo", "-cf", str(f)]).ok:
-                ui.err("visudo 校验失败，不安装（错误的 sudoers 会导致失去 sudo 权限）")
+                ui.err("visudo validation failed; not installing (a broken sudoers would lock you out of sudo)")
                 continue
             mode = sysinfo.run([*rsudo, "stat", "-c", "%a", "--", target]).stdout.strip() or f"{stat.S_IMODE(f.stat().st_mode):o}"
             cmd = ["sudo", "install", "-D", "-o", "root", "-g", "root", "-m", mode, "--", str(f), target]
             if not apply:
                 ui.dim("  + " + " ".join(cmd))
             elif sysinfo.run_live(cmd) != 0:
-                ui.warn(f"安装失败: {target}")
+                ui.warn(f"install failed: {target}")
     if not changed:
-        ui.ok("/etc 与备份一致")
+        ui.ok("/etc matches the backup")
     elif not apply:
-        ui.info("以上为预览。加 --apply 安装；修改引导/initramfs 相关文件后记得 grub-mkconfig / mkinitcpio -P")
+        ui.info("this was a preview; add --apply to install. After changing boot/initramfs files, run grub-mkconfig / mkinitcpio -P")
     if held:
-        ui.note(f"{held} 个与硬件绑定的文件未安装")
+        ui.note(f"{held} hardware-bound files were not installed")
     return 0

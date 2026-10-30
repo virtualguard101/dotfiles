@@ -2,7 +2,7 @@ import pytest
 
 from dotfiles import guard
 
-FAKE_GH = "ghp_" + "a1B2" * 9   # 运行时拼接，不在源码中出现完整 token
+FAKE_GH = "ghp_" + "a1B2" * 9   # built at runtime: the full token never appears in the source
 
 
 @pytest.mark.parametrize("source, target", [
@@ -14,7 +14,7 @@ FAKE_GH = "ghp_" + "a1B2" * 9   # 运行时拼接，不在源码中出现完整 
     ("home/literal_dot_npmrc", "dot_npmrc"),
     ("system/etc/sudoers", "/etc/sudoers"),
     ("system/etc/grub.d/executable_40_custom", "/etc/grub.d/40_custom"),
-    # 不是部署目标：仓库根目录的工具与 chezmoi 自身的配置
+    # not deployment targets: repo-root tooling and chezmoi's own config
     ("src/dotfiles/guard.py", None),
     ("packages/archpkg.txt", None),
     ("bootstrap.sh", None),

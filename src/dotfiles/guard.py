@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
-"""chezmoi 源仓库的提交/推送检查（跨平台，仅依赖 Python 3.9+ 标准库与 git）。
+"""Commit/push checks for the chezmoi source repository (cross-platform; needs only the
+Python 3.9+ standard library and git).
 
-子命令：
-  staged [路径...]     pre-commit 阶段：检查暂存区（index）中的内容；不给路径时检查全部暂存文件
-  push                 pre-push 阶段：逐个检查将被推送的每个提交新增/修改的文件
-  tree                 检查工作区内所有已跟踪及未忽略的新文件（dotfiles check 使用）
-  scan [-q] 文件...    只做密钥特征扫描，命中返回 1（dotfiles backup 判断是否需要加密）
-  prune-stash          删除 pre-commit 遗留的 stash 补丁并收紧其目录权限
+Subcommands:
+  staged [paths...]    pre-commit stage: check the index (staged content); all staged files when no paths given
+  push                 pre-push stage: check files added/modified by each commit about to be pushed
+  tree                 check every tracked and unignored new file in the worktree (used by dotfiles check)
+  scan [-q] files...   secret-pattern scan only; exit 1 on a hit (dotfiles backup uses this to decide on encryption)
+  prune-stash          delete leftover pre-commit stash patches and tighten the cache directory permissions
 
-检查项：
-  age       *.age 必须是 age 密文；chezmoi 的 encrypted_ 前缀与 .age 后缀必须成对出现
-  secret    明文文件不得包含密钥特征
-  policy    敏感目标（SSH、凭据文件、/etc/sudoers 等）必须以 encrypted_*.age 形式存储
-  warn      含绝对家目录路径（不阻止提交）
+Checks:
+  age       *.age must be real age ciphertext; chezmoi's encrypted_ prefix and .age suffix must come in pairs
+  secret    plaintext files must not contain secret patterns
+  policy    sensitive targets (SSH, credential files, /etc/sudoers, ...) must be stored as encrypted_*.age
+  warn      absolute home directory paths (does not block the commit)
 
-部署目标按 chezmoi 规则换算：仓库根目录 .chezmoiroot 指定的目录（如 home/）下是 ~ 的目标，
-system/ 下是系统路径（/etc/...），其余文件（工具代码、软件包清单）不是部署目标，只做密钥扫描。
+Deployment targets follow chezmoi rules: files under the directory named by .chezmoiroot
+(e.g. home/) map to ~ targets, system/ maps to system paths (/etc/...), and everything
+else (tool code, package manifests) is not a deployment target but is still secret-scanned.
 
-本文件既是 dotfiles 包的模块，也会被 pre-commit 直接执行，因此只能依赖标准库。
-输出只包含 文件:行号 与规则名，永远不打印命中的内容。
-行内含 "gitleaks:allow" 或 "pragma: allowlist secret" 时跳过该行的 secret 检查。
+This file is both a dotfiles package module and executed directly by pre-commit, so it may
+only depend on the standard library. Output contains only file:line and the rule name; the
+matched content is never printed. A line containing "gitleaks:allow" or
+"pragma: allowlist secret" is skipped by the secret check.
 """
 from __future__ import annotations
 
@@ -34,9 +37,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-# ---------------------------------------------------------------- 规则
+# ---------------------------------------------------------------- rules
 
-# 明文密钥特征：(规则名, 正则)。修改后 backup.sh 会自动沿用（它调用本脚本的 scan）。
+# Secret patterns in plaintext: (rule name, regex). dotfiles backup reuses these via `scan`.
 SECRET_RULES: list[tuple[str, re.Pattern[bytes]]] = [
     (name, re.compile(rx.encode()))
     for name, rx in [
@@ -58,8 +61,8 @@ SECRET_RULES: list[tuple[str, re.Pattern[bytes]]] = [
 ]
 ALLOW_MARKERS = (b"gitleaks:allow", b"pragma: allowlist secret")
 
-# 必须加密的 chezmoi 目标路径（相对 ~，或以 / 开头表示 system/ 下的系统路径）。
-# fnmatch 语义：* 可跨越 /。
+# chezmoi target paths that must be encrypted (relative to ~, or a system path under
+# system/ written with a leading /). fnmatch semantics: * may cross /.
 ENCRYPT_REQUIRED = [
     ".ssh/*", ".gnupg/*",
     ".pypirc", ".npmrc", ".netrc", "_netrc", ".git-credentials",
@@ -85,14 +88,14 @@ FILE_PREFIXES = ("encrypted_", "private_", "readonly_", "empty_", "executable_",
                  "modify_", "remove_", "symlink_", "run_", "once_", "onchange_", "before_",
                  "after_", "literal_")
 DIR_PREFIXES = ("remove_", "external_", "exact_", "private_", "readonly_", "literal_")
-LEGACY_NON_TARGET_TOP = ("scripts",)   # 没有 .chezmoiroot 的旧布局中被忽略的工具目录
-SYSTEM_TOP = "system"                   # /etc 等系统配置的源目录（独立 chezmoi 实例）
+LEGACY_NON_TARGET_TOP = ("scripts",)   # tool directory ignored in the old layout without .chezmoiroot
+SYSTEM_TOP = "system"                   # source dir for system config like /etc (separate chezmoi instance)
 
-# ---------------------------------------------------------------- 输出
+# ---------------------------------------------------------------- output
 
 for _s in (sys.stdout, sys.stderr):
     try:
-        _s.reconfigure(errors="backslashreplace")   # Windows 控制台编码不支持时不崩溃
+        _s.reconfigure(errors="backslashreplace")   # don't crash on characters the console can't encode
     except (AttributeError, ValueError):
         pass
 
@@ -103,7 +106,7 @@ class Finding:
     rule: str
     path: str
     line: int = 0
-    where: str = ""  # 提交短 SHA（push 模式）
+    where: str = ""  # short commit SHA (push mode)
 
     def __str__(self) -> str:
         loc = f"{self.path}:{self.line}" if self.line else self.path
@@ -111,7 +114,7 @@ class Finding:
         return f"{prefix}{loc}: [{self.rule}]"
 
 
-# ---------------------------------------------------------------- git 辅助
+# ---------------------------------------------------------------- git helpers
 
 def git(*args: str, input_: bytes | None = None) -> bytes:
     return subprocess.run(["git", *args], input=input_, check=True,
@@ -119,7 +122,7 @@ def git(*args: str, input_: bytes | None = None) -> bytes:
 
 
 def read_blobs(shas: list[str]) -> dict[str, bytes]:
-    """一次 git cat-file --batch 读出多个 blob，内容只留在内存中。"""
+    """Read many blobs with one `git cat-file --batch`; contents stay in memory only."""
     if not shas:
         return {}
     uniq = list(dict.fromkeys(shas))
@@ -139,7 +142,7 @@ def read_blobs(shas: list[str]) -> dict[str, bytes]:
 
 
 def index_entries() -> dict[str, tuple[str, str]]:
-    """路径 → (mode, blob sha)，来自暂存区。"""
+    """path -> (mode, blob sha), from the index."""
     entries = {}
     for rec in git("ls-files", "-s", "-z").split(b"\0"):
         if not rec:
@@ -150,10 +153,10 @@ def index_entries() -> dict[str, tuple[str, str]]:
     return entries
 
 
-# ---------------------------------------------------------------- chezmoi 路径
+# ---------------------------------------------------------------- chezmoi paths
 
 def _strip_attrs(comp: str, prefixes: tuple[str, ...]) -> tuple[str, bool]:
-    """去掉 chezmoi 属性前缀；遇到 literal_ 时停止并保留其后的原样名称。"""
+    """Strip chezmoi attribute prefixes; stop at literal_ and keep the rest verbatim."""
     while True:
         if comp.startswith("literal_"):
             return comp[len("literal_"):], True
@@ -169,7 +172,7 @@ _SOURCE_ROOT: str | None = None
 
 
 def source_root() -> str:
-    """仓库根目录下 .chezmoiroot 的内容（如 "home"）；没有时为空串（旧布局）。"""
+    """The value of .chezmoiroot at the repo top (e.g. "home"); empty when absent (legacy layout)."""
     global _SOURCE_ROOT
     if _SOURCE_ROOT is None:
         try:
@@ -181,7 +184,8 @@ def source_root() -> str:
 
 
 def target_of(source: str, root: str | None = None) -> str | None:
-    """chezmoi 源路径（相对仓库根）→ 目标路径（~ 相对，或 system/ 下转为 /...）；非目标文件返回 None。"""
+    """chezmoi source path (relative to the repo top) -> target path (relative to ~, or /... under
+    system/); None when the file is not a deployment target."""
     root = source_root() if root is None else root
     parts = source.split("/")
     system = parts[0] == SYSTEM_TOP
@@ -194,7 +198,7 @@ def target_of(source: str, root: str | None = None) -> str | None:
         parts = parts[len(root_parts):]
     elif parts[0] in LEGACY_NON_TARGET_TOP:
         return None
-    # chezmoi 忽略源状态中以 . 开头的条目（.chezmoiignore、.chezmoidata 等是它自己的配置）
+    # chezmoi ignores source-state entries starting with "." (.chezmoiignore, .chezmoidata etc. are its own config)
     if not parts or any(p.startswith(".") for p in parts):
         return None
     out = []
@@ -222,7 +226,7 @@ def requires_encryption(target: str) -> bool:
     return any(fnmatch.fnmatchcase(target, p) for p in ENCRYPT_REQUIRED)
 
 
-# ---------------------------------------------------------------- 检查
+# ---------------------------------------------------------------- checks
 
 def is_binary(data: bytes) -> bool:
     return b"\0" in data[:8192]
@@ -240,7 +244,7 @@ def secret_lines(data: bytes) -> Iterator[tuple[int, str]]:
 
 def check_content(path: str, data: bytes, mode: str = "100644") -> list[Finding]:
     f: list[Finding] = []
-    if mode in ("120000", "160000"):   # 符号链接 / 子模块
+    if mode in ("120000", "160000"):   # symlink / submodule
         return f
     name = Path(path).name
     is_age = path.endswith(".age")
@@ -280,15 +284,15 @@ def report(findings: list[Finding], hint: bool = True) -> int:
         print(f"error:   {x}")
     if errors and hint:
         print(
-            "\n检测到未加密的敏感内容（输出中不含具体值）。处理方式：\n"
-            "  - 敏感文件改用加密托管: chezmoi forget <目标>，再 chezmoi add --encrypt <目标>\n"
-            "  - 若为误报，在该行加注释 gitleaks:allow，或调整 src/dotfiles/guard.py 的规则\n"
-            "  - 已提交但未推送: git reset --soft HEAD~1 后重新处理；已推送则必须轮换该凭据"
+            "\nUnencrypted sensitive content detected (values are not printed). How to resolve:\n"
+            "  - store the sensitive file encrypted: chezmoi forget <target>, then chezmoi add --encrypt <target>\n"
+            "  - false positive: add a gitleaks:allow comment on the line, or adjust the rules in src/dotfiles/guard.py\n"
+            "  - committed but not pushed: git reset --soft HEAD~1 and redo; already pushed: rotate that credential now"
         )
     return 1 if errors else 0
 
 
-# ---------------------------------------------------------------- 子命令
+# ---------------------------------------------------------------- subcommands
 
 def cmd_staged(paths: list[str]) -> int:
     entries = index_entries()
@@ -308,11 +312,11 @@ ZERO = "0" * 40
 def push_commits() -> list[str]:
     to_ref = os.environ.get("PRE_COMMIT_TO_REF") or "HEAD"
     from_ref = os.environ.get("PRE_COMMIT_FROM_REF")
-    if set(to_ref) == {"0"}:   # 删除远程分支
+    if set(to_ref) == {"0"}:   # remote branch deletion
         return []
     if from_ref and set(from_ref) != {"0"}:
         rng = [f"{from_ref}..{to_ref}"]
-    else:   # 新分支或首次推送：所有不在任何远程上的提交
+    else:   # new branch or first push: every commit not on any remote
         rng = [to_ref, "--not", "--remotes"]
     return git("rev-list", "--reverse", *rng).decode().split()
 
@@ -375,7 +379,7 @@ def precommit_home() -> Path:
 
 
 def cmd_prune_stash(max_age_minutes: int) -> int:
-    """pre-commit 会把未暂存的改动存为 patch* 且从不删除；这些补丁可能含明文。"""
+    """pre-commit saves unstaged changes as patch* and never deletes them; the patches may contain plaintext."""
     home = precommit_home()
     if not home.is_dir():
         return 0
@@ -387,7 +391,7 @@ def cmd_prune_stash(max_age_minutes: int) -> int:
     cutoff = time.time() - max_age_minutes * 60
     for p in home.glob("patch*"):
         try:
-            # 只删旧补丁：正在运行的 pre-commit（包括本仓库这次）的补丁还要用来恢复
+            # only delete old patches: a running pre-commit (including this repo's own) still needs its patch to restore
             if p.is_file() and p.stat().st_mtime < cutoff:
                 p.unlink()
         except OSError:
@@ -415,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_scan(a.files, a.quiet)
         return cmd_prune_stash(a.max_age_minutes)
     except subprocess.CalledProcessError as e:
-        print(f"error: git 命令失败: {' '.join(map(str, e.cmd))}", file=sys.stderr)
+        print(f"error: git command failed: {' '.join(map(str, e.cmd))}", file=sys.stderr)
         return 2
 
 

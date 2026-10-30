@@ -1,4 +1,5 @@
-"""两端共用的清理目标：语言工具链的包缓存。只有默认路径按平台不同。"""
+"""Cleanup targets shared by both platforms: language toolchain package caches. Only the default
+paths differ per platform."""
 from __future__ import annotations
 
 import os
@@ -7,10 +8,10 @@ import time
 from pathlib import Path
 
 from dotfiles import sysinfo
-from dotfiles.clean import Ctx, Skip, Target, clean_from_paths, existing
+from dotfiles.clean import Ctx, Skip, Target, existing
 from dotfiles.sysinfo import IS_WINDOWS, have, home, localappdata, query, xdg_cache, xdg_data
 
-PATCH_MINUTES = 60   # pre-commit：保留多少分钟内的 stash 补丁（正在运行的提交还要用它恢复工作区）
+PATCH_MINUTES = 60   # pre-commit: how many minutes of stash patches to keep (a running commit still needs them)
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -32,7 +33,7 @@ def _skip_or_paths(running: bool, reason: str, paths: list[Path]) -> list:
 def uv() -> Target:
     default = localappdata() / "uv" / "cache" if IS_WINDOWS else xdg_cache() / "uv"
     return Target(
-        "uv", "default", "uv cache prune（--deep: uv cache clean）",
+        "uv", "default", "uv cache prune (--deep: uv cache clean)",
         avail=lambda c: have("uv"),
         paths=lambda c: [_queried(["uv", "cache", "dir"], default)],
         clean=lambda c: c.cmd("uv", "cache", "clean" if c.deep else "prune"),
@@ -62,7 +63,7 @@ def pnpm() -> Target:
         c.cmd("pnpm", "store", "prune")
         c.remove([meta])
 
-    return Target("pnpm", "default", "pnpm store prune + 元数据缓存", avail=lambda c: have("pnpm"),
+    return Target("pnpm", "default", "pnpm store prune + metadata cache", avail=lambda c: have("pnpm"),
                   paths=paths, clean=clean)
 
 
@@ -81,7 +82,7 @@ def npm() -> Target:
         c.cmd("npm", "cache", "clean", "--force")
         c.remove([r / "_logs"] + ([r / "_npx"] if c.deep else []))
 
-    return Target("npm", "default", "npm cache clean --force + _logs（--deep 额外删除 _npx）",
+    return Target("npm", "default", "npm cache clean --force + _logs (--deep also removes _npx)",
                   avail=lambda c: have("npm"), paths=paths, clean=clean)
 
 
@@ -96,18 +97,18 @@ def bun() -> Target:
 
 
 def yarn() -> Target:
-    """classic 与 berry 的全局缓存都直接删目录：berry 在项目外会拒绝运行 yarn cache clean。"""
+    """Delete the global caches of both classic and berry as directories: berry refuses `yarn cache clean` outside a project."""
     dirs = [home() / ".yarn" / "berry" / "cache",
             localappdata() / "Yarn" / "Cache" if IS_WINDOWS else xdg_cache() / "yarn"]
-    return Target("yarn", "default", "yarn 全局缓存目录（classic 与 berry）",
+    return Target("yarn", "default", "yarn global caches (classic and berry)",
                   avail=lambda c: bool(existing(dirs)), paths=lambda c: dirs,
                   clean=lambda c: c.remove(dirs))
 
 
-# ---------------------------------------------------------------- 编译型语言
+# ---------------------------------------------------------------- compiled languages
 
 def go() -> Target:
-    """Go 已卸载但构建缓存还在时直接删目录。"""
+    """When Go is uninstalled but its build cache remains, delete the directory directly."""
     default = localappdata() / "go-build" if IS_WINDOWS else xdg_cache() / "go-build"
 
     def paths(c: Ctx):
@@ -126,7 +127,7 @@ def go() -> Target:
         if c.deep:
             c.cmd("go", "clean", "-modcache")
 
-    return Target("go", "default", "go clean -cache（--deep 额外 -modcache；Go 已卸载时删除缓存目录）",
+    return Target("go", "default", "go clean -cache (--deep also -modcache; deletes the cache dir when Go is uninstalled)",
                   avail=lambda c: have("go") or default.exists(), paths=paths, clean=clean)
 
 
@@ -135,13 +136,13 @@ def cargo() -> Target:
 
     def paths(c: Ctx):
         if sysinfo.proc_running(["cargo"]):
-            return [Skip("cargo 正在运行")]
+            return [Skip("cargo is running")]
         out = [root / "registry" / "src", root / "git" / "checkouts"]
         if c.deep:
             out += [root / "registry" / "cache", root / "git" / "db"]
         return out
 
-    return Target("cargo", "default", "$CARGO_HOME/registry/src 与 git/checkouts（--deep 额外 registry/cache、git/db）",
+    return Target("cargo", "default", "$CARGO_HOME/registry/src and git/checkouts (--deep also registry/cache, git/db)",
                   avail=lambda c: (root / "registry").exists() or (root / "git").exists(), paths=paths)
 
 
@@ -160,7 +161,7 @@ def nuget() -> Target:
 
 
 def vcpkg() -> Target:
-    """classic 模式：installed/ 不受影响。"""
+    """Classic mode: installed/ is untouched."""
     def root() -> Path | None:
         for r in (os.environ.get("VCPKG_ROOT"), str(home() / "vcpkg")):
             if r and (Path(r) / ".vcpkg-root").is_file():
@@ -172,10 +173,10 @@ def vcpkg() -> Target:
         if r is None:
             return []
         if sysinfo.proc_running(["vcpkg"]):
-            return [Skip("vcpkg 正在运行")]
+            return [Skip("vcpkg is running")]
         return [r / "buildtrees", r / "packages"] + ([r / "downloads"] if c.deep else [])
 
-    return Target("vcpkg", "default", "$VCPKG_ROOT/buildtrees 与 packages（--deep 额外 downloads）",
+    return Target("vcpkg", "default", "$VCPKG_ROOT/buildtrees and packages (--deep also downloads)",
                   avail=lambda c: root() is not None, paths=paths)
 
 
@@ -186,7 +187,7 @@ def precommit_home() -> Path:
 
 
 def precommit() -> Target:
-    """stash 补丁 patch* 可能含未暂存的明文，pre-commit 从不删除它们。"""
+    """Stash patches patch* may contain unstaged plaintext; pre-commit never deletes them."""
     def old_patches() -> list[Path]:
         cutoff = time.time() - PATCH_MINUTES * 60
         try:
@@ -202,12 +203,12 @@ def precommit() -> Target:
         c.remove(old_patches())
 
     return Target("precommit", "default",
-                  f"pre-commit gc + 删除 {PATCH_MINUTES} 分钟前遗留的 stash 补丁（--deep: pre-commit clean）",
+                  f"pre-commit gc + stash patches older than {PATCH_MINUTES} minutes (--deep: pre-commit clean)",
                   avail=lambda c: have("pre-commit") and precommit_home().exists(),
                   paths=lambda c: [precommit_home()], clean=clean)
 
 
-# ---------------------------------------------------------------- JVM（opt）
+# ---------------------------------------------------------------- JVM (opt)
 
 def gradle() -> Target:
     root = _env_path("GRADLE_USER_HOME", home() / ".gradle")
@@ -218,7 +219,7 @@ def gradle() -> Target:
             c.cmd("gradle", "--stop", "-q")
         c.remove(dirs)
 
-    return Target("gradle", "opt", "$GRADLE_USER_HOME/caches 与 daemon（先 gradle --stop；下次构建重新下载依赖）",
+    return Target("gradle", "opt", "$GRADLE_USER_HOME/caches and daemon (gradle --stop first; deps re-download next build)",
                   avail=lambda c: dirs[0].exists(), paths=lambda c: dirs, clean=clean)
 
 
@@ -231,12 +232,12 @@ def _maven_running() -> bool:
 
 def maven() -> Target:
     repo = home() / ".m2" / "repository"
-    return Target("maven", "opt", "~/.m2/repository（下次构建重新下载全部依赖）",
+    return Target("maven", "opt", "~/.m2/repository (all deps re-download on the next build)",
                   avail=lambda c: repo.exists(),
-                  paths=lambda c: _skip_or_paths(_maven_running(), "Maven 正在运行", [repo]))
+                  paths=lambda c: _skip_or_paths(_maven_running(), "Maven is running", [repo]))
 
 
-# ---------------------------------------------------------------- Docker（opt）
+# ---------------------------------------------------------------- Docker (opt)
 
 _SIZE_RX = re.compile(r"^(Build Cache|Images)\|([\d.]+)\s*([kKMGT]?B)")
 _MULT = {"B": 1, "kB": 1e3, "KB": 1e3, "MB": 1e6, "GB": 1e9, "TB": 1e12}
@@ -264,9 +265,9 @@ def docker() -> Target:
         c.cmd("docker", "builder", "prune", "-f")
         c.cmd("docker", "image", "prune", "-f")
 
-    return Target("docker", "opt", "docker builder prune + image prune（仅 dangling 镜像；占用列为可回收总量）",
+    return Target("docker", "opt", "docker builder prune + image prune (dangling images only; size column is the reclaimable total)",
                   avail=lambda c: _docker_up(), paths=lambda c: [], size=_docker_reclaimable, clean=clean)
 
 
 __all__ = ["uv", "pip", "pnpm", "npm", "bun", "yarn", "go", "cargo", "nuget", "vcpkg", "precommit",
-           "gradle", "maven", "docker", "precommit_home", "clean_from_paths"]
+           "gradle", "maven", "docker", "precommit_home"]

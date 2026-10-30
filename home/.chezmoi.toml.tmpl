@@ -1,7 +1,8 @@
 {{- /*
-  chezmoi init 时由本模板生成 ~/.config/chezmoi/chezmoi.toml（两端相同）。
-  age 私钥不在仓库中：新机器上由 `dotfiles restore` 放到 ~/.config/chezmoi/key.txt；
-  已有机器沿用旧位置（按顺序取最后一个存在的候选路径）。
+  This template generates ~/.config/chezmoi/chezmoi.toml at `chezmoi init` (both platforms).
+  The age private key is not in the repo: `dotfiles restore` places it at
+  ~/.config/chezmoi/key.txt on a new machine; existing machines keep their old location
+  (the last candidate that exists, in order).
 */ -}}
 {{- $identity := joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt" -}}
 {{- range list (joinPath .chezmoi.homeDir "secret" "chezmoi_age_key.txt") (joinPath .chezmoi.homeDir "vg101" "secret" "chezmoi_age_key.txt") -}}
@@ -10,7 +11,7 @@
 encryption = "age"
 
 [age]
-    # 只是私钥文件的路径；私钥本身不进 git，另行离线备份
+    # just the path of the key file; the key itself stays out of git and is backed up offline
     identity = {{ $identity | quote }}
     recipient = "age15r3jnkzxal9mgu3pfngd4t67rwnpy7ftw0udt2cze93jvmnmu9cqvms9a5"
 

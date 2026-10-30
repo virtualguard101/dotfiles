@@ -12,7 +12,7 @@ def test_ssh_config_parsing(tmp_path, monkeypatch):
     (ssh / "config").write_text(
         "# comment\n"
         "Host github.com\n"
-        "    IdentityFile ~/.ssh/gh_key     # 行尾注释\n"
+        "    IdentityFile ~/.ssh/gh_key     # trailing comment\n"
         "Host srv\n"
         "    IdentityFile=\"~/.ssh/with space\"\n"
         "    identityfile %d/.ssh/third\n",
@@ -24,7 +24,7 @@ def test_ssh_config_parsing(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("line, ok", [
-    ("AGE-SECRET-KEY-1" + "Q" * 58, True),   # 运行时拼接：完整的私钥格式不出现在源码中
+    ("AGE-SECRET-KEY-1" + "Q" * 58, True),   # built at runtime: the full key format never appears in the source
     ("# public key: age1abc", False),
     ("age-secret-key-1lowercase", False),
 ])

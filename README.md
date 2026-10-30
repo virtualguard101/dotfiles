@@ -1,103 +1,137 @@
 # dotfiles
 
-基于 [chezmoi](https://www.chezmoi.io) 的 Arch Linux 与 Windows 配置仓库，附带一个由 uv 管理的 Python 工具 `dotfiles`，用来做环境检测、重装后恢复、日常备份与缓存清理。两个平台共用同一个分支、同一套命令。
+An Arch Linux and Windows config repository built on [chezmoi](https://www.chezmoi.io), plus a
+uv-managed Python tool `dotfiles` for environment checks, post-reinstall recovery, daily backups
+and cache cleanup. Both platforms share one branch and one set of commands.
 
-> 仓库是**公开**的。所有敏感文件都以 age 加密后存放（`encrypted_*.age`），解密用的私钥**不在仓库中**，需要另行离线保存（U 盘 / 密码管理器）。私钥丢失后所有加密文件都无法恢复。
+> The repo is **public**. All sensitive files are stored age-encrypted (`encrypted_*.age`); the
+> decryption key is **not** in the repo and must be backed up offline (USB drive / password
+> manager). If the key is lost, none of the encrypted files can be recovered.
 
-## 仓库布局
+Chinese documentation: [README_zh-CN.md](README_zh-CN.md) · [docs/reference_zh-CN.md](docs/reference_zh-CN.md)
+
+## Repository layout
 
 ```
-.chezmoiroot              内容为 home：chezmoi 只把 home/ 当作源状态
-home/                     两个平台的 dotfiles（chezmoi 源状态）
-  .chezmoi.toml.tmpl      chezmoi init 时生成配置（加密方式、私钥路径、公钥）
-  .chezmoidata/platforms.toml   每个目标的平台归属；.chezmoiignore 据此生成
-system/                   Linux /etc 的备份（独立的 chezmoi 实例，不部署到 ~）
-packages/                 软件包清单：archpkg.txt / scoopfile.json / winget.json
-src/dotfiles/             Python 工具（只用标准库）
-bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
-docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
+.chezmoiroot              contains "home": chezmoi treats home/ as the source state
+home/                     dotfiles for both platforms (chezmoi source state)
+  .chezmoi.toml.tmpl      generates the chezmoi config at init (encryption, key path, recipient)
+  .chezmoidata/platforms.toml   platform ownership per target; .chezmoiignore derives from it
+system/                   Linux /etc backup (separate chezmoi instance, never deployed to ~)
+packages/                 package manifests: archpkg.txt / scoopfile.json / winget.json
+src/dotfiles/             the Python tool (standard library only)
+bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and clones the repo,
+                          then hands over to dotfiles restore
+docs/reference.md         detailed reference: command behavior, encryption and platform rules,
+                          cleanup targets, commit checks
 ```
 
-根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。
+Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the
+home directory.
 
-## 重装后恢复
+## Post-reinstall recovery
 
-准备：**离线保存的 age 私钥文件**（`AGE-SECRET-KEY-1…`），以及能访问 GitHub 的网络。如果需要代理，先在当前终端设置 `HTTPS_PROXY`。
+You need: the **offline-stored age key file** (`AGE-SECRET-KEY-1…`) and network access to GitHub.
+If you need a proxy, set `HTTPS_PROXY` in the current terminal first.
 
 ### Arch Linux
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/virtualguard101/dotfiles/main/bootstrap.sh
-less bootstrap.sh                          # 先读一遍再运行
-bash bootstrap.sh                          # 只显示恢复计划
-bash bootstrap.sh --apply                  # 执行（会询问私钥文件路径，也可加 --key-file /路径）
+less bootstrap.sh                          # read it before running
+bash bootstrap.sh                          # shows the recovery plan only
+bash bootstrap.sh --apply                  # execute (asks for the key file; or pass --key-file /path)
 ```
 
 ### Windows
 
-在普通（非管理员）PowerShell 中：
+In a regular (non-admin) PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/virtualguard101/dotfiles/main/bootstrap.ps1 -OutFile bootstrap.ps1
-notepad bootstrap.ps1                      # 先读一遍再运行
-powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1            # 只显示恢复计划
-powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # 执行
+notepad bootstrap.ps1                      # read it before running
+powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1            # plan only
+powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # execute
 ```
 
-不要用 `curl … | bash` 或 `irm … | iex` 直接执行：那样标准输入不是终端，无法交互输入私钥路径。
+Do not pipe straight into `curl … | bash` or `irm … | iex`: stdin is then not a terminal and you
+cannot type the key path interactively.
 
-### 恢复流程做了什么
+### What the recovery flow does
 
-bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 winget），并通过 HTTPS 把仓库克隆到 `~/.local/share/chezmoi`，其余都由 `dotfiles restore` 完成：
+bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) and clones the
+public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
+`dotfiles restore`:
 
-| 步骤 | 内容 |
+| Step | What it does |
 |---|---|
-| `key` | 把私钥写到 `~/.config/chezmoi/key.txt`（仅本人可读），并校验它与仓库公钥匹配 |
-| `config` | 由 `home/.chezmoi.toml.tmpl` 生成 chezmoi 配置 |
-| `dotfiles` | 先完整预演一次解密（失败则一个文件都不写），再备份将被覆盖的已有文件到 `~/.local/state/dotfiles/pre-apply-*`，最后 `chezmoi apply` |
-| `system` | Linux：恢复 `/etc`；`fstab`、`crypttab`、`default/grub` 等与硬件绑定的文件只显示差异，`sudoers` 先经 `visudo` 校验 |
-| `packages` | Linux：pacman 安装官方仓库中的包，AUR 包交给 paru/yay；Windows：`winget import` 与 `scoop import` |
-| `externals` | 拉取 nvim 配置等外部仓库；git 代理连不上时（代理软件还没装）临时改为直连 |
-| `ssh` | 为 `~/.ssh/config` 引用的每把缺失的私钥生成新密钥（私钥不备份），并可用 gh 把 GitHub 用的公钥登记上去 |
-| `shell` | Linux：把登录 shell 改为 zsh |
-| `hooks` | 安装提交检查 hooks；仓库与 externals 拉取用 HTTPS、推送改为 SSH |
-| `verify` | `chezmoi verify`、安全检查、权限审计 |
+| `key` | writes the key to `~/.config/chezmoi/key.txt` (owner-only permissions) and validates it against the repo's public key |
+| `config` | generates the chezmoi config from `home/.chezmoi.toml.tmpl` |
+| `dotfiles` | rehearses decryption once (nothing is written on failure), backs up files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs `chezmoi apply` |
+| `system` | Linux: restores `/etc`; hardware-bound files (`fstab`, `crypttab`, `default/grub`, ...) show diffs only; `sudoers` is validated with `visudo` first |
+| `packages` | Linux: pacman installs packages from configured repos, AUR packages go to paru/yay; Windows: `winget import` and `scoop import` |
+| `externals` | fetches external repos such as the nvim config; temporarily connects directly when the git proxy is unreachable |
+| `ssh` | generates any private key referenced by `~/.ssh/config` that is missing (keys are never backed up), and can register the GitHub public key via `gh` |
+| `shell` | Linux: sets the login shell to zsh |
+| `hooks` | installs the commit-check hooks; repo and externals use HTTPS for fetch, push is switched to SSH |
+| `verify` | `chezmoi verify`, the security check, and the permission audit |
 
-每一步执行前都会重新检测当前状态，已完成的步骤自动跳过；任何一步失败都会停下，解决后重跑同一条命令即可从那一步继续。装包、改 `/etc`、换 shell、登记公钥这类操作执行前会确认（`--yes` 跳过确认）。只想执行某几步时用 `--only`，例如 `--only key,config,dotfiles`；跳过某几步用 `--skip`。
+Every step re-detects the current state before running; completed steps are skipped automatically.
+Any failure stops the flow — fix the problem and rerun the same command to continue from that step.
+Steps that install packages, modify `/etc`, change the shell or register keys ask for confirmation
+(`--yes` skips). To run only some steps use `--only`, e.g. `--only key,config,dotfiles`; to skip
+some use `--skip`.
 
-恢复完成后需要手动处理的事项会在输出中列出，通常包括：其他服务器上的 `authorized_keys`（新生成的 SSH 公钥）、`packages/winget-unavailable.txt` 中不在 winget 源里的程序。
+After recovery, the output lists items that need manual attention, usually: `authorized_keys` on
+your other servers (for the newly generated SSH keys) and the programs in
+`packages/winget-unavailable.txt` that are not in any winget source.
 
-## 日常使用
+## Daily use
 
 ```bash
-uv run dotfiles doctor                 # 检测环境：工具链、加密配置、仓库与 hooks、缺少的软件包
-uv run dotfiles backup -n              # 预览备份
-uv run dotfiles backup --commit        # 备份并提交（不推送）；之后 git push
-uv run dotfiles clean scan             # 查看可清理的缓存
-uv run dotfiles clean run --apply      # 清理 default 层
+uv run dotfiles doctor                 # environment: toolchain, encryption config, repo and hooks, missing packages
+uv run dotfiles backup -n              # preview a backup
+uv run dotfiles backup --commit        # backup and commit (no push); then git push
+uv run dotfiles clean scan             # see what caches can be cleaned
+uv run dotfiles clean run --apply      # clean the default tier
 ```
 
-装了 [just](https://github.com/casey/just) 时可以用短命令：`just doctor`、`just backup -n`、`just clean scan` 等，见 `just --list`。
+With [just](https://github.com/casey/just) installed there are shortcuts: `just doctor`,
+`just backup -n`, `just clean scan`, etc.; see `just --list`.
 
-| 命令 | 作用 |
+| Command | What it does |
 |---|---|
-| `doctor [--json]` | 环境检测（只读），缺少必需条件时退出码为 1 |
-| `restore [--apply] [--only …] [--skip …] [--key-file 路径] [--yes]` | 重装后恢复，默认只显示计划 |
-| `status` | 备份状态：漂移、未托管的候选、软件包清单、权限 |
-| `backup [-n] [--no-system] [--commit]` | re-add 已托管文件 → 添加候选 → `/etc`（Linux）→ 软件包清单 → 安全检查 |
-| `check` | 安全检查：明文密钥、`.age` 格式、必须加密的目标、平台归属 |
-| `audit [--apply]` | 敏感文件权限（Linux 600/700，Windows ACL） |
-| `system-restore [--apply] [/etc/路径…]` | Linux：对比 `system/` 与当前 `/etc`，按需安装 |
-| `clean scan / list / run / leftovers` | 缓存清理，`run` 默认只预览，`--apply` 执行 |
+| `doctor [--json]` | environment detection (read-only); exit code 1 when a required condition is missing |
+| `restore [--apply] [--only …] [--skip …] [--key-file path] [--yes]` | post-reinstall recovery; shows the plan by default |
+| `status` | backup state: drift, unmanaged candidates, package manifests, permissions |
+| `backup [-n] [--no-system] [--commit]` | re-add managed files -> add candidates -> `/etc` (Linux) -> package manifests -> security check |
+| `check` | security check: plaintext secrets, `.age` format, must-encrypt targets, platform ownership |
+| `audit [--apply]` | sensitive-file permissions (Linux 600/700, Windows ACL) |
+| `system-restore [--apply] [/etc/path…]` | Linux: compare `system/` with the current `/etc` and install as needed |
+| `clean scan / list / run / leftovers` | cache cleanup; `run` previews by default, `--apply` executes |
 
-所有修改性操作默认只预览。完整说明见 [docs/reference.md](docs/reference.md)。
+Every modifying command previews by default. Full details in
+[docs/reference.md](docs/reference.md).
 
-## 安全设计
+## Security design
 
-- **私钥不进仓库**：仓库中只有公钥；`check` 与提交检查会拦下任何明文私钥（`AGE-SECRET-KEY-`、PEM 私钥块）以及被 git 跟踪的私钥文件。
-- **敏感文件一律加密**：备份时按清单、密钥特征扫描和 chezmoi 内置扫描三重判断是否加密；SSH 配置、凭据文件、`sudoers` 等目标未加密时提交会被拒绝。加密托管的文件部署后权限为 600。
-- **提交与推送双重检查**：pre-commit 阶段检查暂存区，pre-push 阶段检查每一个待推送的提交（`--no-verify` 跳过的提交也会被拦下）。输出只有文件、行号和规则名，不显示密钥。
-- **平台隔离**：每个目标在 `platforms.toml` 中声明归属，另一平台的目标（以及只属于它的父目录）会被忽略，一个平台上的备份不会改写另一平台的源文件。
-- **恢复不会静默破坏现有文件**：先预演解密，再备份将被覆盖的文件；与硬件绑定的 `/etc` 文件不会自动安装。
-- **临时明文只放在 tmpfs**：`/etc` 备份与恢复的暂存区位于 `$XDG_RUNTIME_DIR`，用完即删。
-- **服务器端兜底**：本地 hook 可以被卸载，建议在 GitHub 仓库设置中开启 Secret scanning 与 Push protection。
+- **The private key never enters the repo**: only the public key is stored; `check` and the commit
+  checks block any plaintext private key (`AGE-SECRET-KEY-`, PEM private key blocks) and any
+  git-tracked key file.
+- **Sensitive files are always encrypted**: at backup time the decision to encrypt is made by three
+  layers — the manifest lists, the secret-pattern scan, and chezmoi's built-in scan. Commits are
+  rejected when SSH configs, credential files, `sudoers` etc. are not encrypted. Encrypted files
+  deploy with 600 permissions.
+- **Double checks at commit and push**: the pre-commit stage inspects the index; the pre-push stage
+  inspects every commit about to be pushed (commits made with `--no-verify` are caught too). Output
+  contains only file, line number and rule name — never the secret.
+- **Platform isolation**: every target declares its owner in `platforms.toml`; the other platform's
+  targets (and their exclusive parent directories) are ignored, so a backup on one platform never
+  overwrites the other platform's source files.
+- **Recovery never silently destroys existing files**: decryption is rehearsed first, then files
+  about to be overwritten are backed up; hardware-bound `/etc` files are never installed
+  automatically.
+- **Transient plaintext only on tmpfs**: staging for the `/etc` backup and restore lives in
+  `$XDG_RUNTIME_DIR` and is deleted afterwards.
+- **Server-side backstop**: local hooks can be uninstalled; enable Secret scanning and Push
+  protection in the GitHub repo settings as well.

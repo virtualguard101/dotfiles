@@ -1,7 +1,8 @@
 {{- /*
-  其他平台的目标一律忽略；归属见 .chezmoidata/platforms.toml。
-  同时忽略这些目标的父目录（只要其下没有本平台或 shared 的目标），否则父目录本身仍被托管，
-  例如 Windows 的 readonly_Documents/ 会在 Linux 上把 ~/Documents 改成只读。
+  Targets of the other platform are always ignored; ownership is declared in
+  .chezmoidata/platforms.toml. Parent directories of those targets are ignored too (unless they
+  also hold targets of this platform or shared ones) — otherwise the parent itself stays managed,
+  e.g. Windows' readonly_Documents/ would chmod ~/Documents read-only on Linux.
 */ -}}
 {{- $os := .chezmoi.os -}}
 {{- $own := list -}}

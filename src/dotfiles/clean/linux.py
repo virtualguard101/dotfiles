@@ -1,4 +1,4 @@
-"""Linux（Arch）清理目标：以 ~/.cache 为主，覆盖 archpkg 中会产生缓存的工具与应用。"""
+"""Linux (Arch) cleanup targets: centered on ~/.cache, covering tools and apps from archpkg that build up caches."""
 from __future__ import annotations
 
 import os
@@ -29,7 +29,7 @@ ELECTRON_CACHE_DIRS = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "
 VSCODE_FAMILY = ("Code", "Code - OSS", "VSCodium", "Cursor", "Windsurf")
 VSCODE_CACHE_DIRS = ("CachedData", "CachedExtensionVSIXs", "CachedProfilesData", "logs")
 
-# 已卸载应用的残留：检测名（pacman 包名或命令，任一存在即视为已安装）→ 路径（相对 ~）
+# Leftovers from uninstalled apps: detection names (pacman package or command; any hit means installed) -> paths (relative to ~)
 LEFTOVER_MAP = (
     (("cursor-bin", "cursor"), (".config/Cursor",)),
     (("google-chrome", "google-chrome-stable"), (".config/google-chrome", ".cache/google-chrome")),
@@ -45,7 +45,7 @@ LEFTOVER_MAP = (
 )
 
 
-# ---------------------------------------------------------------- 删除范围
+# ---------------------------------------------------------------- deletion scope
 
 def safe_roots() -> list[Path]:
     roots = [home()]
@@ -62,11 +62,11 @@ def protected() -> list[Path]:
             h / "Documents", h / "Desktop", h / "Downloads", h / ".ssh", h / ".gnupg", chez.REPO]
 
 
-# ---------------------------------------------------------------- 运行检测
+# ---------------------------------------------------------------- running detection
 
 def lock_alive(path: Path) -> bool:
-    """锁文件对应的进程是否存活：符号链接锁（Chromium SingletonLock → host-PID，Firefox lock → IP:+PID）
-    或写有 PID 的普通文件（VS Code code.lock）。"""
+    """Whether the process behind a lock file is alive: symlink locks (Chromium SingletonLock ->
+    host-PID, Firefox lock -> IP:+PID) or regular files holding a PID (VS Code code.lock)."""
     try:
         if path.is_symlink():
             m = re.search(r"[-+](\d+)$", os.readlink(path))
@@ -93,7 +93,7 @@ def _pgrep(*names: str) -> bool:
     return sysinfo.proc_running(names)
 
 
-# ---------------------------------------------------------------- 目标
+# ---------------------------------------------------------------- targets
 
 def _yay() -> Target:
     def bases() -> set[str]:
@@ -121,7 +121,7 @@ def _yay() -> Target:
 
     def paths(c: Ctx):
         if busy():
-            return [Skip("yay/paru/makepkg 正在运行")]
+            return [Skip("yay/paru/makepkg is running")]
         installed = bases()
         out: list = []
         for d in dirs():
@@ -130,7 +130,7 @@ def _yay() -> Target:
 
     def clean(c: Ctx):
         if busy():
-            ui.warn("yay/paru/makepkg 正在运行，跳过")
+            ui.warn("yay/paru/makepkg is running; skipping")
             return
         installed = bases()
         for d in dirs():
@@ -138,10 +138,11 @@ def _yay() -> Target:
                 if untracked(d):
                     c.cmd("git", "-C", str(d), "clean", "-ffdxq")
             else:
-                ui.info(f"  已卸载或非 git 克隆: {d.name}")
+                ui.info(f"  uninstalled or not a git clone: {d.name}")
                 c.remove([d])
 
-    return Target("yay", "default", "AUR 构建目录（yay/paru）：已安装包的克隆 git clean -ffdx，已卸载包的克隆整体删除",
+    return Target("yay", "default",
+                  "AUR build dirs (yay/paru): `git clean -ffdx` for installed packages' clones, delete clones of uninstalled ones",
                   avail=lambda c: bool(dirs()), paths=paths, clean=clean)
 
 
@@ -151,12 +152,13 @@ def _firefox() -> Target:
         for p in sub_dirs(xdg_cache() / "mozilla" / "firefox"):
             locks = [home() / ".mozilla" / "firefox" / p.name / "lock", xdg_config() / "mozilla" / "firefox" / p.name / "lock"]
             if any(lock_alive(lock) for lock in locks):
-                out.append(Skip(f"Firefox 配置 {p.name} 正在使用"))
+                out.append(Skip(f"Firefox profile {p.name} is in use"))
                 continue
             out += [p / "cache2", p / "startupCache", p / "thumbnails"]
         return out
 
-    return Target("firefox", "default", "Firefox 网络缓存 cache2 / startupCache / thumbnails（配置文件被占用时跳过）",
+    return Target("firefox", "default",
+                  "Firefox network cache cache2 / startupCache / thumbnails (skipped while the profile is in use)",
                   avail=lambda c: (xdg_cache() / "mozilla" / "firefox").is_dir(), paths=paths)
 
 
@@ -186,7 +188,7 @@ def _electron() -> Target:
         out: list = []
         for d in electron_app_dirs():
             if electron_busy(d):
-                out.append(Skip(f"{d.name} 正在运行"))
+                out.append(Skip(f"{d.name} is running"))
                 continue
             bases = [d, d / "Default", *sub_dirs(d, "Profile*"), *sub_dirs(d / "Partitions")]
             for b in bases:
@@ -196,7 +198,8 @@ def _electron() -> Target:
         return out
 
     return Target("electron", "default",
-                  "~/.config 下 Electron/Chromium 应用的 Cache、Code Cache、GPUCache 等（应用运行时跳过）", paths=paths)
+                  "Cache, Code Cache, GPUCache etc. of Electron/Chromium apps under ~/.config (skipped while running)",
+                  paths=paths)
 
 
 def _lsp() -> Target:
@@ -204,32 +207,32 @@ def _lsp() -> Target:
 
     def paths(c: Ctx):
         if _cmdline_match(r"tsserver|typingsInstaller|jedi-language-server|pylsp"):
-            return [Skip("语言服务正在运行（关闭编辑器后再清理）")]
+            return [Skip("a language server is running (close the editor first)")]
         return dirs
 
-    return Target("lsp", "default", "编辑器语言服务缓存 ~/.cache/typescript ~/.cache/jedi（语言服务运行时跳过）",
+    return Target("lsp", "default", "editor language-server caches ~/.cache/typescript ~/.cache/jedi (skipped while running)",
                   avail=lambda c: bool(existing(dirs)), paths=paths)
 
 
 def _wine() -> Target:
     dirs = [xdg_cache() / "wine", xdg_cache() / "winetricks"]
-    return Target("wine", "default", "wine-mono/gecko 安装包与 winetricks 下载缓存",
+    return Target("wine", "default", "wine-mono/gecko installers and winetricks download cache",
                   avail=lambda c: bool(existing(dirs)), paths=lambda c: dirs)
 
 
 def _kde() -> Target:
-    """只碰可再生且非 mmap 的缓存；ksycoca / *.kcache 交给 Plasma 自己维护。"""
+    """Only touches regenerable, non-mmapped caches; ksycoca / *.kcache are left to Plasma."""
     c_ = xdg_cache()
 
     def paths(c: Ctx):
         out: list = [c_ / "drkonqi" / "crashes", c_ / "bookmarksrunner", c_ / "kcrash-metadata"]
         if _pgrep("plasma-discover"):
-            out.append(Skip("Discover 正在运行，保留 AppStream 缓存"))
+            out.append(Skip("Discover is running; keeping the AppStream cache"))
         else:
             out += [c_ / "appstream", c_ / "discover"]
         return out
 
-    return Target("kde", "default", "DrKonqi 崩溃报告、KRunner 书签副本、Discover/AppStream 目录缓存",
+    return Target("kde", "default", "DrKonqi crash reports, KRunner bookmark copies, Discover/AppStream caches",
                   avail=lambda c: bool(existing([c_ / "drkonqi", c_ / "bookmarksrunner", c_ / "appstream"])),
                   paths=paths)
 
@@ -261,11 +264,12 @@ def _thumbnails() -> Target:
         if not files:
             return
         if c.dry:
-            ui.dim(f"  + 删除 ~/.cache/thumbnails 中 {THUMBNAIL_DAYS} 天未访问的 {len(files)} 个文件")
+            ui.dim(f"  + delete {len(files)} thumbnails untouched for {THUMBNAIL_DAYS} days in ~/.cache/thumbnails")
         else:
             c.remove(files)
 
-    return Target("thumbnails", "default", f"超过 THUMBNAIL_DAYS({THUMBNAIL_DAYS}) 天未访问的缩略图（--deep: 全部）",
+    return Target("thumbnails", "default",
+                  f"thumbnails not accessed for THUMBNAIL_DAYS({THUMBNAIL_DAYS}) days (--deep: all)",
                   avail=lambda c: root.is_dir(), paths=paths, clean=clean)
 
 
@@ -279,7 +283,7 @@ def _zcompdump() -> Target:
         return [p for p in sorted(home().glob(".zcompdump-*"))
                 if not (p.name.endswith(f"-{cur}") or p.name.endswith(f"-{cur}.zwc"))]
 
-    return Target("zcompdump", "default", "旧 zsh 版本遗留的 ~/.zcompdump-*",
+    return Target("zcompdump", "default", "~/.zcompdump-* left over from older zsh versions",
                   avail=lambda c: have("zsh"), paths=lambda c: stale())
 
 
@@ -290,7 +294,7 @@ def _shader() -> Target:
         return [c_ / "mesa_shader_cache", c_ / "mesa_shader_cache_db", c_ / "radv_builtin_shaders",
                 *sorted(c_.glob("qtshadercache-*")), c_ / "nvidia" / "GLCache"]
 
-    return Target("shader", "opt", "Mesa/RADV/Qt 着色器缓存（删除后首次启动游戏/应用会卡顿）",
+    return Target("shader", "opt", "Mesa/RADV/Qt shader caches (first game/app launch after deletion will stutter)",
                   avail=lambda c: bool(existing(dirs())), paths=lambda c: dirs())
 
 
@@ -304,7 +308,7 @@ def _trash() -> Target:
             c.remove([*sorted((root / "files").glob("*")), *sorted((root / "files").glob(".*")),
                       *sorted((root / "info").glob("*"))])
 
-    return Target("trash", "opt", "清空回收站（不可恢复）", avail=lambda c: root.is_dir(),
+    return Target("trash", "opt", "empty the trash (unrecoverable)", avail=lambda c: root.is_dir(),
                   paths=lambda c: [root / "files", root / "info", root / "expunged"], clean=clean)
 
 
@@ -313,7 +317,7 @@ def _pacman() -> Target:
         c.cmd("sudo", "paccache", f"-rk{PACCACHE_KEEP}")
         c.cmd("sudo", "paccache", "-ruk0")
 
-    return Target("pacman", "opt", f"sudo paccache -rk{PACCACHE_KEEP} 与 -ruk0（已卸载包的缓存全部删除）",
+    return Target("pacman", "opt", f"sudo paccache -rk{PACCACHE_KEEP} and -ruk0 (caches of uninstalled packages are all removed)",
                   avail=lambda c: have("paccache"), paths=lambda c: [Path("/var/cache/pacman/pkg")], clean=clean)
 
 
@@ -340,7 +344,7 @@ def targets() -> list[Target]:
     ]
 
 
-# ---------------------------------------------------------------- 报告
+# ---------------------------------------------------------------- reports
 
 def overview() -> None:
     seen = set()
@@ -353,8 +357,8 @@ def overview() -> None:
             u = shutil.disk_usage(p)
         except OSError:
             continue
-        ui.info(f"  {ui.pad(str(p), 30)}已用 {ui.human(u.used)} / {ui.human(u.total)}，可用 {ui.human(u.free)}")
-    ui.info(f"~/.cache 总占用: {ui.human(fsutil.size_of([xdg_cache()]))}")
+        ui.info(f"  {ui.pad(str(p), 30)}used {ui.human(u.used)} / {ui.human(u.total)}, free {ui.human(u.free)}")
+    ui.info(f"~/.cache total: {ui.human(fsutil.size_of([xdg_cache()]))}")
 
 
 def uncovered_roots() -> list[Path]:
@@ -362,20 +366,22 @@ def uncovered_roots() -> list[Path]:
 
 
 def scan_extra(ctx: Ctx) -> None:
-    ui.section("仅报告")
+    ui.section("Report only")
     if have("paccache"):
         def saved(args: list[str]) -> str:
             m = re.search(r"saved: ([^)]*)", sysinfo.run(["paccache", *args]).stdout)
             return m.group(1) if m else "0"
-        ui.info(f"pacman: 每包保留 {PACCACHE_KEEP} 版可省 {saved([f'-dk{PACCACHE_KEEP}'])}，已卸载包可省 {saved(['-duk0'])}")
+        ui.info(f"pacman: keeping {PACCACHE_KEEP} version(s) saves {saved([f'-dk{PACCACHE_KEEP}'])}, "
+                f"removed packages save {saved(['-duk0'])}")
     if have("pacman"):
         orphans = sysinfo.run(["pacman", "-Qdtq"]).stdout.split()
         debug = sum(1 for o in orphans if o.endswith("-debug"))
-        ui.info(f"孤立包: {len(orphans)} 个（其中 -debug 包 {debug} 个）；检查 pacman -Qdt，移除 pacman -Qdtq | sudo pacman -Rns -")
+        ui.info(f"orphan packages: {len(orphans)} ({debug} -debug packages); inspect with pacman -Qdt, "
+                "remove with pacman -Qdtq | sudo pacman -Rns -")
     core = Path("/var/lib/systemd/coredump")
     if core.is_dir():
-        ui.info(f"coredump: {ui.human(fsutil.size_of([core]))}（systemd-tmpfiles 按期清理；coredumpctl list 查看）")
-    ui.info("Electron 的 Service Worker / IndexedDB 属于离线数据，不在清理范围内")
+        ui.info(f"coredumps: {ui.human(fsutil.size_of([core]))} (cleaned periodically by systemd-tmpfiles; see coredumpctl list)")
+    ui.info("Electron Service Worker / IndexedDB are offline data and outside the cleanup scope")
 
 
 def _installed(names: tuple[str, ...]) -> bool:
@@ -386,7 +392,7 @@ def _installed(names: tuple[str, ...]) -> bool:
 
 
 def leftovers() -> None:
-    ui.section("已卸载应用的残留目录（确认无用后手动删除）")
+    ui.section("Leftover dirs of uninstalled apps (delete manually once confirmed useless)")
     any_ = False
     for names, rels in LEFTOVER_MAP:
         if _installed(names):
@@ -394,12 +400,12 @@ def leftovers() -> None:
         for rel in rels:
             p = home() / rel
             if p.exists():
-                ui.info(f"  {ui.pad(ui.human(fsutil.size_of([p])), 10)}~/{ui.pad(rel, 36)}（{names[0]} 未安装）")
+                ui.info(f"  {ui.pad(ui.human(fsutil.size_of([p])), 10)}~/{ui.pad(rel, 36)} ({names[0]} not installed)")
                 any_ = True
     if not any_:
-        ui.ok("无")
+        ui.ok("none")
 
-    ui.section(f"超过 {STALE_DAYS} 天无写入的 Electron/Chromium 配置目录")
+    ui.section(f"Electron/Chromium config dirs with no writes for {STALE_DAYS} days")
     any_ = False
     cutoff = time.time() - STALE_DAYS * 86400
     for d in electron_app_dirs():
@@ -411,7 +417,7 @@ def leftovers() -> None:
                 continue
         if newest and newest < cutoff:
             ui.info(f"  {ui.pad(ui.human(fsutil.size_of([d])), 10)}{ui.pad(fsutil.tilde(d), 36)}"
-                    f"最后写入 {time.strftime('%Y-%m-%d', time.localtime(newest))}")
+                    f"last write {time.strftime('%Y-%m-%d', time.localtime(newest))}")
             any_ = True
     if not any_:
-        ui.ok("无")
+        ui.ok("none")

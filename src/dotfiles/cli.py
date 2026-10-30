@@ -1,4 +1,5 @@
-"""命令行入口：uv run dotfiles <子命令>。各子命令按需导入，单个模块出错不影响其他命令。"""
+"""Command-line entry point: `uv run dotfiles <command>`. Subcommands import lazily so a failure
+in one module does not affect the others."""
 from __future__ import annotations
 
 import argparse
@@ -7,58 +8,58 @@ import sys
 from dotfiles import __version__, sysinfo, ui
 
 EPILOG = """\
-常用流程:
-  重装后恢复   bootstrap.sh / bootstrap.ps1  →  dotfiles restore --apply
-  日常备份     dotfiles backup -n  →  dotfiles backup --commit
-  清理缓存     dotfiles clean scan  →  dotfiles clean run --apply
-所有修改性操作默认只预览；详见 README.md。"""
+common flows:
+  after a reinstall   bootstrap.sh / bootstrap.ps1  ->  dotfiles restore --apply
+  daily backup        dotfiles backup -n  ->  dotfiles backup --commit
+  cache cleanup       dotfiles clean scan  ->  dotfiles clean run --apply
+Every modifying command previews by default; see README.md for details."""
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="dotfiles", description="基于 chezmoi 的跨平台 dotfiles 维护工具",
+    p = argparse.ArgumentParser(prog="dotfiles", description="cross-platform dotfiles maintenance built on chezmoi",
                                 epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"dotfiles {__version__}")
-    sub = p.add_subparsers(dest="cmd", metavar="<子命令>")
+    sub = p.add_subparsers(dest="cmd", metavar="<command>")
 
-    s = sub.add_parser("doctor", help="检测系统环境、工具链、加密配置与仓库状态（只读）")
-    s.add_argument("--json", action="store_true", help="以 JSON 输出")
+    s = sub.add_parser("doctor", help="check the system, toolchain, encryption config and repo state (read-only)")
+    s.add_argument("--json", action="store_true", help="print JSON")
 
-    s = sub.add_parser("restore", help="重装后恢复：私钥 → 配置 → dotfiles → 软件包 → SSH → hooks（默认只显示计划）")
-    s.add_argument("--apply", action="store_true", help="实际执行")
-    s.add_argument("--only", action="append", default=[], metavar="步骤", help="只执行指定步骤（可重复或用逗号分隔）")
-    s.add_argument("--skip", action="append", default=[], metavar="步骤", help="跳过指定步骤")
-    s.add_argument("--key-file", metavar="路径", help="age 私钥文件（例如 U 盘中的文件）；不给时交互询问")
-    s.add_argument("-y", "--yes", action="store_true", help="对需要确认的步骤自动确认")
+    s = sub.add_parser("restore", help="post-reinstall recovery: key -> config -> dotfiles -> packages -> ssh -> hooks (plan by default)")
+    s.add_argument("--apply", action="store_true", help="actually run")
+    s.add_argument("--only", action="append", default=[], metavar="STEP", help="run only these steps (repeatable, comma-separated)")
+    s.add_argument("--skip", action="append", default=[], metavar="STEP", help="skip these steps")
+    s.add_argument("--key-file", metavar="PATH", help="age private key file (e.g. on a USB drive); prompts interactively when omitted")
+    s.add_argument("-y", "--yes", action="store_true", help="auto-confirm steps that ask")
 
-    sub.add_parser("status", help="备份状态：漂移、未托管的候选、软件包清单、权限（只读）")
+    sub.add_parser("status", help="backup state: drift, unmanaged candidates, package manifests, permissions (read-only)")
 
-    s = sub.add_parser("backup", help="re-add 已托管文件 → 添加候选 → 系统配置 → 软件包清单 → check")
-    s.add_argument("-n", "--dry-run", action="store_true", help="只显示将要发生的变更")
-    s.add_argument("--no-system", action="store_true", help="跳过 /etc（Linux），不需要 sudo")
-    s.add_argument("--commit", action="store_true", help="检查通过后提交（不推送）")
+    s = sub.add_parser("backup", help="re-add managed files -> add candidates -> system config -> package manifests -> check")
+    s.add_argument("-n", "--dry-run", action="store_true", help="show what would change")
+    s.add_argument("--no-system", action="store_true", help="skip /etc (Linux); no sudo needed")
+    s.add_argument("--commit", action="store_true", help="commit after the check passes (no push)")
 
-    sub.add_parser("check", help="安全检查：明文密钥 / .age 格式 / 必须加密的目标 / 平台归属 / 私钥位置")
+    sub.add_parser("check", help="security check: plaintext secrets / .age format / must-encrypt targets / platform ownership")
 
-    s = sub.add_parser("audit", help="敏感文件权限检查（Linux 600/700，Windows ACL）")
-    s.add_argument("--apply", action="store_true", help="收紧权限")
+    s = sub.add_parser("audit", help="sensitive-file permissions (Linux 600/700, Windows ACL)")
+    s.add_argument("--apply", action="store_true", help="tighten permissions")
 
-    s = sub.add_parser("system-restore", help="Linux：把 system/ 中的 /etc 备份与当前系统对比，--apply 时安装")
-    s.add_argument("--apply", action="store_true", help="实际安装（需要 sudo）")
-    s.add_argument("paths", nargs="*", metavar="/etc/路径", help="只处理这些路径；与硬件绑定的文件必须显式指定")
+    s = sub.add_parser("system-restore", help="Linux: compare system/ backups with the current /etc; --apply installs")
+    s.add_argument("--apply", action="store_true", help="actually install (needs sudo)")
+    s.add_argument("paths", nargs="*", metavar="/etc/PATH", help="only these paths; hardware-bound files must be named explicitly")
 
-    s = sub.add_parser("clean", help="缓存清理（默认只预览）")
+    s = sub.add_parser("clean", help="cache cleanup (preview by default)")
     csub = s.add_subparsers(dest="clean_cmd", metavar="<scan|list|run|leftovers>")
-    c = csub.add_parser("scan", help="只读：各目标占用、未覆盖项、残留目录")
+    c = csub.add_parser("scan", help="read-only: size and state per target, uncovered dirs, leftovers")
     c.add_argument("--deep", action="store_true")
-    csub.add_parser("list", help="列出全部清理目标")
-    c = csub.add_parser("run", help="执行清理；不指定目标时等同 default")
-    c.add_argument("targets", nargs="*", metavar="目标", help="目标 id，或 default / opt / all")
-    c.add_argument("--apply", action="store_true", help="实际执行")
-    c.add_argument("--deep", action="store_true", help="更彻底的清理方式")
-    c.add_argument("-x", "--exclude", action="append", default=[], metavar="目标", help="排除目标（可重复或用逗号分隔）")
-    csub.add_parser("leftovers", help="只读：已卸载应用的残留目录")
+    csub.add_parser("list", help="list all cleanup targets")
+    c = csub.add_parser("run", help="run cleanup; equals the default tier when no target is given")
+    c.add_argument("targets", nargs="*", metavar="TARGET", help="target id, or default / opt / all")
+    c.add_argument("--apply", action="store_true", help="actually run")
+    c.add_argument("--deep", action="store_true", help="more thorough cleanup mode")
+    c.add_argument("-x", "--exclude", action="append", default=[], metavar="TARGET", help="exclude a target (repeatable, comma-separated)")
+    csub.add_parser("leftovers", help="read-only: leftover dirs of uninstalled apps")
 
-    s = sub.add_parser("guard", help="提交检查（pre-commit 调用）；参数原样传给 guard", add_help=False)
+    s = sub.add_parser("guard", help="commit checks (invoked by pre-commit); arguments are passed to guard", add_help=False)
     s.add_argument("args", nargs=argparse.REMAINDER)
     return p
 
@@ -86,7 +87,7 @@ def dispatch(a: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return backup.cmd_audit(apply=a.apply)
     if a.cmd == "system-restore":
         if not sysinfo.IS_LINUX:
-            raise ui.Abort("system-restore 只用于 Linux", 2)
+            raise ui.Abort("system-restore is Linux-only", 2)
         from dotfiles import system_etc
         return system_etc.cmd_restore(apply=a.apply, filters=a.paths)
     if a.cmd == "clean":
@@ -117,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         ui.err(str(e))
         return e.code
     except KeyboardInterrupt:
-        ui.err("已中断")
+        ui.err("interrupted")
         return 130
 
 

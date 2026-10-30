@@ -12,7 +12,7 @@ def tree(tmp_path):
     (root / "cache" / "a" / "f").write_bytes(b"x" * 100)
     (root / "keep").mkdir()
     (root / "keep" / "important").write_bytes(b"y" * 1000)
-    os.symlink(root / "keep", root / "cache" / "link")      # 指向缓存之外的链接
+    os.symlink(root / "keep", root / "cache" / "link")      # a link pointing outside the cache
     return root
 
 

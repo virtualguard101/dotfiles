@@ -1,10 +1,10 @@
-# 每个托管目标（相对 ~ 的路径；目录覆盖其下所有文件）只在所属平台部署。
-# .chezmoiignore 据此忽略其他平台的目标：在一个平台上执行 chezmoi add / re-add 时，
-# 不会读写另一平台的源文件。
+# Each managed target (a path relative to ~; directory entries cover everything below) deploys
+# only on its own platform. .chezmoiignore derives its rules from this file, so `chezmoi add` /
+# `re-add` on one platform never reads or overwrites the other platform's source files.
 #
-# - `dotfiles backup` 新增目标时自动登记到当前平台
-# - `dotfiles check` 要求每个托管目标都在且只在一个列表中
-# - 两端都部署、内容相同或用模板区分的目标放在 shared
+# - `dotfiles backup` registers new targets under the current platform automatically
+# - `dotfiles check` requires every managed target to be listed exactly once
+# - targets deployed on both platforms (identical, or told apart by templates) go in shared
 [platforms]
 shared = [
   ".gitconfig",

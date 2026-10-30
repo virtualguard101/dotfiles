@@ -1,4 +1,4 @@
-"""终端输出：颜色、分节标题、中英文混排对齐与大小格式化。"""
+"""Terminal output: colors, section titles, CJK-aware alignment and size formatting."""
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ import unicodedata
 
 
 def _enable_windows_vt() -> bool:
-    """在 Windows 控制台中开启 ANSI 转义序列；失败时返回 False（改为无颜色输出）。"""
+    """Enable ANSI escape sequences in a Windows console; returns False on failure (no colors)."""
     try:
         import ctypes
 
@@ -23,7 +23,7 @@ def _enable_windows_vt() -> bool:
 
 for _s in (sys.stdout, sys.stderr):
     try:
-        _s.reconfigure(errors="backslashreplace")   # 控制台编码不支持的字符转义输出，不崩溃
+        _s.reconfigure(errors="backslashreplace")   # escape characters the console codec can't represent, don't crash
     except (AttributeError, ValueError):
         pass
 
@@ -65,18 +65,18 @@ _MARKS = {"ok": ("32", "✓"), "warn": ("33", "!"), "fail": ("31", "✗"), "info
 
 
 def status_line(level: str, text: str, indent: int = 2) -> None:
-    """带颜色状态标记的一行，写到 stdout（报告类输出保持顺序）。"""
+    """One line with a colored status mark, written to stdout (keeps report output in order)."""
     code, mark = _MARKS.get(level, ("0", " "))
     print(f"{' ' * indent}{_paint(code, mark)} {text}")
 
 
 def note(text: str) -> None:
-    """强调提示（黄色），写到 stdout。"""
+    """Emphasized hint (yellow), written to stdout."""
     print(_paint("33", text))
 
 
 class Abort(Exception):
-    """可预期的失败：打印消息后以指定退出码结束。"""
+    """An expected failure: print the message and exit with the given code."""
 
     def __init__(self, message: str, code: int = 1):
         super().__init__(message)
@@ -84,7 +84,7 @@ class Abort(Exception):
 
 
 def width(text: str) -> int:
-    """终端显示宽度：中日韩全角字符占两列。"""
+    """Display width in terminal columns: CJK fullwidth characters count as two."""
     return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
 
 
@@ -109,11 +109,11 @@ def human(num_bytes: int) -> str:
 
 
 def confirm(question: str, assume_yes: bool) -> bool:
-    """交互确认；--yes 时直接通过，非交互终端时视为拒绝。"""
+    """Interactive confirmation; passes through with --yes, treated as declined on a non-tty."""
     if assume_yes:
         return True
     if not sys.stdin.isatty():
-        warn(f"非交互终端，跳过需要确认的操作：{question}")
+        warn(f"not a terminal, skipping a step that needs confirmation: {question}")
         return False
     try:
         answer = input(f"{question} [y/N] ").strip().lower()

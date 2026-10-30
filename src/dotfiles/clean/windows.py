@@ -1,5 +1,6 @@
-"""Windows 清理目标：%TEMP%、scoop、浏览器与 Electron 缓存、语言工具链缓存，以及需要管理员的系统级目标。
-从原 scripts/clean.ps1 移植（见提交 a15c9b5）；路径在运行时求值，便于在其他平台上测试文件系统逻辑。"""
+"""Windows cleanup targets: %TEMP%, scoop, browser and Electron caches, language toolchain caches,
+plus admin-only system targets. Ported from the original scripts/clean.ps1 (commit a15c9b5);
+paths are resolved at call time so the filesystem logic is testable on other platforms."""
 from __future__ import annotations
 
 import json
@@ -30,14 +31,16 @@ ELECTRON_CACHE_DIRS = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "
                        "GPUPersistentCache", "GrShaderCache", "GraphiteDawnCache", "ShaderCache")
 VSCODE_FAMILY = ("Code", "Code - Insiders", "VSCodium", "Cursor", "Windsurf", "Kiro", "Trae")
 VSCODE_CACHE_DIRS = ("CachedData", "CachedExtensionVSIXs", "CachedProfilesData", "logs")
-# %APPDATA% 目录名与进程名不一致的应用（没有锁文件时用于运行检测）
+# apps whose %APPDATA% dir name differs from their process name (used for running detection without a lock file)
 PROCESS_ALIAS = {"LarkShell": ("Feishu", "Lark"), "Docker Desktop": ("Docker Desktop",), "Code": ("Code",)}
 BROWSERS = (Path("Microsoft/Edge/User Data"), Path("Google/Chrome/User Data"),
             Path("BraveSoftware/Brave-Browser/User Data"))
 BROWSER_PROFILE_CACHES = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache")
 BROWSER_ROOT_CACHES = ("GrShaderCache", "GraphiteDawnCache", "ShaderCache", "GPUPersistentCache")
 
-# 已卸载应用的残留：检测名（命令、“应用和功能”中的程序名、scoop 应用，或含 / 的相对路径存在）→ 路径（相对 ~）
+# Leftovers from uninstalled apps: detection names (command, "Apps & Features" entry, scoop app, or an
+# existing relative path with /) -> paths (relative to ~). Some detection names are the localized
+# DisplayName values shown in "Apps & Features" on a Chinese-locale Windows; keep them as-is.
 LEFTOVER_MAP = (
     (("cursor",), ("AppData/Roaming/Cursor",)),
     (("cursor", "cursor-agent", "AppData/Local/cursor-agent"), (".cursor",)),
@@ -84,10 +87,10 @@ def protected() -> list[Path]:
             h / "Desktop", h / "Downloads", h / ".ssh", chez.REPO]
 
 
-# ---------------------------------------------------------------- 运行检测
+# ---------------------------------------------------------------- running detection
 
 def pid_lock(path: Path) -> bool:
-    """VS Code 的 code.lock 中是 PID。"""
+    """VS Code's code.lock contains a PID."""
     try:
         m = re.search(r"(\d+)", path.read_text(errors="ignore"))
     except OSError:
@@ -105,7 +108,7 @@ def electron_busy(d: Path) -> bool:
 
 
 def electron_app_dirs() -> list[Path]:
-    """只认 VS Code 系或带 Chromium 标记（Local State 或 GPUCache）的目录。"""
+    """Only VS Code-family dirs or those with a Chromium marker (Local State or GPUCache)."""
     out = []
     for d in sub_dirs(appdata()):
         if d.name in VSCODE_FAMILY or (d / "Local State").exists() or (d / "GPUCache").exists():
@@ -113,7 +116,7 @@ def electron_app_dirs() -> list[Path]:
     return out
 
 
-# ---------------------------------------------------------------- 目标
+# ---------------------------------------------------------------- targets
 
 def _temp() -> Target:
     def stale() -> list[Path]:
@@ -153,9 +156,9 @@ def _temp() -> Target:
             return
         for p in items:
             c.deleter.assert_deletable(p)
-        ui.dim(f"  + 删除 %TEMP% 中 {len(items)} 个顶层条目（{ui.human(fsutil.size_of(items))}）")
+        ui.dim(f"  + delete {len(items)} top-level entries in %TEMP% ({ui.human(fsutil.size_of(items))})")
 
-    return Target("temp", "default", f"%TEMP% 中超过 TEMP_DAYS({TEMP_DAYS}) 天未修改的文件与目录（被占用的文件跳过）",
+    return Target("temp", "default", f"top-level %TEMP% entries older than TEMP_DAYS({TEMP_DAYS}) days (locked files are skipped)",
                   avail=lambda c: temp_dir().is_dir(), paths=lambda c: stale(), clean=clean)
 
 
@@ -192,7 +195,7 @@ def _scoop() -> Target:
         if c.deep:
             c.cmd("scoop", "cache", "rm", "-a")
 
-    return Target("scoop", "default", "scoop cleanup -a -k：旧版本与过期安装包（--deep 额外 scoop cache rm -a）",
+    return Target("scoop", "default", "scoop cleanup -a -k: old versions and stale installers (--deep also scoop cache rm -a)",
                   avail=lambda c: have("scoop"), paths=stale, clean=clean)
 
 
@@ -201,7 +204,7 @@ def _electron() -> Target:
         out: list = []
         for d in electron_app_dirs():
             if electron_busy(d):
-                out.append(Skip(f"{d.name} 正在运行"))
+                out.append(Skip(f"{d.name} is running"))
                 continue
             for b in [d, *sub_dirs(d, "Default"), *sub_dirs(d, "Profile*"), *sub_dirs(d / "Partitions")]:
                 out += existing([b / s for s in ELECTRON_CACHE_DIRS])
@@ -209,7 +212,8 @@ def _electron() -> Target:
                 out += existing([d / s for s in VSCODE_CACHE_DIRS])
         return out
 
-    return Target("electron", "default", "%APPDATA% 下 Electron 应用的 Cache、Code Cache、GPUCache 等（应用运行时跳过）",
+    return Target("electron", "default",
+                  "Cache, Code Cache, GPUCache etc. of Electron apps under %APPDATA% (skipped while running)",
                   paths=paths)
 
 
@@ -221,7 +225,7 @@ def _browser() -> Target:
             if not root.is_dir():
                 continue
             if sysinfo.file_locked(root / "lockfile"):
-                out.append(Skip(f"{rel.parts[1]} 正在运行"))
+                out.append(Skip(f"{rel.parts[1]} is running"))
                 continue
             profiles = [*sub_dirs(root, "Default"), *sub_dirs(root, "Profile *"), *sub_dirs(root, "Guest Profile")]
             for p in profiles:
@@ -229,27 +233,29 @@ def _browser() -> Target:
             out += existing([root / s for s in BROWSER_ROOT_CACHES])
         return out
 
-    return Target("browser", "default", "Edge / Chrome / Brave 各配置文件的 Cache、Code Cache、GPUCache 与着色器缓存（浏览器运行时跳过）",
+    return Target("browser", "default",
+                  "profile caches and shader caches of Edge / Chrome / Brave (skipped while the browser is running)",
                   avail=lambda c: any((localappdata() / r).is_dir() for r in BROWSERS), paths=paths)
 
 
 def _firefox() -> Target:
-    """缓存在 Local，锁在 Roaming 的同名配置目录中。"""
+    """Caches live in Local; the profile lock lives in Roaming under the same name."""
     def paths(c: Ctx):
         out: list = []
         for p in sub_dirs(localappdata() / "Mozilla" / "Firefox" / "Profiles"):
             if sysinfo.file_locked(appdata() / "Mozilla" / "Firefox" / "Profiles" / p.name / "parent.lock"):
-                out.append(Skip(f"Firefox 配置 {p.name} 正在使用"))
+                out.append(Skip(f"Firefox profile {p.name} is in use"))
                 continue
             out += existing([p / s for s in ("cache2", "startupCache", "thumbnails", "jumpListCache")])
         return out
 
-    return Target("firefox", "default", "Firefox 网络缓存 cache2 / startupCache / thumbnails（配置文件被占用时跳过）",
+    return Target("firefox", "default", "Firefox network cache cache2 / startupCache / thumbnails (skipped while in use)",
                   avail=lambda c: (localappdata() / "Mozilla" / "Firefox" / "Profiles").is_dir(), paths=paths)
 
 
 def _updaters() -> Target:
-    """electron-updater 下载的安装包；应用运行时可能在等待退出后安装 pending 中的更新，所以跳过。"""
+    """Installers downloaded by electron-updater; skipped while the app runs because it may be
+    waiting to install a pending update on exit."""
     def paths(c: Ctx):
         out: list = []
         for d in sub_dirs(localappdata(), "*-updater"):
@@ -257,26 +263,26 @@ def _updaters() -> Target:
             roaming = appdata() / app
             if sysinfo.proc_running([app, app.replace("-", ""), app.replace("-", " ")]) or \
                     (roaming.exists() and electron_busy(roaming)):
-                out.append(Skip(f"{app} 正在运行"))
+                out.append(Skip(f"{app} is running"))
                 continue
             out += existing([d / "installer.exe", d / "pending"])
         return out
 
-    return Target("updaters", "default", "%LOCALAPPDATA%\\*-updater 中 electron-updater 下载的安装包（应用运行时跳过）",
+    return Target("updaters", "default", "electron-updater installers in %LOCALAPPDATA%\\*-updater (skipped while running)",
                   avail=lambda c: bool(sub_dirs(localappdata(), "*-updater")), paths=paths)
 
 
 def _cloudmusic() -> Target:
     cache_dir = localappdata() / "NetEase" / "CloudMusic" / "Cache"
-    return Target("cloudmusic", "opt", "网易云音乐播放缓存（不含下载的歌曲；运行时跳过）",
+    return Target("cloudmusic", "opt", "NetEase Cloud Music playback cache (not downloaded songs; skipped while running)",
                   avail=lambda c: cache_dir.is_dir(),
-                  paths=lambda c: [Skip("网易云音乐正在运行")] if sysinfo.proc_running(["cloudmusic"]) else [cache_dir])
+                  paths=lambda c: [Skip("NetEase Cloud Music is running")] if sysinfo.proc_running(["cloudmusic"]) else [cache_dir])
 
 
 def _crashdumps() -> Target:
     wer = localappdata() / "Microsoft" / "Windows" / "WER"
     dirs = [localappdata() / "CrashDumps", wer / "ReportArchive", wer / "ReportQueue"]
-    return Target("crashdumps", "opt", "%LOCALAPPDATA%\\CrashDumps 与 WER 报告（调试崩溃时可能需要）",
+    return Target("crashdumps", "opt", "%LOCALAPPDATA%\\CrashDumps and WER reports (may be needed to debug a crash)",
                   avail=lambda c: bool(existing(dirs)), paths=lambda c: existing(dirs))
 
 
@@ -285,7 +291,7 @@ def _shader() -> Target:
         return [localappdata() / p for p in ("D3DSCache", "NVIDIA/DXCache", "NVIDIA/GLCache", "AMD/DxCache",
                                              "AMD/DxcCache", "AMD/VkCache", "Intel/ShaderCache")]
 
-    return Target("shader", "opt", "DirectX / NVIDIA / AMD / Intel 着色器缓存（删除后首次启动游戏会卡顿）",
+    return Target("shader", "opt", "DirectX / NVIDIA / AMD / Intel shader caches (first game launch after deletion will stutter)",
                   avail=lambda c: bool(existing(dirs())), paths=lambda c: existing(dirs()))
 
 
@@ -295,16 +301,16 @@ def _nugetpkgs() -> Target:
 
     def clean(c: Ctx):
         if sysinfo.proc_running(busy):
-            ui.warn("Visual Studio / MSBuild / dotnet 正在运行，跳过")
+            ui.warn("Visual Studio / MSBuild / dotnet is running; skipping")
             return
         if have("dotnet"):
             c.cmd("dotnet", "nuget", "locals", "global-packages", "--clear")
         else:
             c.remove([path])
 
-    return Target("nugetpkgs", "opt", "dotnet nuget locals global-packages --clear（下次构建重新下载全部包）",
+    return Target("nugetpkgs", "opt", "dotnet nuget locals global-packages --clear (all packages re-download next build)",
                   avail=lambda c: path.is_dir(),
-                  paths=lambda c: [Skip("Visual Studio / MSBuild / dotnet 正在运行")] if sysinfo.proc_running(busy) else [path],
+                  paths=lambda c: [Skip("Visual Studio / MSBuild / dotnet is running")] if sysinfo.proc_running(busy) else [path],
                   clean=clean)
 
 
@@ -323,16 +329,16 @@ def _recycle() -> Target:
             return
         r = sysinfo.powershell("Clear-RecycleBin -Force -ErrorAction Stop")
         if not r.ok:
-            ui.warn(f"清空回收站失败: {r.stderr.strip()[:200]}")
+            ui.warn(f"failed to empty the Recycle Bin: {r.stderr.strip()[:200]}")
             c.failed = True
 
-    return Target("recycle", "opt", "清空所有驱动器的回收站（不可恢复）", paths=lambda c: [], size=size, clean=clean)
+    return Target("recycle", "opt", "empty the Recycle Bin on all drives (unrecoverable)", paths=lambda c: [], size=size, clean=clean)
 
 
 def _require_admin(c: Ctx) -> bool:
     if sysinfo.is_admin():
         return True
-    ui.warn("需要在管理员终端中运行，跳过")
+    ui.warn("needs an elevated terminal; skipping")
     c.failed = True
     return False
 
@@ -346,7 +352,7 @@ def _wu() -> Target:
 
     def clean(c: Ctx):
         if c.dry:
-            ui.dim(f"  + Stop-Service wuauserv, bits；删除 {wu_download()}\\*；Start-Service wuauserv, bits")
+            ui.dim(f"  + Stop-Service wuauserv, bits; delete {wu_download()}\\*; Start-Service wuauserv, bits")
             return
         if not _require_admin(c):
             return
@@ -356,7 +362,7 @@ def _wu() -> Target:
         finally:
             sysinfo.powershell("Start-Service wuauserv, bits")
 
-    return Target("wu", "opt", "Windows Update 下载缓存 SoftwareDistribution\\Download（需要管理员）",
+    return Target("wu", "opt", "Windows Update download cache SoftwareDistribution\\Download (needs admin)",
                   avail=lambda c: wu_download().is_dir(), paths=paths, clean=clean)
 
 
@@ -368,7 +374,7 @@ def _dism() -> Target:
         if _require_admin(c):
             c.cmd("dism", "/Online", "/Cleanup-Image", "/StartComponentCleanup")
 
-    return Target("dism", "opt", "DISM /StartComponentCleanup 清理组件存储（需要管理员，耗时较长）",
+    return Target("dism", "opt", "DISM /StartComponentCleanup component store cleanup (needs admin, takes a while)",
                   paths=lambda c: [], size=lambda c: -1, clean=clean)
 
 
@@ -382,7 +388,7 @@ def targets() -> list[Target]:
     ]
 
 
-# ---------------------------------------------------------------- 报告
+# ---------------------------------------------------------------- reports
 
 def overview() -> None:
     for letter in string.ascii_uppercase:
@@ -394,8 +400,8 @@ def overview() -> None:
         except OSError:
             continue
         if u.used:
-            ui.info(f"  {letter}:  已用 {ui.human(u.used)}  可用 {ui.human(u.free)}")
-    ui.info(f"%TEMP% 总占用: {ui.human(fsutil.size_of([temp_dir()]))}")
+            ui.info(f"  {letter}:  used {ui.human(u.used)}  free {ui.human(u.free)}")
+    ui.info(f"%TEMP% total: {ui.human(fsutil.size_of([temp_dir()]))}")
 
 
 def uncovered_roots() -> list[Path]:
@@ -403,15 +409,16 @@ def uncovered_roots() -> list[Path]:
 
 
 def scan_extra(ctx: Ctx) -> None:
-    ui.section("仅报告")
+    ui.section("Report only")
     explorer = localappdata() / "Microsoft" / "Windows" / "Explorer"
     thumbs = sorted(explorer.glob("*cache_*.db")) if explorer.is_dir() else []
-    ui.info(f"缩略图 / 图标缓存: {ui.human(fsutil.size_of(thumbs))}（被资源管理器占用；用磁盘清理 cleanmgr 的缩略图项清理）")
+    ui.info(f"thumbnail / icon caches: {ui.human(fsutil.size_of(thumbs))} (held by Explorer; clean via Disk Cleanup's Thumbnails item)")
     vhds = [*(localappdata() / "Packages").glob("*/LocalState/ext4.vhdx"),
             *(localappdata() / "Docker" / "wsl").rglob("*.vhdx")]
     for v in vhds:
-        ui.info(f"WSL 虚拟磁盘: {ui.human(fsutil.size_of([v]))}  {fsutil.tilde(v)}（压缩需先 wsl --shutdown，建议手动执行）")
-    ui.info("Electron / 浏览器的 Service Worker、IndexedDB、Local Storage 属于离线数据，不在清理范围内")
+        ui.info(f"WSL virtual disk: {ui.human(fsutil.size_of([v]))}  {fsutil.tilde(v)} "
+                "(compact manually after wsl --shutdown)")
+    ui.info("Electron / browser Service Worker, IndexedDB and Local Storage are offline data and outside the cleanup scope")
 
 
 @cache
@@ -450,7 +457,8 @@ def app_installed(names: tuple[str, ...]) -> bool:
             continue
         if have(n):
             return True
-        # 中文名没有词边界，按子串匹配；ASCII 名按整词匹配，避免 nu 之类的短名误命中
+        # CJK names have no word boundaries, so match as a substring; ASCII names match whole words
+        # to avoid short names like "nu" hitting everything
         rx = rf"(?<!\w){re.escape(n)}(?!\w)" if n.isascii() else re.escape(n)
         if any(re.search(rx, inst, re.I) for inst in _installed_names()):
             return True
@@ -458,21 +466,21 @@ def app_installed(names: tuple[str, ...]) -> bool:
 
 
 def leftovers() -> None:
-    ui.section("已卸载应用的残留目录（确认无用后手动删除）")
+    ui.section("Leftover dirs of uninstalled apps (delete manually once confirmed useless)")
     any_ = False
     for names, rels in LEFTOVER_MAP:
         if app_installed(names):
             continue
         for rel in rels:
             p = home() / rel
-            if not p.exists() or electron_busy(p):   # 目录正被占用：应用改名或以其他方式安装
+            if not p.exists() or electron_busy(p):   # dir is in use: the app was renamed or installed differently
                 continue
-            ui.info(f"  {ui.pad(ui.human(fsutil.size_of([p])), 10)}~/{ui.pad(rel, 40)}（{names[0]} 未安装）")
+            ui.info(f"  {ui.pad(ui.human(fsutil.size_of([p])), 10)}~/{ui.pad(rel, 40)} ({names[0]} not installed)")
             any_ = True
     if not any_:
-        ui.ok("无")
+        ui.ok("none")
 
-    ui.section(f"超过 {STALE_DAYS} 天无写入的 Electron 配置目录")
+    ui.section(f"Electron config dirs with no writes for {STALE_DAYS} days")
     any_ = False
     cutoff = time.time() - STALE_DAYS * 86400
     for d in electron_app_dirs():
@@ -484,7 +492,7 @@ def leftovers() -> None:
                 continue
         if newest and newest < cutoff:
             ui.info(f"  {ui.pad(ui.human(fsutil.size_of([d])), 10)}{ui.pad(fsutil.tilde(d), 40)}"
-                    f"最后写入 {time.strftime('%Y-%m-%d', time.localtime(newest))}")
+                    f"last write {time.strftime('%Y-%m-%d', time.localtime(newest))}")
             any_ = True
     if not any_:
-        ui.ok("无")
+        ui.ok("none")

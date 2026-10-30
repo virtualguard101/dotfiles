@@ -1,5 +1,6 @@
-"""环境检测（只读）：系统、包管理器、工具链、网络、chezmoi 加密配置、仓库与 hooks、软件包。
-每项给出 ok / warn / fail；fail 表示缺少必需条件，退出码为 1。"""
+"""Environment detection (read-only): system, package managers, toolchain, network, chezmoi
+encryption config, repo and hooks, packages. Each item is ok / warn / fail; fail means a required
+condition is missing and the exit code is 1."""
 from __future__ import annotations
 
 import json
@@ -38,7 +39,7 @@ class Report:
         self.items.append(Item(section, name, level, detail, hint))
 
 
-# ---------------------------------------------------------------- 系统
+# ---------------------------------------------------------------- system
 
 def _gpus() -> list[str]:
     if IS_WINDOWS:
@@ -51,54 +52,55 @@ def _gpus() -> list[str]:
             driver = Path(os.readlink(card / "device" / "driver")).name
         except OSError:
             continue
-        out.append(f"{GPU_VENDORS.get(vendor, vendor)}（驱动 {driver}）")
+        out.append(f"{GPU_VENDORS.get(vendor, vendor)} (driver {driver})")
     return out
 
 
 def check_system(rep: Report) -> None:
-    s = "系统"
+    s = "system"
     if IS_LINUX:
         rel = sysinfo.os_release()
-        rep.add(s, "发行版", "ok" if sysinfo.is_arch_like() else "warn",
-                f"{rel.get('PRETTY_NAME', '未知')}，内核 {pyplatform.release()}",
-                "" if sysinfo.is_arch_like() else "软件包恢复只支持 Arch 系（pacman）")
-        session = os.environ.get("XDG_SESSION_TYPE", "未知")
+        rep.add(s, "distribution", "ok" if sysinfo.is_arch_like() else "warn",
+                f"{rel.get('PRETTY_NAME', 'unknown')}, kernel {pyplatform.release()}",
+                "" if sysinfo.is_arch_like() else "package restore supports Arch-like distros only (pacman)")
+        session = os.environ.get("XDG_SESSION_TYPE", "unknown")
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
-        rep.add(s, "桌面会话", "info", f"{session} {desktop}".strip())
-        rep.add(s, "登录 shell", "info", os.environ.get("SHELL", "未知"))
+        rep.add(s, "desktop session", "info", f"{session} {desktop}".strip())
+        rep.add(s, "login shell", "info", os.environ.get("SHELL", "unknown"))
     elif IS_WINDOWS:
-        rep.add(s, "Windows", "ok", f"{pyplatform.version()}（{pyplatform.machine()}）")
+        rep.add(s, "Windows", "ok", f"{pyplatform.version()} ({pyplatform.machine()})")
         ps = sysinfo.query(["pwsh", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"])
-        rep.add(s, "PowerShell 7", "ok" if ps else "warn", ps or "未安装（只有 Windows PowerShell 5.1）",
+        rep.add(s, "PowerShell 7", "ok" if ps else "warn", ps or "not installed (only Windows PowerShell 5.1)",
                 "" if ps else "winget install Microsoft.PowerShell")
-    rep.add(s, "架构", "info", pyplatform.machine())
+    rep.add(s, "architecture", "info", pyplatform.machine())
     gpus = _gpus()
-    rep.add(s, "GPU", "info", "；".join(gpus) or "未检测到")
-    rep.add(s, "Python", "info", f"{sys.version.split()[0]}（{sys.executable}）")
+    rep.add(s, "GPU", "info", "; ".join(gpus) or "none detected")
+    rep.add(s, "Python", "info", f"{sys.version.split()[0]} ({sys.executable})")
 
 
-# ---------------------------------------------------------------- 工具链
+# ---------------------------------------------------------------- toolchain
 
 def check_tools(rep: Report) -> None:
-    s = "工具"
+    s = "tools"
     managers = ("winget", "scoop", "choco") if IS_WINDOWS else ("pacman", "yay", "paru", "nix", "flatpak")
     found = [m for m in managers if have(m)]
-    rep.add("包管理器", "可用", "ok" if found else "fail", ", ".join(found) or "无",
-            "" if found else ("安装 App Installer（winget）" if IS_WINDOWS else "需要 pacman"))
+    rep.add("package managers", "available", "ok" if found else "fail", ", ".join(found) or "none",
+            "" if found else ("install App Installer (winget)" if IS_WINDOWS else "pacman is required"))
     if IS_WINDOWS and not have("scoop"):
-        rep.add("包管理器", "scoop", "warn", "未安装", "见 https://scoop.sh；restore 的 packages 步骤需要它")
+        rep.add("package managers", "scoop", "warn", "not installed",
+                "see https://scoop.sh; the restore packages step needs it")
     for t in REQUIRED_TOOLS:
         v = sysinfo.version_of(t)
-        rep.add(s, t, "ok" if v else "fail", v or "未安装", "" if v else "运行 bootstrap 安装")
+        rep.add(s, t, "ok" if v else "fail", v or "not installed", "" if v else "run bootstrap to install")
     for t in RECOMMENDED_TOOLS:
         path = sysinfo.which(t)
-        rep.add(s, t, "ok" if path else "warn", path or "未安装",
+        rep.add(s, t, "ok" if path else "warn", path or "not installed",
                 "" if path else {"pre-commit": "uv tool install pre-commit"}.get(t, ""))
     if not have("age"):
-        rep.add(s, "age", "info", "未安装（chezmoi 内置 age，不影响加解密）")
+        rep.add(s, "age", "info", "not installed (chezmoi bundles age, so encryption still works)")
 
 
-# ---------------------------------------------------------------- 网络
+# ---------------------------------------------------------------- network
 
 def _proxy_reachable(value: str) -> bool:
     m = re.match(r"^(?:[a-z0-9+]+://)?(?:[^@/]+@)?([^:/]+):(\d+)", value.strip())
@@ -116,16 +118,16 @@ def git_proxy() -> str:
 
 
 def check_network(rep: Report) -> None:
-    s = "网络"
+    s = "network"
     proxy = git_proxy()
     if proxy:
         up = _proxy_reachable(proxy)
-        rep.add(s, "git http.proxy", "ok" if up else "warn", f"{proxy}（{'可连接' if up else '无法连接'}）",
-                "" if up else "代理软件未运行；restore 拉取 externals 时会临时改为直连")
+        rep.add(s, "git http.proxy", "ok" if up else "warn", f"{proxy} ({'reachable' if up else 'unreachable'})",
+                "" if up else "the proxy app is not running; restore fetches externals directly as a fallback")
     else:
-        rep.add(s, "git http.proxy", "info", "未设置")
+        rep.add(s, "git http.proxy", "info", "not set")
     env = [k for k in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "ALL_PROXY") if os.environ.get(k)]
-    rep.add(s, "代理环境变量", "info", ", ".join(env) or "未设置")
+    rep.add(s, "proxy env vars", "info", ", ".join(env) or "not set")
 
 
 # ---------------------------------------------------------------- chezmoi
@@ -154,73 +156,75 @@ def default_source_dir() -> Path:
 def check_chezmoi(rep: Report) -> None:
     s = "chezmoi"
     if not have("chezmoi"):
-        rep.add(s, "chezmoi", "fail", "未安装", "运行 bootstrap")
+        rep.add(s, "chezmoi", "fail", "not installed", "run bootstrap")
         return
     configured = sysinfo.query(["chezmoi", "source-path"]) or ""
     want = str(chez.source_state_dir())
     same = os.path.normcase(configured) == os.path.normcase(want)
-    rep.add(s, "源目录", "ok" if same else "fail", configured or "未知",
-            "" if same else f"仓库应位于 {default_source_dir()}（bootstrap 会克隆到这里）")
+    rep.add(s, "source dir", "ok" if same else "fail", configured or "unknown",
+            "" if same else f"the repo should be at {default_source_dir()} (bootstrap clones it there)")
     cur, exp = current_config(), expected_config()
     if cur is None:
-        rep.add(s, "配置文件", "fail", f"{chez.config_file()} 不存在", "dotfiles restore --apply --only config")
+        rep.add(s, "config file", "fail", f"{chez.config_file()} does not exist",
+                "dotfiles restore --apply --only config")
     else:
-        rep.add(s, "配置文件", "ok" if cur == exp else "warn", str(chez.config_file()),
-                "" if cur == exp else "与模板生成的结果不同：dotfiles restore --apply --only config")
+        rep.add(s, "config file", "ok" if cur == exp else "warn", str(chez.config_file()),
+                "" if cur == exp else "differs from the template output: dotfiles restore --apply --only config")
     cfg = cur or {}
-    rep.add(s, "加密", "ok" if cfg.get("encryption") == "age" else "fail", cfg.get("encryption", "未设置"))
+    rep.add(s, "encryption", "ok" if cfg.get("encryption") == "age" else "fail", cfg.get("encryption", "not set"))
     identity = Path((cfg.get("age") or {}).get("identity") or (exp or {}).get("age", {}).get("identity", ""))
     if not identity.name:
-        rep.add(s, "age 私钥", "fail", "未配置", "dotfiles restore --apply --only key")
+        rep.add(s, "age private key", "fail", "not configured", "dotfiles restore --apply --only key")
         return
     if not identity.is_file():
-        rep.add(s, "age 私钥", "fail", f"{identity} 不存在", "dotfiles restore --apply --only key")
+        rep.add(s, "age private key", "fail", f"{identity} does not exist", "dotfiles restore --apply --only key")
         return
     recipient = chez.recipient_of(identity)
     match = recipient in chez.template_recipients()
-    rep.add(s, "age 私钥", "ok" if match else "fail", f"{identity}（{'与仓库公钥匹配' if match else '与仓库公钥不匹配'}）",
-            "" if match else "私钥不对：换成与仓库 recipient 对应的私钥")
+    rep.add(s, "age private key", "ok" if match else "fail",
+            f"{identity} ({'matches the repo public key' if match else 'does not match the repo public key'})",
+            "" if match else "wrong key: use the private key matching the repo's recipient")
     if not IS_WINDOWS:
         mode = stat.S_IMODE(identity.stat().st_mode)
-        rep.add(s, "私钥权限", "ok" if not mode & 0o077 else "warn", f"{mode:o}",
+        rep.add(s, "key permissions", "ok" if not mode & 0o077 else "warn", f"{mode:o}",
                 "" if not mode & 0o077 else "dotfiles audit --apply")
     if same and cur is not None:
         r = chez.cz("status", "--exclude", "externals")
         if r.ok:
             pending = [line for line in r.stdout.splitlines() if line[1:2] in "AMDR" and line[1:2] != " "]
-            rep.add(s, "待部署变更", "ok" if not pending else "warn", f"{len(pending)} 项",
-                    "" if not pending else "chezmoi diff 查看；dotfiles restore --apply --only dotfiles 部署")
+            rep.add(s, "pending changes", "ok" if not pending else "warn", f"{len(pending)} items",
+                    "" if not pending else "see chezmoi diff; deploy with dotfiles restore --apply --only dotfiles")
         else:
-            rep.add(s, "待部署变更", "fail", r.stderr.strip()[:120], "解密失败：检查私钥与配置")
+            rep.add(s, "pending changes", "fail", r.stderr.strip()[:120], "decryption failed: check the key and config")
 
 
-# ---------------------------------------------------------------- 仓库
+# ---------------------------------------------------------------- repo
 
 def check_repo(rep: Report) -> None:
-    s = "仓库"
+    s = "repo"
     g = chez.git
     branch = g("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    rep.add(s, "分支", "info", branch)
+    rep.add(s, "branch", "info", branch)
     counts = g("rev-list", "--left-right", "--count", "HEAD...@{upstream}")
     if counts.ok:
         ahead, behind = counts.stdout.split()
-        rep.add(s, "与上游", "ok" if behind == "0" else "warn", f"领先 {ahead}，落后 {behind}",
+        rep.add(s, "vs upstream", "ok" if behind == "0" else "warn", f"ahead {ahead}, behind {behind}",
                 "" if behind == "0" else "git pull --ff-only")
     dirty = [line for line in g("status", "--porcelain").stdout.splitlines() if line]
-    rep.add(s, "未提交改动", "ok" if not dirty else "info", f"{len(dirty)} 项")
+    rep.add(s, "uncommitted changes", "ok" if not dirty else "info", f"{len(dirty)} items")
     hooks = Path(g("rev-parse", "--git-path", "hooks").stdout.strip() or ".git/hooks")
     if not hooks.is_absolute():
         hooks = chez.repo() / hooks
     installed = all((hooks / h).is_file() and "pre-commit" in (hooks / h).read_text(errors="ignore")
                     for h in ("pre-commit", "pre-push"))
-    rep.add(s, "提交检查 hooks", "ok" if installed else "warn", "已安装" if installed else "未安装",
+    rep.add(s, "commit hooks", "ok" if installed else "warn", "installed" if installed else "not installed",
             "" if installed else "dotfiles restore --apply --only hooks")
     origin = g("remote", "get-url", "origin").stdout.strip()
     push = g("remote", "get-url", "--push", "origin").stdout.strip()
-    rep.add(s, "远程", "info", origin if origin == push else f"{origin}（推送 {push}）")
+    rep.add(s, "remote", "info", origin if origin == push else f"{origin} (push: {push})")
 
 
-# ---------------------------------------------------------------- 软件包
+# ---------------------------------------------------------------- packages
 
 def missing_arch_packages() -> list[str]:
     path = chez.packages_dir() / "archpkg.txt"
@@ -231,10 +235,10 @@ def missing_arch_packages() -> list[str]:
 
 
 def check_packages(rep: Report) -> None:
-    s = "软件包"
+    s = "packages"
     if IS_LINUX:
         missing = missing_arch_packages()
-        rep.add(s, "archpkg.txt", "ok" if not missing else "warn", f"缺少 {len(missing)} 个",
+        rep.add(s, "archpkg.txt", "ok" if not missing else "warn", f"{len(missing)} missing",
                 "" if not missing else "dotfiles restore --apply --only packages")
     elif IS_WINDOWS:
         f = chez.packages_dir() / "scoopfile.json"
@@ -242,15 +246,15 @@ def check_packages(rep: Report) -> None:
             from dotfiles.clean.windows import scoop_dir
             apps = json.loads(f.read_text(encoding="utf-8")).get("apps", [])
             missing = [a["Name"] for a in apps if not (scoop_dir() / "apps" / a["Name"]).is_dir()]
-            rep.add(s, "scoopfile.json", "ok" if not missing else "warn", f"缺少 {len(missing)} 个",
+            rep.add(s, "scoopfile.json", "ok" if not missing else "warn", f"{len(missing)} missing",
                     "" if not missing else "dotfiles restore --apply --only packages")
         unavailable = chez.packages_dir() / "winget-unavailable.txt"
         if unavailable.is_file():
             n = sum(1 for line in unavailable.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#"))
-            rep.add(s, "需手动安装", "info", f"{n} 个（见 packages/winget-unavailable.txt）")
+            rep.add(s, "manual installs", "info", f"{n} programs (see packages/winget-unavailable.txt)")
 
 
-# ---------------------------------------------------------------- 输出
+# ---------------------------------------------------------------- output
 
 def collect() -> Report:
     rep = Report()
@@ -258,9 +262,9 @@ def collect() -> Report:
         try:
             check(rep)
         except ui.Abort as e:
-            rep.add(check.__name__.removeprefix("check_"), "检测失败", "fail", str(e))
-        except Exception as e:   # 单项检测出错不影响其他项
-            rep.add(check.__name__.removeprefix("check_"), "检测出错", "warn", f"{type(e).__name__}: {e}")
+            rep.add(check.__name__.removeprefix("check_"), "detection failed", "fail", str(e))
+        except Exception as e:   # one failing check must not affect the others
+            rep.add(check.__name__.removeprefix("check_"), "detection error", "warn", f"{type(e).__name__}: {e}")
     return rep
 
 
@@ -277,9 +281,9 @@ def run(as_json: bool) -> int:
             ui.section(section)
         ui.status_line(i.level, f"{ui.pad(i.name, 16)}{i.detail}")
     issues = [i for i in rep.items if i.hint and i.level in ("fail", "warn")]
-    ui.section("结论")
+    ui.section("Summary")
     if not issues:
-        ui.ok("环境完整，无待处理项")
+        ui.ok("environment complete, nothing to address")
     for i in issues:
         ui.status_line(i.level, f"{i.section}/{i.name}: {i.hint}", indent=0)
     return 1 if failed else 0
