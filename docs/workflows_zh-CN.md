@@ -18,7 +18,7 @@
 
 ### 2.1 日常备份：在各机器上直接提交到 `main`
 
-dotfile 内容、`packages/` 下的清单和 `/etc` 备份：
+dotfile 内容、`packages/` 下的清单、`/etc` 备份，以及对 `dotfiles.toml` 的新增条目或阈值调整（`dotfiles config add backup.linux.track …`、`… ignore …`、`config set clean.…`）：
 
 ```bash
 git pull --rebase
@@ -36,7 +36,7 @@ git push
 
 ### 2.2 工具、规则、共享配置：`dev` → PR → `main`
 
-包括 `src/`、`tests/`、`bootstrap.*`、`.chezmoiignore`、`.chezmoi.toml.tmpl`、共享模板（如 `.gitconfig.tmpl`）、在 `platforms.toml` 中调整目标的平台归属，以及 guard 规则。这里出错会影响两个平台的恢复。合并前至少做：
+包括 `src/`、`tests/`、`bootstrap.*`、`.chezmoiignore`、`.chezmoi.toml.tmpl`、共享模板（如 `.gitconfig.tmpl`）、在 `platforms.toml` 中调整目标的平台归属，从 `dotfiles.toml` 的保护性清单（`backup.<os>.secret`、`etc.secret`、`etc.exclude`）中删除条目，以及 guard 规则。这里出错会影响两个平台的恢复。合并前至少做：
 
 ```bash
 uv run pytest && uv run dotfiles check

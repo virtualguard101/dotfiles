@@ -14,8 +14,11 @@ import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from dotfiles import chez, sysinfo, ui
-from dotfiles.sysinfo import IS_LINUX, IS_WINDOWS, have, home
+from dotfiles.utils import platforms, ui
+from dotfiles.utils.common import chez
+from dotfiles.utils.platforms import IS_LINUX, IS_WINDOWS, have, home
+from dotfiles.utils.platforms import linux as linplat
+from dotfiles.utils.platforms import windows as winplat
 
 REQUIRED_TOOLS = ("git", "chezmoi", "uv")
 RECOMMENDED_TOOLS = ("gh", "pre-commit", "ssh-keygen", "just") + (("pwsh",) if IS_WINDOWS else ("sudo", "zsh"))
@@ -43,7 +46,7 @@ class Report:
 
 def _gpus() -> list[str]:
     if IS_WINDOWS:
-        r = sysinfo.powershell("Get-CimInstance Win32_VideoController | ForEach-Object Name", timeout=30)
+        r = winplat.powershell("Get-CimInstance Win32_VideoController | ForEach-Object Name", timeout=30)
         return [line.strip() for line in r.stdout.splitlines() if line.strip()]
     out = []
     for card in sorted(Path("/sys/class/drm").glob("card[0-9]")):
@@ -59,17 +62,17 @@ def _gpus() -> list[str]:
 def check_system(rep: Report) -> None:
     s = "system"
     if IS_LINUX:
-        rel = sysinfo.os_release()
-        rep.add(s, "distribution", "ok" if sysinfo.is_arch_like() else "warn",
+        rel = linplat.os_release()
+        rep.add(s, "distribution", "ok" if linplat.is_arch_like() else "warn",
                 f"{rel.get('PRETTY_NAME', 'unknown')}, kernel {pyplatform.release()}",
-                "" if sysinfo.is_arch_like() else "package restore supports Arch-like distros only (pacman)")
+                "" if linplat.is_arch_like() else "package restore supports Arch-like distros only (pacman)")
         session = os.environ.get("XDG_SESSION_TYPE", "unknown")
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
         rep.add(s, "desktop session", "info", f"{session} {desktop}".strip())
         rep.add(s, "login shell", "info", os.environ.get("SHELL", "unknown"))
     elif IS_WINDOWS:
         rep.add(s, "Windows", "ok", f"{pyplatform.version()} ({pyplatform.machine()})")
-        ps = sysinfo.query(["pwsh", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"])
+        ps = platforms.query(["pwsh", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"])
         rep.add(s, "PowerShell 7", "ok" if ps else "warn", ps or "not installed (only Windows PowerShell 5.1)",
                 "" if ps else "winget install Microsoft.PowerShell")
     rep.add(s, "architecture", "info", pyplatform.machine())
@@ -90,10 +93,10 @@ def check_tools(rep: Report) -> None:
         rep.add("package managers", "scoop", "warn", "not installed",
                 "see https://scoop.sh; the restore packages step needs it")
     for t in REQUIRED_TOOLS:
-        v = sysinfo.version_of(t)
+        v = platforms.version_of(t)
         rep.add(s, t, "ok" if v else "fail", v or "not installed", "" if v else "run bootstrap to install")
     for t in RECOMMENDED_TOOLS:
-        path = sysinfo.which(t)
+        path = platforms.which(t)
         rep.add(s, t, "ok" if path else "warn", path or "not installed",
                 "" if path else {"pre-commit": "uv tool install pre-commit"}.get(t, ""))
     if not have("age"):
@@ -114,7 +117,7 @@ def _proxy_reachable(value: str) -> bool:
 
 
 def git_proxy() -> str:
-    return sysinfo.query(["git", "config", "--global", "--get", "http.proxy"]) or ""
+    return platforms.query(["git", "config", "--global", "--get", "http.proxy"]) or ""
 
 
 def check_network(rep: Report) -> None:
@@ -150,7 +153,7 @@ def current_config() -> dict | None:
 
 
 def default_source_dir() -> Path:
-    return sysinfo.xdg_data() / "chezmoi" if not IS_WINDOWS else home() / ".local" / "share" / "chezmoi"
+    return platforms.xdg_data() / "chezmoi" if not IS_WINDOWS else home() / ".local" / "share" / "chezmoi"
 
 
 def check_chezmoi(rep: Report) -> None:
@@ -158,7 +161,7 @@ def check_chezmoi(rep: Report) -> None:
     if not have("chezmoi"):
         rep.add(s, "chezmoi", "fail", "not installed", "run bootstrap")
         return
-    configured = sysinfo.query(["chezmoi", "source-path"]) or ""
+    configured = platforms.query(["chezmoi", "source-path"]) or ""
     want = str(chez.source_state_dir())
     same = os.path.normcase(configured) == os.path.normcase(want)
     rep.add(s, "source dir", "ok" if same else "fail", configured or "unknown",
@@ -193,7 +196,7 @@ def check_chezmoi(rep: Report) -> None:
         if r.ok:
             pending = [line for line in r.stdout.splitlines() if line[1:2] in "AMDR" and line[1:2] != " "]
             rep.add(s, "pending changes", "ok" if not pending else "warn", f"{len(pending)} items",
-                    "" if not pending else "see chezmoi diff; deploy with dotfiles restore --apply --only dotfiles")
+                    "" if not pending else "preview with dotfiles apply; deploy with dotfiles apply --apply")
         else:
             rep.add(s, "pending changes", "fail", r.stderr.strip()[:120], "decryption failed: check the key and config")
 
@@ -230,7 +233,7 @@ def missing_arch_packages() -> list[str]:
     path = chez.packages_dir() / "archpkg.txt"
     if not path.is_file() or not have("pacman"):
         return []
-    installed = set(sysinfo.run(["pacman", "-Qq"]).stdout.split())
+    installed = set(platforms.run(["pacman", "-Qq"]).stdout.split())
     return [p for p in path.read_text(encoding="utf-8").split() if p not in installed]
 
 
@@ -243,7 +246,7 @@ def check_packages(rep: Report) -> None:
     elif IS_WINDOWS:
         f = chez.packages_dir() / "scoopfile.json"
         if f.is_file() and have("scoop"):
-            from dotfiles.clean.windows import scoop_dir
+            from dotfiles.utils.platforms.windows import scoop_dir
             apps = json.loads(f.read_text(encoding="utf-8")).get("apps", [])
             missing = [a["Name"] for a in apps if not (scoop_dir() / "apps" / a["Name"]).is_dir()]
             rep.add(s, "scoopfile.json", "ok" if not missing else "warn", f"{len(missing)} missing",

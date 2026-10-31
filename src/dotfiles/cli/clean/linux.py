@@ -7,43 +7,31 @@ import shutil
 import time
 from pathlib import Path
 
-from dotfiles import chez, fsutil, sysinfo, ui
-from dotfiles.clean import Ctx, Skip, Target, common, existing, sub_dirs
-from dotfiles.sysinfo import have, home, xdg_cache, xdg_config, xdg_data
-
-
-def _int_env(name: str, default: int) -> int:
-    value = os.environ.get(name, "")
-    return int(value) if value.isdigit() else default
-
-
-THUMBNAIL_DAYS = _int_env("THUMBNAIL_DAYS", 90)
-STALE_DAYS = _int_env("STALE_DAYS", 180)
-JOURNAL_MAX = os.environ.get("JOURNAL_MAX", "1G")
-PACCACHE_KEEP = _int_env("PACCACHE_KEEP", 1)
-UNCOVERED_MIN_MB = _int_env("UNCOVERED_MIN_MB", 10)
-UNCOVERED_ALWAYS = ("yay", "paru", "mozilla", "typescript", "jedi", "thumbnails")
+from dotfiles.cli.clean import shared as common
+from dotfiles.cli.clean.base import Ctx, Skip, Target, existing, sub_dirs
+from dotfiles.utils import fsutil, platforms, ui
+from dotfiles.utils.common import chez
+from dotfiles.utils.common import config as dotconf
+from dotfiles.utils.platforms import have, home, xdg_cache, xdg_config, xdg_data
 
 ELECTRON_CACHE_DIRS = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache",
                        "GPUPersistentCache", "GrShaderCache", "ShaderCache")
 VSCODE_FAMILY = ("Code", "Code - OSS", "VSCodium", "Cursor", "Windsurf")
 VSCODE_CACHE_DIRS = ("CachedData", "CachedExtensionVSIXs", "CachedProfilesData", "logs")
 
-# Leftovers from uninstalled apps: detection names (pacman package or command; any hit means installed) -> paths (relative to ~)
-LEFTOVER_MAP = (
-    (("cursor-bin", "cursor"), (".config/Cursor",)),
-    (("google-chrome", "google-chrome-stable"), (".config/google-chrome", ".cache/google-chrome")),
-    (("chromium",), (".config/chromium", ".cache/chromium")),
-    (("visual-studio-code-bin", "code"), (".config/Code", ".vscode")),
-    (("discord",), (".config/discord",)),
-    (("notion-app-electron",), (".config/Notion",)),
-    (("obsidian",), (".config/obsidian",)),
-    (("feishu-bin",), (".config/LarkShell", ".cache/LarkShell")),
-    (("telegram-desktop",), (".local/share/TelegramDesktop",)),
-    (("steam",), (".local/share/Steam",)),
-    (("wine",), (".wine", ".cache/wine")),
-)
 
+
+
+def _c(name: str):
+    """Tunable from dotfiles.toml [clean.linux] (an environment variable may override it)."""
+    return dotconf.get(f"clean.linux.{name}")
+
+
+def leftover_map() -> list[tuple[list[str], list[str]]]:
+    """(detection names, paths relative to ~) from dotfiles.toml [[clean.linux.leftovers]]."""
+    def as_list(v):
+        return [v] if isinstance(v, str) else list(v)
+    return [(as_list(t["detect"]), as_list(t["paths"])) for t in dotconf.get("clean.linux.leftovers")]
 
 # ---------------------------------------------------------------- deletion scope
 
@@ -76,21 +64,21 @@ def lock_alive(path: Path) -> bool:
             return False
     except OSError:
         return False
-    return bool(m) and sysinfo.pid_alive(int(m.group(1)))
+    return bool(m) and platforms.pid_alive(int(m.group(1)))
 
 
 def _argv_match(rx: str) -> bool:
     pattern = re.compile(rx, re.I)
-    return any(pattern.search(" ".join(p.argv[:2]) or p.exe) for p in sysinfo.processes())
+    return any(pattern.search(" ".join(p.argv[:2]) or p.exe) for p in platforms.processes())
 
 
 def _cmdline_match(rx: str) -> bool:
     pattern = re.compile(rx)
-    return any(pattern.search(" ".join(p.argv)) for p in sysinfo.processes())
+    return any(pattern.search(" ".join(p.argv)) for p in platforms.processes())
 
 
 def _pgrep(*names: str) -> bool:
-    return sysinfo.proc_running(names)
+    return platforms.proc_running(names)
 
 
 # ---------------------------------------------------------------- targets
@@ -116,7 +104,7 @@ def _yay() -> Target:
         return _pgrep("yay", "paru", "makepkg")
 
     def untracked(d: Path) -> list[Path]:
-        r = sysinfo.run(["git", "-C", str(d), "ls-files", "-o", "--directory"])
+        r = platforms.run(["git", "-C", str(d), "ls-files", "-o", "--directory"])
         return [d / line.rstrip("/") for line in r.stdout.splitlines() if line.strip()]
 
     def paths(c: Ctx):
@@ -241,7 +229,7 @@ def _thumbnails() -> Target:
     root = xdg_cache() / "thumbnails"
 
     def old_files() -> list[Path]:
-        cutoff = time.time() - THUMBNAIL_DAYS * 86400
+        cutoff = time.time() - _c("thumbnail_days") * 86400
         out = []
         for dirpath, _, files in os.walk(root):
             for f in files:
@@ -264,18 +252,18 @@ def _thumbnails() -> Target:
         if not files:
             return
         if c.dry:
-            ui.dim(f"  + delete {len(files)} thumbnails untouched for {THUMBNAIL_DAYS} days in ~/.cache/thumbnails")
+            ui.dim(f"  + delete {len(files)} thumbnails untouched for {_c('thumbnail_days')} days in ~/.cache/thumbnails")
         else:
             c.remove(files)
 
     return Target("thumbnails", "default",
-                  f"thumbnails not accessed for THUMBNAIL_DAYS({THUMBNAIL_DAYS}) days (--deep: all)",
+                  f"thumbnails not accessed for {_c('thumbnail_days')} days (thumbnail_days) (--deep: all)",
                   avail=lambda c: root.is_dir(), paths=paths, clean=clean)
 
 
 def _zcompdump() -> Target:
     def stale() -> list[Path]:
-        line = sysinfo.query(["zsh", "--version"]) or ""
+        line = platforms.query(["zsh", "--version"]) or ""
         parts = line.split()
         if len(parts) < 2:
             return []
@@ -314,15 +302,15 @@ def _trash() -> Target:
 
 def _pacman() -> Target:
     def clean(c: Ctx):
-        c.cmd("sudo", "paccache", f"-rk{PACCACHE_KEEP}")
+        c.cmd("sudo", "paccache", f"-rk{_c('paccache_keep')}")
         c.cmd("sudo", "paccache", "-ruk0")
 
-    return Target("pacman", "opt", f"sudo paccache -rk{PACCACHE_KEEP} and -ruk0 (caches of uninstalled packages are all removed)",
+    return Target("pacman", "opt", f"sudo paccache -rk{_c('paccache_keep')} and -ruk0 (caches of uninstalled packages are all removed)",
                   avail=lambda c: have("paccache"), paths=lambda c: [Path("/var/cache/pacman/pkg")], clean=clean)
 
 
 def _journal_size(c: Ctx) -> int:
-    line = sysinfo.query(["journalctl", "--disk-usage"]) or ""
+    line = platforms.query(["journalctl", "--disk-usage"]) or ""
     m = re.search(r"([\d.]+)([KMGT])", line)
     if not m:
         return 0
@@ -330,9 +318,9 @@ def _journal_size(c: Ctx) -> int:
 
 
 def _journal() -> Target:
-    return Target("journal", "opt", f"sudo journalctl --vacuum-size={JOURNAL_MAX}",
+    return Target("journal", "opt", f"sudo journalctl --vacuum-size={_c('journal_max')}",
                   avail=lambda c: have("journalctl"), paths=lambda c: [], size=_journal_size,
-                  clean=lambda c: c.cmd("sudo", "journalctl", f"--vacuum-size={JOURNAL_MAX}"))
+                  clean=lambda c: c.cmd("sudo", "journalctl", f"--vacuum-size={_c('journal_max')}"))
 
 
 def targets() -> list[Target]:
@@ -369,12 +357,13 @@ def scan_extra(ctx: Ctx) -> None:
     ui.section("Report only")
     if have("paccache"):
         def saved(args: list[str]) -> str:
-            m = re.search(r"saved: ([^)]*)", sysinfo.run(["paccache", *args]).stdout)
+            m = re.search(r"saved: ([^)]*)", platforms.run(["paccache", *args]).stdout)
             return m.group(1) if m else "0"
-        ui.info(f"pacman: keeping {PACCACHE_KEEP} version(s) saves {saved([f'-dk{PACCACHE_KEEP}'])}, "
+        keep = _c("paccache_keep")
+        ui.info(f"pacman: keeping {keep} version(s) saves {saved([f'-dk{keep}'])}, "
                 f"removed packages save {saved(['-duk0'])}")
     if have("pacman"):
-        orphans = sysinfo.run(["pacman", "-Qdtq"]).stdout.split()
+        orphans = platforms.run(["pacman", "-Qdtq"]).stdout.split()
         debug = sum(1 for o in orphans if o.endswith("-debug"))
         ui.info(f"orphan packages: {len(orphans)} ({debug} -debug packages); inspect with pacman -Qdt, "
                 "remove with pacman -Qdtq | sudo pacman -Rns -")
@@ -386,7 +375,7 @@ def scan_extra(ctx: Ctx) -> None:
 
 def _installed(names: tuple[str, ...]) -> bool:
     for n in names:
-        if have(n) or (have("pacman") and sysinfo.run(["pacman", "-Qq", n]).ok):
+        if have(n) or (have("pacman") and platforms.run(["pacman", "-Qq", n]).ok):
             return True
     return False
 
@@ -394,7 +383,7 @@ def _installed(names: tuple[str, ...]) -> bool:
 def leftovers() -> None:
     ui.section("Leftover dirs of uninstalled apps (delete manually once confirmed useless)")
     any_ = False
-    for names, rels in LEFTOVER_MAP:
+    for names, rels in leftover_map():
         if _installed(names):
             continue
         for rel in rels:
@@ -405,9 +394,9 @@ def leftovers() -> None:
     if not any_:
         ui.ok("none")
 
-    ui.section(f"Electron/Chromium config dirs with no writes for {STALE_DAYS} days")
+    ui.section(f"Electron/Chromium config dirs with no writes for {_c('stale_days')} days")
     any_ = False
-    cutoff = time.time() - STALE_DAYS * 86400
+    cutoff = time.time() - _c("stale_days") * 86400
     for d in electron_app_dirs():
         newest = 0.0
         for p in [d, *d.glob("*"), *d.glob("*/*")]:

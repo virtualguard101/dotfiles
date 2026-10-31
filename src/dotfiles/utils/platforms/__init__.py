@@ -2,8 +2,6 @@
 Windows-specific calls are branched at runtime."""
 from __future__ import annotations
 
-import csv
-import io
 import locale
 import os
 import shutil
@@ -156,45 +154,15 @@ class Proc:
     argv: tuple[str, ...] = ()
 
 
-def _linux_processes() -> list[Proc]:
-    uid = os.getuid()
-    out = []
-    for entry in os.scandir("/proc"):
-        if not entry.name.isdigit():
-            continue
-        try:
-            if entry.stat().st_uid != uid:
-                continue
-            base = f"/proc/{entry.name}"
-            with open(f"{base}/comm", encoding="utf-8", errors="replace") as fh:
-                name = fh.read().strip().lower()
-            try:
-                exe = os.readlink(f"{base}/exe")
-            except OSError:
-                exe = ""
-            with open(f"{base}/cmdline", "rb") as fh:
-                argv = tuple(_decode(a) for a in fh.read().split(b"\0") if a)
-            out.append(Proc(int(entry.name), name, exe, argv))
-        except OSError:
-            continue
-    return out
-
-
-def _windows_processes() -> list[Proc]:
-    r = run(["tasklist", "/fo", "csv", "/nh"], timeout=60)
-    out = []
-    for row in csv.reader(io.StringIO(r.stdout)):
-        if len(row) >= 2 and row[1].isdigit():
-            name = row[0].lower()
-            out.append(Proc(int(row[1]), name[:-4] if name.endswith(".exe") else name))
-    return out
-
-
 @cache
 def processes() -> tuple[Proc, ...]:
     """Snapshot of the current user's processes (cached for one run)."""
     try:
-        return tuple(_windows_processes() if IS_WINDOWS else _linux_processes())
+        if IS_WINDOWS:
+            from dotfiles.utils.platforms import windows as plat
+        else:
+            from dotfiles.utils.platforms import linux as plat
+        return tuple(plat.list_processes())
     except OSError:
         return ()
 
@@ -260,33 +228,3 @@ def is_admin() -> bool:
         except Exception:
             return False
     return os.geteuid() == 0
-
-
-def powershell(script: str, timeout: float = 120) -> Result:
-    """Windows: run a PowerShell snippet with -NoProfile, forcing UTF-8 output."""
-    exe = "pwsh" if have("pwsh") else "powershell"
-    prefix = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
-    return run([exe, "-NoProfile", "-NonInteractive", "-Command", prefix + script], timeout=timeout)
-
-
-# ---------------------------------------------------------------- system info
-
-@cache
-def os_release() -> dict[str, str]:
-    data: dict[str, str] = {}
-    for path in ("/etc/os-release", "/usr/lib/os-release"):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                for line in fh:
-                    key, sep, value = line.strip().partition("=")
-                    if sep:
-                        data[key] = value.strip().strip('"')
-            break
-        except OSError:
-            continue
-    return data
-
-
-def is_arch_like() -> bool:
-    rel = os_release()
-    return rel.get("ID") == "arch" or "arch" in rel.get("ID_LIKE", "").split()

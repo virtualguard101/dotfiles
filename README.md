@@ -11,23 +11,25 @@ home/                     dotfiles for both platforms (chezmoi source state)
   .chezmoidata/platforms.toml   platform ownership per target; .chezmoiignore derives from it
 system/                   Linux /etc backup (separate chezmoi instance, never deployed to ~)
 packages/                 package manifests: archpkg.txt / scoopfile.json / winget.json
+dotfiles.toml             backup and cleanup lists and tunables (data; `dotfiles config` edits it)
 src/dotfiles/             the Python tool (standard library only)
 bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and clones the repo,
                           then hands over to dotfiles restore
 docs/reference.md         detailed reference: command behavior, encryption and platform rules,
                           cleanup targets, commit checks
 docs/workflows.md         branch roles and which path each kind of change takes
+docs/architecture.md      how the tool is organized, layering rules, where to extend it
 ```
 
 Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.
 
 ## Design Principles
 
-- **chezmoi does the file work, the Python tool decides policy**: every transfer between `~` and the source state (attribute prefixes, encryption, template rendering, ignore rules) goes through chezmoi. `dotfiles` decides which files to pass, whether to encrypt them and whether the result may be committed, then calls chezmoi to do it. The tool itself writes only `platforms.toml` and the manifests in `packages/`.
+- **chezmoi does the file work, the Python tool decides policy**: every transfer between `~` and the source state (attribute prefixes, encryption, template rendering, ignore rules) goes through chezmoi. `dotfiles` decides which files to pass, whether to encrypt them and whether the result may be committed, then calls chezmoi to do it. The tool itself writes only `platforms.toml`, `dotfiles.toml` (through `dotfiles config`) and the manifests in `packages/`.
 
-- **The source state is the backup list**: whatever exists under `home/` is managed, and `backup` re-adds all of it. The `track` / `secret` lists in `src/dotfiles/backup.py` only discover new files; `platforms.toml` only says on which platform each managed target deploys.
+- **The source state is the backup list**: whatever exists under `home/` is managed, and `backup` re-adds all of it. The `track` / `secret` lists in `dotfiles.toml` only discover new files (`ignore` silences candidates you never want); `platforms.toml` only says on which platform each managed target deploys.
 
-- **Each command works in one direction**: `backup` only copies `~` into the repo, and `restore` / `chezmoi apply` only copy the repo into `~`. `backup` never deploys, never deletes from the source state (stop managing a target with `chezmoi forget` and remove its `platforms.toml` entry), never merges templates (it only reports their drift) and never pushes.
+- **Each command works in one direction**: `backup` only copies `~` into the repo, and `apply` / `restore` / `chezmoi apply` only copy the repo into `~`. `backup` never deploys, never deletes from the source state (stop managing a target with `chezmoi forget` and remove its `platforms.toml` entry), never merges templates (it only reports their drift) and never pushes.
 
 - **Plain chezmoi stays first-class**: `chezmoi add`, `re-add` and `edit` produce the same source files as `backup`. Missing steps (an unregistered target, a sensitive file added in plaintext) are caught by `dotfiles check` and the commit hooks, which enforce the rules whichever path made the change.
 
@@ -95,6 +97,8 @@ After recovery, the output lists items that need manual attention, usually: `aut
 uv run dotfiles doctor                 # environment: toolchain, encryption config, repo and hooks, missing packages
 uv run dotfiles backup -n              # preview a backup
 uv run dotfiles backup --commit        # backup and commit (no push); then git push
+uv run dotfiles apply                  # preview what deploying repo edits into ~ would change
+uv run dotfiles apply --apply          # deploy them (overwritten files are backed up first)
 uv run dotfiles clean scan             # see what caches can be cleaned
 uv run dotfiles clean run --apply      # clean the default tier
 ```
@@ -105,12 +109,14 @@ With [just](https://github.com/casey/just) installed there are shortcuts: `just 
 |---|---|
 | `doctor [--json]` | environment detection (read-only); exit code 1 when a required condition is missing |
 | `restore [--apply] [--only …] [--skip …] [--key-file path] [--yes]` | post-reinstall recovery; shows the plan by default |
+| `apply [--apply] [TARGET…]` | deploy the repo into `~` (reverse of backup): diffs first, encrypted targets never shown decrypted |
 | `status` | backup state: drift, unmanaged candidates, package manifests, permissions |
 | `backup [-n] [--no-system] [--commit]` | re-add managed files -> add candidates -> `/etc` (Linux) -> package manifests -> security check |
 | `check` | security check: plaintext secrets, `.age` format, must-encrypt targets, platform ownership |
 | `audit [--apply]` | sensitive-file permissions (Linux 600/700, Windows ACL) |
 | `system-restore [--apply] [/etc/path…]` | Linux: compare `system/` with the current `/etc` and install as needed |
 | `clean scan / list / run / leftovers` | cache cleanup; `run` previews by default, `--apply` executes |
+| `config list / get / add / remove / set` | the lists and tunables in `dotfiles.toml`; edits keep comments |
 
 Every modifying command previews by default. Full details in [docs/reference.md](docs/reference.md).
 

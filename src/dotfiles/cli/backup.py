@@ -7,55 +7,43 @@ backup flow: preflight -> re-add managed files (plaintext with secrets is switch
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
 import stat
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from dotfiles import chez, guard, sysinfo, ui
-from dotfiles.sysinfo import IS_WINDOWS, home
+from dotfiles.utils import platforms, ui
+from dotfiles.utils.common import chez, guard
+from dotfiles.utils.common import config as dotconf
+from dotfiles.utils.platforms import IS_WINDOWS, home
+from dotfiles.utils.platforms import windows as winplat
 
 
 @dataclass
 class Profile:
-    track: list[str]                    # configs recommended for tracking (relative to ~, with /; directories expand to regular files)
-    secret: list[str]                   # always encrypted
-    exclude: list[str] = field(default_factory=lambda: ["*.tbcache", "*.lock", "*.log", "*.bak", "*~", "*_history"])
+    track: list[str]       # configs recommended for tracking (relative to ~; directories expand to regular files)
+    secret: list[str]      # always encrypted
+    exclude: list[str]     # file-name patterns skipped when expanding directories
+    ignore: list[str]      # candidates never added nor reported
 
 
-LINUX = Profile(
-    track=[
-        ".zshenv", ".bash_profile", ".profile", ".tool-versions",
-        ".config/user-dirs.dirs", ".config/mimeapps.list",
-        ".config/kdeglobals", ".config/kwinrc", ".config/kglobalshortcutsrc", ".config/kxkbrc",
-        ".config/konsolerc", ".config/dolphinrc", ".config/spectaclerc", ".local/share/konsole",
-        ".config/ghostty", ".config/bottom", ".config/htop", ".config/gh/config.yml",
-        ".config/systemd/user", ".config/autostart",
-        ".local/share/fcitx5/rime/default.custom.yaml", ".aria2/aria2.conf",
-    ],
-    secret=[".wakatime.cfg", ".npmrc", ".config/gh/hosts.yml", ".docker/config.json"],
-)
-
-WINDOWS = Profile(
-    track=[
-        ".gitconfig", ".wslconfig", ".config/scoop/config.json",
-        "Documents/PowerShell/Microsoft.PowerShell_profile.ps1",
-        "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
-        "AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json",
-        "AppData/Roaming/Code/User/settings.json", "AppData/Roaming/Code/User/keybindings.json",
-        "Documents/PowerToys/Backup",
-    ],
-    secret=[".wakatime.cfg", ".docker/config.json", ".claude/settings.json", "AppData/Roaming/GitHub CLI/hosts.yml",
-            "AppData/Roaming/rclone/rclone.conf", ".npmrc", ".pypirc", "_netrc", ".git-credentials"],
-)
+def profile(os_name: str = platforms.OS_NAME) -> Profile:
+    """This platform's lists from dotfiles.toml ([backup.<os>])."""
+    return Profile(*(list(dotconf.get(f"backup.{os_name}.{k}")) for k in ("track", "secret", "exclude", "ignore")))
 
 
-def profile() -> Profile:
-    return WINDOWS if IS_WINDOWS else LINUX
+def is_ignored(target: str, patterns: list[str]) -> bool:
+    """target (relative to ~, with /) equals a pattern, lies inside a directory pattern, or matches a glob."""
+    for pat in patterns:
+        pat = pat.rstrip("/")
+        if target == pat or target.startswith(pat + "/") or fnmatch.fnmatch(target, pat):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------- helpers
@@ -68,23 +56,25 @@ def rel_home(path: Path) -> str:
 
 
 def expand(rel: str, prof: Profile) -> list[Path]:
-    """File or directory relative to ~ -> the regular files inside (skips links, files >= 1MiB and exclude patterns)."""
+    """File or directory relative to ~ -> the regular files inside (skips links, files >= 1MiB,
+    exclude patterns and ignored targets)."""
     p = home() / rel
     if not os.path.lexists(p) or os.path.islink(p):
         return []
-    if p.is_file():
-        return [p]
     out = []
-    for f in sorted(p.rglob("*")):
-        try:
-            if f.is_symlink() or not f.is_file() or f.stat().st_size >= 1024 * 1024:
+    if p.is_file():
+        out = [p]
+    else:
+        for f in sorted(p.rglob("*")):
+            try:
+                if f.is_symlink() or not f.is_file() or f.stat().st_size >= 1024 * 1024:
+                    continue
+            except OSError:
                 continue
-        except OSError:
-            continue
-        if any(f.match(pat) for pat in prof.exclude):
-            continue
-        out.append(f)
-    return out
+            if any(f.match(pat) for pat in prof.exclude):
+                continue
+            out.append(f)
+    return [f for f in out if not is_ignored(rel_home(f), prof.ignore)]
 
 
 def has_home_path(path: Path) -> bool:
@@ -128,7 +118,7 @@ def preflight() -> dict:
     if set(chez.age_recipients(config)) != set(chez.template_recipients()):
         ui.warn("recipient in the chezmoi config differs from the repo template; run dotfiles restore --only config")
     if IS_WINDOWS:
-        docs = sysinfo.powershell("[Environment]::GetFolderPath('MyDocuments')").stdout.strip()
+        docs = winplat.powershell("[Environment]::GetFolderPath('MyDocuments')").stdout.strip()
         if docs and os.path.normcase(docs) != os.path.normcase(str(home() / "Documents")):
             ui.warn(f"the Documents folder is redirected to {docs}; targets under Documents/ do not match the real location")
     return config
@@ -164,7 +154,7 @@ def cmd_status() -> int:
 
     ui.section("Backup candidates (unmanaged)")
     managed = {os.path.normcase(p) for p in chez.managed(include="files,symlinks", absolute=True)}
-    platforms = chez.load_platforms()
+    owners = chez.load_platforms()
     any_ = False
     for kind, rels in (("secret", prof.secret), ("track", prof.track)):
         for rel in rels:
@@ -172,8 +162,8 @@ def cmd_status() -> int:
                 if os.path.normcase(str(f)) in managed:
                     continue
                 target = rel_home(f)
-                owner = chez.owner_of(target, platforms)
-                if owner not in (None, "shared", sysinfo.OS_NAME):
+                owner = chez.owner_of(target, owners)
+                if owner not in (None, "shared", platforms.OS_NAME):
                     flag = f"owned by {owner}->skip"
                 else:
                     flag = "encrypt" if kind == "secret" or has_secret(f) else "plain"
@@ -192,12 +182,13 @@ def cmd_status() -> int:
         else:
             ui.warn(f"{name} not generated yet (created by backup)")
 
-    if sysinfo.IS_LINUX:
-        from dotfiles import system_etc
-        system_etc.status()
+    if platforms.IS_LINUX:
+        from dotfiles.cli import etc
+        etc.status()
 
     ui.section("Permission audit")
-    audit(apply=False)
+    from dotfiles.cli import audit
+    audit.audit(apply=False)
     ui.info()
     ui.info("next: dotfiles backup -n to preview a backup; dotfiles audit --apply to tighten permissions")
     return 0
@@ -225,7 +216,7 @@ class Runner:
             print(r.stderr.rstrip("\n"), file=sys.stderr)
         return r.returncode
 
-    def cz_quiet(self, *args: str) -> sysinfo.Result:
+    def cz_quiet(self, *args: str) -> platforms.Result:
         return chez.cz(*self.flags, *args)
 
 
@@ -346,7 +337,7 @@ def add_candidate(run: Runner, f: Path, kind: str, managed: set[str]) -> None:
         return
     target = rel_home(f)
     owner = chez.owner_of(target)
-    if owner not in (None, "shared", sysinfo.OS_NAME):
+    if owner not in (None, "shared", platforms.OS_NAME):
         ui.warn(f"skip (owned by {owner}; if both platforms need it, make it a template and register it as shared): {target}")
         return
     if has_home_path(f):
@@ -371,8 +362,8 @@ def add_candidate(run: Runner, f: Path, kind: str, managed: set[str]) -> None:
     if not run.dry and not chez.is_managed(f):
         ui.warn(f"not managed (ignored by .chezmoiignore?): {target}")
         return
-    if chez.register_platform(target, sysinfo.OS_NAME, run.dry):
-        ui.info(f"        registered platform owner: {sysinfo.OS_NAME}")
+    if chez.register_platform(target, platforms.OS_NAME, run.dry):
+        ui.info(f"        registered platform owner: {platforms.OS_NAME}")
 
 
 def backup_candidates(run: Runner) -> None:
@@ -445,19 +436,19 @@ def update_pkg_file(name: str, kind: str, new: str, dry: bool) -> None:
 def backup_packages(dry: bool) -> None:
     ui.section("Package manifests")
     if not IS_WINDOWS:
-        if sysinfo.have("pacman"):
-            update_pkg_file("archpkg.txt", "arch", sysinfo.run(["pacman", "-Qqe"]).stdout, dry)
+        if platforms.have("pacman"):
+            update_pkg_file("archpkg.txt", "arch", platforms.run(["pacman", "-Qqe"]).stdout, dry)
         return
-    if sysinfo.have("scoop"):
-        r = sysinfo.run(["scoop", "export"], timeout=300)
+    if platforms.have("scoop"):
+        r = platforms.run(["scoop", "export"], timeout=300)
         try:
             update_pkg_file("scoopfile.json", "scoop", normalize_export("scoop", json.loads(r.stdout)), dry)
         except (ValueError, KeyError) as e:
             ui.warn(f"scoop export failed (exit {r.returncode}): {e}")
-    if sysinfo.have("winget"):
+    if platforms.have("winget"):
         with tempfile.TemporaryDirectory() as tmp:
             raw = Path(tmp) / "winget.json"
-            r = sysinfo.run(["winget", "export", "-o", str(raw), "--accept-source-agreements",
+            r = platforms.run(["winget", "export", "-o", str(raw), "--accept-source-agreements",
                              "--disable-interactivity"], timeout=600)
             if not raw.is_file():
                 ui.warn(f"winget export failed (exit {r.returncode})")
@@ -495,10 +486,13 @@ def gate() -> bool:
         ui.err(f"platform ownership: {p}")
     if problems:
         bad = True
+    for p in dotconf.validate():
+        ui.err(f"dotfiles.toml: {p}")
+        bad = True
     if bad:
         ui.err("security check failed; nothing will be committed")
         return False
-    ui.ok("no plaintext secrets, .age files are valid ciphertext, sensitive targets encrypted, platform ownership complete")
+    ui.ok("no plaintext secrets, .age files are valid ciphertext, sensitive targets encrypted, platform ownership complete, dotfiles.toml valid")
     return True
 
 
@@ -512,9 +506,9 @@ def cmd_backup(dry: bool, with_system: bool, commit: bool) -> int:
     run = Runner(dry)
     backup_managed(run)
     backup_candidates(run)
-    if with_system and sysinfo.IS_LINUX:
-        from dotfiles import system_etc
-        system_etc.backup(run)
+    if with_system and platforms.IS_LINUX:
+        from dotfiles.cli import etc
+        etc.backup(run)
     backup_packages(dry)
     passed = gate()
     ui.section("Repo status")
@@ -527,112 +521,12 @@ def cmd_backup(dry: bool, with_system: bool, commit: bool) -> int:
             ui.ok("nothing to commit")
             return 0
         from datetime import date
-        msg = f"backup: sync {sysinfo.OS_NAME} dotfiles ({date.today().isoformat()})"
-        if sysinfo.run_live(["git", "-C", str(chez.repo()), "commit", "-q", "-m", msg]) != 0:
+        msg = f"backup: sync {platforms.OS_NAME} dotfiles ({date.today().isoformat()})"
+        if platforms.run_live(["git", "-C", str(chez.repo()), "commit", "-q", "-m", msg]) != 0:
             raise ui.Abort("git commit failed (pre-commit check did not pass?)")
         ui.ok(f"committed {chez.git('log', '-1', '--format=%h').stdout.strip()} (not pushed; run git push when ready)")
     ui.info()
     ui.info("reminder: the age private key is not in the repo; back it up offline (password manager / USB drive):")
     for i in chez.age_identities():
         ui.info(f"  {i}")
-    return 0
-
-
-# ---------------------------------------------------------------- audit
-
-class _Audit:
-    hits = 0
-
-
-def _audit_targets() -> list[tuple[Path, bool]]:
-    """(path, is_dir): always-encrypted configs, credential files, ~/.ssh, ~/.gnupg, age identity files and their dirs."""
-    h = home()
-    out: list[tuple[Path, bool]] = []
-    for rel in [*profile().secret, ".pypirc", ".netrc", ".git-credentials", ".ssh/config"]:
-        out.append((h / rel, False))
-    out += [(h / ".ssh", True), (h / ".gnupg", True)]
-    ssh = h / ".ssh"
-    if ssh.is_dir():
-        for f in sorted(ssh.iterdir()):
-            if f.is_file() and f.suffix != ".pub" and not f.name.startswith("known_hosts") and f.name != "config":
-                out.append((f, False))
-    for i in chez.age_identities():
-        out += [(i, False), (i.parent, True)]
-    seen, uniq = set(), []
-    for p, d in out:
-        if p not in seen and os.path.lexists(p) and not os.path.islink(p):
-            seen.add(p)
-            uniq.append((p, d))
-    return uniq
-
-
-def _audit_posix(path: Path, is_dir: bool, apply: bool) -> None:
-    want = 0o700 if is_dir else 0o600
-    cur = stat.S_IMODE(os.lstat(path).st_mode)
-    if cur & ~want & 0o777:
-        ui.info(f"  {ui.pad(tilde(path), 50)}{cur:o} -> {want:o}")
-        _Audit.hits += 1
-        if apply:
-            os.chmod(path, want)
-
-
-def tilde(path: Path) -> str:
-    from dotfiles.fsutil import tilde
-    return tilde(path)
-
-
-_ALLOWED_SIDS_EXTRA = ("S-1-5-18", "S-1-5-32-544")   # SYSTEM, Administrators
-
-
-def current_sid() -> str:
-    out = sysinfo.run(["whoami", "/user", "/fo", "csv", "/nh"]).stdout.strip()
-    m = re.search(r'"(S-1-[\d-]+)"', out)
-    return m.group(1) if m else ""
-
-
-def restrict_acl(path: Path, is_dir: bool) -> bool:
-    """Windows: drop inheritance; only the current user, SYSTEM and Administrators keep access."""
-    inh = "(OI)(CI)" if is_dir else ""
-    sids = [current_sid(), *_ALLOWED_SIDS_EXTRA]
-    args = ["icacls", str(path), "/inheritance:r"]
-    for sid in sids:
-        if sid:
-            args += ["/grant:r", f"*{sid}:{inh}F"]
-    return sysinfo.run([*args, "/q"]).ok
-
-
-def _audit_windows(path: Path, is_dir: bool, apply: bool) -> None:
-    script = ("(Get-Acl -LiteralPath $env:DOTFILES_AUDIT_PATH).Access | Where-Object AccessControlType -eq 'Allow' | "
-              "ForEach-Object { try { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } "
-              "catch { $_.IdentityReference.Value } }")
-    os.environ["DOTFILES_AUDIT_PATH"] = str(path)
-    try:
-        sids = set(sysinfo.powershell(script).stdout.split())
-    finally:
-        os.environ.pop("DOTFILES_AUDIT_PATH", None)
-    allowed = {current_sid(), *_ALLOWED_SIDS_EXTRA}
-    extra = sorted(sids - allowed)
-    if not extra:
-        return
-    ui.info(f"  {ui.pad(tilde(path), 50)}also accessible by: {', '.join(extra)}")
-    _Audit.hits += 1
-    if apply and not restrict_acl(path, is_dir):
-        ui.warn(f"icacls failed: {path}")
-
-
-def audit(apply: bool) -> None:
-    _Audit.hits = 0
-    for path, is_dir in _audit_targets():
-        (_audit_windows if IS_WINDOWS else _audit_posix)(path, is_dir, apply)
-    if _Audit.hits == 0:
-        ui.ok("sensitive file permissions are fine")
-    elif not apply:
-        ui.info(f"{_Audit.hits} items have overly wide permissions; run dotfiles audit --apply to tighten them")
-    else:
-        ui.ok(f"tightened {_Audit.hits} items")
-
-
-def cmd_audit(apply: bool) -> int:
-    ui.section("Permission audit")
-    audit(apply)
     return 0

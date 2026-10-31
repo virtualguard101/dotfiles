@@ -18,8 +18,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from dotfiles import chez, sysinfo, ui
-from dotfiles.sysinfo import IS_LINUX, IS_WINDOWS, have, home
+from dotfiles.utils import platforms, ui
+from dotfiles.utils.common import chez, deploy
+from dotfiles.utils.platforms import IS_LINUX, IS_WINDOWS, have, home
+from dotfiles.utils.platforms import linux as linplat
 
 DONE, TODO, SKIP, BLOCKED = "done", "todo", "skip", "blocked"
 LABEL = {DONE: "done", TODO: "todo", SKIP: "skip", BLOCKED: "blocked"}
@@ -51,7 +53,7 @@ class StepFailed(Exception):
 # ---------------------------------------------------------------- age private key
 
 def generated_config() -> dict | None:
-    from dotfiles.doctor import expected_config
+    from dotfiles.cli.doctor import expected_config
     return expected_config()
 
 
@@ -95,7 +97,7 @@ def write_private(path: Path, text: str) -> None:
     if IS_WINDOWS:
         with open(path, "x", encoding="utf-8", newline="\n") as fh:
             fh.write(text)
-        from dotfiles.backup import restrict_acl
+        from dotfiles.utils.platforms.windows import restrict_acl
         if not restrict_acl(path, is_dir=False):
             ui.warn(f"could not tighten the ACL of {path}; run dotfiles audit --apply")
         return
@@ -123,8 +125,8 @@ def run_key(o: Options) -> None:
 # ---------------------------------------------------------------- chezmoi config
 
 def check_config(o: Options) -> tuple[str, str]:
-    from dotfiles.doctor import current_config, default_source_dir
-    configured = sysinfo.query(["chezmoi", "source-path"]) or ""
+    from dotfiles.cli.doctor import current_config, default_source_dir
+    configured = platforms.query(["chezmoi", "source-path"]) or ""
     if os.path.normcase(configured) != os.path.normcase(str(chez.source_state_dir())):
         return BLOCKED, (f"chezmoi source dir is {configured or 'unknown'}; the repo should be at "
                          f"{default_source_dir()} (bootstrap clones it there)")
@@ -150,40 +152,19 @@ def run_config(o: Options) -> None:
 
 # ---------------------------------------------------------------- deploy dotfiles
 
-def _status(*extra: str) -> list[tuple[str, str]]:
-    r = chez.cz("status", *extra)
-    if not r.ok:
-        raise StepFailed(f"chezmoi status failed (cannot decrypt?): {r.stderr.strip()[:300]}")
-    return [(line[:2], line[3:]) for line in r.stdout.splitlines() if len(line) > 3]
-
-
 def check_dotfiles(o: Options) -> tuple[str, str]:
     try:
-        pending = [(c, p) for c, p in _status("--exclude", "externals") if c[1] != " "]
-    except StepFailed as e:
+        changes = deploy.pending()
+    except deploy.DeployError as e:
         return BLOCKED, str(e)
-    if not pending:
+    if not changes:
         return DONE, "target state matches the repo"
-    existing = sum(1 for c, p in pending if c[1] == "M")
-    return TODO, f"{len(pending)} items to deploy ({existing} existing files will be backed up before being overwritten)"
+    existing = sum(1 for c in changes if c.action == "M")
+    return TODO, f"{len(changes)} items to deploy ({existing} existing files will be backed up before being overwritten)"
 
 
 def run_dotfiles(o: Options) -> None:
-    dry = chez.cz("apply", "--dry-run", "--exclude", "externals", "--no-tty")
-    if not dry.ok:   # full rehearsal first: if decryption fails, nothing is written
-        raise StepFailed(f"rehearsal failed, nothing was written: {dry.stderr.strip()[:300]}")
-    pending = [p for c, p in _status("--exclude", "externals") if c[1] == "M"]
-    if pending:
-        dest = sysinfo.xdg_state() / "dotfiles" / f"pre-apply-{datetime.now():%Y%m%d-%H%M%S}"
-        dest.mkdir(parents=True, mode=0o700)
-        for rel in pending:
-            src = home() / rel
-            if src.is_file() and not src.is_symlink():
-                (dest / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest / rel)
-        ui.info(f"  {len(pending)} files about to be overwritten were backed up to {dest}")
-    if chez.cz_live("apply", "--exclude", "externals", "--force", "--no-tty") != 0:
-        raise StepFailed("chezmoi apply failed")
+    deploy.deploy()     # rehearsal -> backup of files about to be overwritten -> chezmoi apply
 
 
 # ---------------------------------------------------------------- system config (Linux /etc)
@@ -195,14 +176,14 @@ def check_system(o: Options) -> tuple[str, str]:
 
 
 def run_system(o: Options) -> None:
-    from dotfiles import system_etc
-    system_etc.cmd_restore(apply=True, filters=[])
+    from dotfiles.cli import etc
+    etc.cmd_restore(apply=True, filters=[])
 
 
 # ---------------------------------------------------------------- packages
 
 def _arch_split(missing: list[str]) -> tuple[list[str], list[str]]:
-    sync = set(sysinfo.run(["pacman", "-Slq"]).stdout.split())
+    sync = set(platforms.run(["pacman", "-Slq"]).stdout.split())
     return [p for p in missing if p in sync], [p for p in missing if p not in sync]
 
 
@@ -215,7 +196,7 @@ def _winget_missing() -> list[str] | None:
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "installed.json"
-        sysinfo.run(["winget", "export", "-o", str(out), "--accept-source-agreements", "--disable-interactivity"], timeout=600)
+        platforms.run(["winget", "export", "-o", str(out), "--accept-source-agreements", "--disable-interactivity"], timeout=600)
         if not out.is_file():
             return None
         have_ids = {p["PackageIdentifier"] for s in json.loads(out.read_text(encoding="utf-8-sig")).get("Sources", [])
@@ -227,16 +208,16 @@ def _scoop_missing() -> list[str]:
     f = chez.packages_dir() / "scoopfile.json"
     if not f.is_file():
         return []
-    from dotfiles.clean.windows import scoop_dir
+    from dotfiles.utils.platforms.windows import scoop_dir
     return [a["Name"] for a in json.loads(f.read_text(encoding="utf-8")).get("apps", [])
             if not (scoop_dir() / "apps" / a["Name"]).is_dir()]
 
 
 def check_packages(o: Options) -> tuple[str, str]:
     if IS_LINUX:
-        if not sysinfo.is_arch_like() or not have("pacman"):
+        if not linplat.is_arch_like() or not have("pacman"):
             return SKIP, "not an Arch-like distribution"
-        from dotfiles.doctor import missing_arch_packages
+        from dotfiles.cli.doctor import missing_arch_packages
         missing = missing_arch_packages()
         if not missing:
             return DONE, "all packages in archpkg.txt are installed"
@@ -259,17 +240,17 @@ def check_packages(o: Options) -> tuple[str, str]:
 
 def run_packages(o: Options) -> None:
     if IS_LINUX:
-        from dotfiles.doctor import missing_arch_packages
+        from dotfiles.cli.doctor import missing_arch_packages
         repo, foreign = _arch_split(missing_arch_packages())
         if repo:
             cmd = ["sudo", "pacman", "-S", "--needed", *(["--noconfirm"] if o.assume_yes else []), *repo]
-            if sysinfo.run_live(cmd) != 0:
+            if platforms.run_live(cmd) != 0:
                 raise StepFailed("pacman install failed (rerun this step to continue)")
         if foreign:
             helper = next((h for h in ("paru", "yay") if have(h)), None)
             if helper:
                 ui.info(f"  installing {len(foreign)} AUR packages via {helper}")
-                if sysinfo.run_live([helper, "-S", "--needed", *(["--noconfirm"] if o.assume_yes else []), *foreign]) != 0:
+                if platforms.run_live([helper, "-S", "--needed", *(["--noconfirm"] if o.assume_yes else []), *foreign]) != 0:
                     ui.warn("some AUR packages failed to install")
             else:
                 ui.warn(f"paru/yay not installed; the following {len(foreign)} packages need manual install (AUR or archlinuxcn):")
@@ -277,12 +258,12 @@ def run_packages(o: Options) -> None:
         return
     winget_json = chez.packages_dir() / "winget.json"
     if winget_json.is_file() and have("winget"):
-        sysinfo.run_live(["winget", "import", "-i", str(winget_json), "--accept-package-agreements",
+        platforms.run_live(["winget", "import", "-i", str(winget_json), "--accept-package-agreements",
                           "--accept-source-agreements", "--ignore-unavailable", "--ignore-versions",
                           "--disable-interactivity"])
     scoop_json = chez.packages_dir() / "scoopfile.json"
     if scoop_json.is_file() and have("scoop"):
-        sysinfo.run_live(["scoop", "import", str(scoop_json)])
+        platforms.run_live(["scoop", "import", str(scoop_json)])
     manual = chez.packages_dir() / "winget-unavailable.txt"
     if manual.is_file():
         names = [line for line in manual.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
@@ -295,7 +276,7 @@ def run_packages(o: Options) -> None:
 def proxy_override() -> dict[str, str]:
     """When git has a proxy configured but it is unreachable (proxy app not installed on a new machine),
     temporarily switch to a direct connection."""
-    from dotfiles.doctor import _proxy_reachable, git_proxy
+    from dotfiles.cli.doctor import _proxy_reachable, git_proxy
     proxy = git_proxy()
     if not proxy or _proxy_reachable(proxy):
         return {}
@@ -372,17 +353,17 @@ def run_ssh(o: Options) -> None:
         if not IS_WINDOWS:
             os.chmod(k.parent, 0o700)
         ui.info(f"  generating {k} (prompts for a passphrase; setting one is recommended)")
-        if sysinfo.run_live(["ssh-keygen", "-t", "ed25519", "-f", str(k), "-C", f"{getpass.getuser()}@{host} {time.strftime('%Y-%m-%d')}"]) != 0:
+        if platforms.run_live(["ssh-keygen", "-t", "ed25519", "-f", str(k), "-C", f"{getpass.getuser()}@{host} {time.strftime('%Y-%m-%d')}"]) != 0:
             raise StepFailed(f"ssh-keygen failed: {k}")
         created.append(k)
     if IS_WINDOWS and created:
-        from dotfiles.backup import restrict_acl
+        from dotfiles.utils.platforms.windows import restrict_acl
         for k in created:
             restrict_acl(k, is_dir=False)
     if github in created and have("gh"):
-        if sysinfo.run(["gh", "auth", "status"]).ok:
+        if platforms.run(["gh", "auth", "status"]).ok:
             if ui.confirm(f"register {github.name}.pub with GitHub?", o.assume_yes):
-                sysinfo.run_live(["gh", "ssh-key", "add", f"{github}.pub", "--title", f"{host} {time.strftime('%Y-%m-%d')}"])
+                platforms.run_live(["gh", "ssh-key", "add", f"{github}.pub", "--title", f"{host} {time.strftime('%Y-%m-%d')}"])
         else:
             ui.note(f"run gh auth login first, then: gh ssh-key add {github}.pub --title {host}")
     others = [k for k in created if k != github]
@@ -400,7 +381,7 @@ def _login_shell() -> str:
 
 
 def check_shell(o: Options) -> tuple[str, str]:
-    zsh = sysinfo.which("zsh")
+    zsh = platforms.which("zsh")
     if not zsh:
         return SKIP, "zsh not installed (rechecked after the packages step)"
     current = _login_shell()
@@ -410,7 +391,7 @@ def check_shell(o: Options) -> tuple[str, str]:
 
 
 def run_shell(o: Options) -> None:
-    if sysinfo.run_live(["chsh", "-s", sysinfo.which("zsh") or "/usr/bin/zsh"]) != 0:
+    if platforms.run_live(["chsh", "-s", platforms.which("zsh") or "/usr/bin/zsh"]) != 0:
         raise StepFailed("chsh failed")
 
 
@@ -421,11 +402,11 @@ _GITHUB_HTTPS = re.compile(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"
 
 def _ssh_pushurl(repo_dir: Path) -> tuple[str, str] | None:
     """When origin is a GitHub HTTPS URL: (current push URL, expected SSH push URL)."""
-    r = sysinfo.run(["git", "-C", str(repo_dir), "remote", "get-url", "origin"])
+    r = platforms.run(["git", "-C", str(repo_dir), "remote", "get-url", "origin"])
     m = _GITHUB_HTTPS.match(r.stdout.strip())
     if not m:
         return None
-    push = sysinfo.run(["git", "-C", str(repo_dir), "remote", "get-url", "--push", "origin"]).stdout.strip()
+    push = platforms.run(["git", "-C", str(repo_dir), "remote", "get-url", "--push", "origin"]).stdout.strip()
     return push, f"git@github.com:{m.group(1)}/{m.group(2)}.git"
 
 
@@ -438,7 +419,7 @@ def _hook_dirs() -> list[Path]:
 
 
 def check_hooks(o: Options) -> tuple[str, str]:
-    from dotfiles.doctor import Report, check_repo
+    from dotfiles.cli.doctor import Report, check_repo
     rep = Report()
     check_repo(rep)
     todo = []
@@ -453,16 +434,16 @@ def check_hooks(o: Options) -> tuple[str, str]:
 
 def run_hooks(o: Options) -> None:
     if not have("pre-commit"):
-        if sysinfo.run_live(["uv", "tool", "install", "pre-commit"]) != 0:
+        if platforms.run_live(["uv", "tool", "install", "pre-commit"]) != 0:
             raise StepFailed("uv tool install pre-commit failed")
     if not have("pre-commit"):
         ui.warn("pre-commit installed but not on PATH: run uv tool update-shell, reopen the terminal, then rerun this step")
-    elif sysinfo.run_live(["pre-commit", "install"], cwd=chez.repo()) != 0:
+    elif platforms.run_live(["pre-commit", "install"], cwd=chez.repo()) != 0:
         raise StepFailed("pre-commit install failed")
     for d in _hook_dirs():
         urls = _ssh_pushurl(d)
         if urls and urls[0] != urls[1]:
-            sysinfo.run(["git", "-C", str(d), "remote", "set-url", "--push", "origin", urls[1]])
+            platforms.run(["git", "-C", str(d), "remote", "set-url", "--push", "origin", urls[1]])
             ui.info(f"  {d}: fetch stays on HTTPS, push switched to {urls[1]}")
 
 
@@ -473,10 +454,11 @@ def check_verify(o: Options) -> tuple[str, str]:
 
 
 def run_verify(o: Options) -> None:
-    from dotfiles import backup
+    from dotfiles.cli import backup
     ok = chez.cz("verify", "--exclude", "externals").ok
     (ui.ok if ok else ui.warn)("chezmoi verify: " + ("target state matches the repo" if ok else "still differs; see chezmoi diff"))
-    backup.audit(apply=False)
+    from dotfiles.cli import audit
+    audit.audit(apply=False)
     if not backup.gate() or not ok:
         raise StepFailed("verification failed")
 
@@ -513,7 +495,7 @@ def select(only: list[str], skip: list[str]) -> list[Step]:
     for name in only + skip:
         if name not in ids:
             raise ui.Abort(f"unknown step: {name} (available: {', '.join(s.id for s in STEPS)})", 2)
-    return [s for s in STEPS if sysinfo.OS_NAME in s.platforms and (not only or s.id in only) and s.id not in skip]
+    return [s for s in STEPS if platforms.OS_NAME in s.platforms and (not only or s.id in only) and s.id not in skip]
 
 
 def run(apply: bool, only: list[str], skip: list[str], key_file: str | None, assume_yes: bool) -> int:

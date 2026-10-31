@@ -6,7 +6,7 @@ import stat
 from pathlib import Path
 from typing import Iterable
 
-from dotfiles import ui
+from dotfiles.utils import ui
 
 _REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 

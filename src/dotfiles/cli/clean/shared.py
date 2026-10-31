@@ -7,9 +7,18 @@ import re
 import time
 from pathlib import Path
 
-from dotfiles import sysinfo
-from dotfiles.clean import Ctx, Skip, Target, existing
-from dotfiles.sysinfo import IS_WINDOWS, have, home, localappdata, query, xdg_cache, xdg_data
+from dotfiles.cli.clean.base import Ctx, Skip, Target, existing
+from dotfiles.utils import platforms
+from dotfiles.utils.platforms import (
+    IS_WINDOWS,
+    have,
+    home,
+    localappdata,
+    query,
+    xdg_cache,
+    xdg_data,
+)
+from dotfiles.utils.platforms import windows as winplat
 
 PATCH_MINUTES = 60   # pre-commit: how many minutes of stash patches to keep (a running commit still needs them)
 
@@ -135,7 +144,7 @@ def cargo() -> Target:
     root = _env_path("CARGO_HOME", home() / ".cargo")
 
     def paths(c: Ctx):
-        if sysinfo.proc_running(["cargo"]):
+        if platforms.proc_running(["cargo"]):
             return [Skip("cargo is running")]
         out = [root / "registry" / "src", root / "git" / "checkouts"]
         if c.deep:
@@ -172,7 +181,7 @@ def vcpkg() -> Target:
         r = root()
         if r is None:
             return []
-        if sysinfo.proc_running(["vcpkg"]):
+        if platforms.proc_running(["vcpkg"]):
             return [Skip("vcpkg is running")]
         return [r / "buildtrees", r / "packages"] + ([r / "downloads"] if c.deep else [])
 
@@ -225,9 +234,9 @@ def gradle() -> Target:
 
 def _maven_running() -> bool:
     if IS_WINDOWS:
-        r = sysinfo.powershell("Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | ForEach-Object CommandLine")
+        r = winplat.powershell("Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | ForEach-Object CommandLine")
         return "plexus.classworlds" in r.stdout
-    return any("plexus.classworlds" in " ".join(p.argv) for p in sysinfo.processes())
+    return any("plexus.classworlds" in " ".join(p.argv) for p in platforms.processes())
 
 
 def maven() -> Target:
@@ -248,11 +257,11 @@ def _docker_up() -> bool:
         return False
     if IS_WINDOWS:
         return Path(r"\\.\pipe\docker_engine").exists()
-    return sysinfo.run(["docker", "info"], timeout=5).ok
+    return platforms.run(["docker", "info"], timeout=5).ok
 
 
 def _docker_reclaimable(c: Ctx) -> int:
-    r = sysinfo.run(["docker", "system", "df", "--format", "{{.Type}}|{{.Reclaimable}}"], timeout=30)
+    r = platforms.run(["docker", "system", "df", "--format", "{{.Type}}|{{.Reclaimable}}"], timeout=30)
     total = 0
     for line in r.stdout.splitlines():
         if m := _SIZE_RX.match(line.strip()):

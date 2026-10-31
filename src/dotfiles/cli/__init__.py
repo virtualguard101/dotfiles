@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-from dotfiles import __version__, sysinfo, ui
+from dotfiles import __version__
+from dotfiles.utils import platforms, ui
 
 EPILOG = """\
 common flows:
   after a reinstall   bootstrap.sh / bootstrap.ps1  ->  dotfiles restore --apply
   daily backup        dotfiles backup -n  ->  dotfiles backup --commit
+  deploy repo edits   dotfiles apply  ->  dotfiles apply --apply
   cache cleanup       dotfiles clean scan  ->  dotfiles clean run --apply
 Every modifying command previews by default; see README.md for details."""
 
@@ -30,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--skip", action="append", default=[], metavar="STEP", help="skip these steps")
     s.add_argument("--key-file", metavar="PATH", help="age private key file (e.g. on a USB drive); prompts interactively when omitted")
     s.add_argument("-y", "--yes", action="store_true", help="auto-confirm steps that ask")
+
+    s = sub.add_parser("apply", help="deploy the repo into ~ (reverse of backup): preview diffs, --apply deploys with a backup")
+    s.add_argument("targets", nargs="*", metavar="TARGET", help="only these paths under ~ (default: everything)")
+    s.add_argument("--apply", action="store_true", help="actually deploy")
 
     sub.add_parser("status", help="backup state: drift, unmanaged candidates, package manifests, permissions (read-only)")
 
@@ -59,6 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("-x", "--exclude", action="append", default=[], metavar="TARGET", help="exclude a target (repeatable, comma-separated)")
     csub.add_parser("leftovers", help="read-only: leftover dirs of uninstalled apps")
 
+    s = sub.add_parser("config", help="backup and cleanup lists in dotfiles.toml: list / get / add / remove / set / path")
+    s.add_argument("action", choices=["list", "get", "add", "remove", "set", "path"])
+    s.add_argument("key", nargs="?", metavar="KEY", help="dotted key, e.g. backup.linux.ignore (list: optional prefix)")
+    s.add_argument("values", nargs="*", metavar="VALUE")
+
     s = sub.add_parser("guard", help="commit checks (invoked by pre-commit); arguments are passed to guard", add_help=False)
     s.add_argument("args", nargs=argparse.REMAINDER)
     return p
@@ -70,28 +81,32 @@ def _split(values: list[str]) -> list[str]:
 
 def dispatch(a: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if a.cmd == "doctor":
-        from dotfiles import doctor
+        from dotfiles.cli import doctor
         return doctor.run(as_json=a.json)
     if a.cmd == "restore":
-        from dotfiles import restore
+        from dotfiles.cli import restore
         return restore.run(apply=a.apply, only=_split(a.only), skip=_split(a.skip), key_file=a.key_file,
                            assume_yes=a.yes)
-    if a.cmd in ("status", "backup", "check", "audit"):
-        from dotfiles import backup
+    if a.cmd == "apply":
+        from dotfiles.cli import apply
+        return apply.cmd_apply(a.targets, apply=a.apply)
+    if a.cmd in ("status", "backup", "check"):
+        from dotfiles.cli import backup
         if a.cmd == "status":
             return backup.cmd_status()
         if a.cmd == "backup":
             return backup.cmd_backup(dry=a.dry_run, with_system=not a.no_system, commit=a.commit)
-        if a.cmd == "check":
-            return backup.cmd_check()
-        return backup.cmd_audit(apply=a.apply)
+        return backup.cmd_check()
+    if a.cmd == "audit":
+        from dotfiles.cli import audit
+        return audit.cmd_audit(apply=a.apply)
     if a.cmd == "system-restore":
-        if not sysinfo.IS_LINUX:
+        if not platforms.IS_LINUX:
             raise ui.Abort("system-restore is Linux-only", 2)
-        from dotfiles import system_etc
-        return system_etc.cmd_restore(apply=a.apply, filters=a.paths)
+        from dotfiles.cli import etc
+        return etc.cmd_restore(apply=a.apply, filters=a.paths)
     if a.cmd == "clean":
-        from dotfiles import clean
+        from dotfiles.cli import clean
         if a.clean_cmd == "scan":
             return clean.cmd_scan(deep=a.deep)
         if a.clean_cmd == "list":
@@ -102,8 +117,11 @@ def dispatch(a: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             return clean.cmd_leftovers()
         parser.parse_args(["clean", "--help"])
         return 2
+    if a.cmd == "config":
+        from dotfiles.cli import config
+        return config.cmd(a.action, a.key, a.values)
     if a.cmd == "guard":
-        from dotfiles import guard
+        from dotfiles.utils.common import guard
         return guard.main(a.args)
     parser.print_help()
     return 0 if a.cmd is None else 2

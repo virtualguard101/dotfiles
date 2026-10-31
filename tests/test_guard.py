@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
 
-from dotfiles import guard
+from dotfiles.utils.common import guard
 
 FAKE_GH = "ghp_" + "a1B2" * 9   # built at runtime: the full token never appears in the source
 
@@ -15,7 +17,7 @@ FAKE_GH = "ghp_" + "a1B2" * 9   # built at runtime: the full token never appears
     ("system/etc/sudoers", "/etc/sudoers"),
     ("system/etc/grub.d/executable_40_custom", "/etc/grub.d/40_custom"),
     # not deployment targets: repo-root tooling and chezmoi's own config
-    ("src/dotfiles/guard.py", None),
+    ("src/dotfiles/utils/common/guard/checks.py", None),
     ("packages/archpkg.txt", None),
     ("bootstrap.sh", None),
     ("home/.chezmoiignore", None),
@@ -37,7 +39,7 @@ def test_allow_marker():
 
 
 def test_policy_requires_encryption_for_sensitive_targets(monkeypatch):
-    monkeypatch.setattr(guard, "_SOURCE_ROOT", "home")
+    monkeypatch.setattr(guard.paths, "_SOURCE_ROOT", "home")
     errors = lambda p, d=b"x\n": [f.rule for f in guard.check_content(p, d) if f.level == "error"]
     assert any(r.startswith("must-encrypt") for r in errors("home/dot_wakatime.cfg"))
     assert any(r.startswith("must-encrypt") for r in errors("home/private_dot_ssh/private_id_ed25519"))
@@ -47,7 +49,7 @@ def test_policy_requires_encryption_for_sensitive_targets(monkeypatch):
 
 
 def test_age_files_must_be_ciphertext(monkeypatch):
-    monkeypatch.setattr(guard, "_SOURCE_ROOT", "home")
+    monkeypatch.setattr(guard.paths, "_SOURCE_ROOT", "home")
     rules = [f.rule for f in guard.check_content("home/encrypted_dot_x.age", b"plain\n")]
     assert "age-not-ciphertext" in rules
     armored = b"-----BEGIN AGE ENCRYPTED FILE-----\nYWdl\n-----END AGE ENCRYPTED FILE-----\n"
@@ -76,12 +78,37 @@ def test_scan_exit_codes(tmp_path):
     ("~/x", False),
 ])
 def test_home_path_only_matches_this_user(text, hit):
-    assert bool(guard.home_path_rx(guard.Path("/home/alice")).search(text.encode())) is hit, text
+    assert bool(guard.home_path_rx(Path("/home/alice")).search(text.encode())) is hit, text
 
 
 def test_home_path_rule_ignores_examples_but_flags_this_home(monkeypatch):
-    monkeypatch.setattr(guard, "_this_home_rx", lambda: guard.home_path_rx(guard.Path("/home/alice")))
+    monkeypatch.setattr(guard.checks, "_this_home_rx", lambda: guard.home_path_rx(Path("/home/alice")))
     def rules(data: bytes) -> list[str]:
         return [f.rule for f in guard.check_content("src/x.py", data)]
     assert "absolute-home-path" not in rules(b'# says "set by /home/username/file"\n')
     assert "absolute-home-path" in rules(b"cache = '/home/alice/.cache'\n")
+
+
+def test_registered_check_runs_in_every_mode(monkeypatch):
+    """The extension interface: a check appended to CHECKS runs wherever check_content does."""
+    def no_todo(ctx):
+        if ctx.text is not None and b"TODO-SECRET" in ctx.text:
+            yield guard.Finding("error", "todo-secret", ctx.path, ctx.text.count(b"\n", 0, ctx.text.index(b"TODO-SECRET")) + 1)
+
+    monkeypatch.setattr(guard.checks, "CHECKS", [*guard.CHECKS, no_todo])
+    found = guard.check_content("src/x.py", b"ok\nTODO-SECRET here\n")
+    assert [(f.rule, f.line) for f in found] == [("todo-secret", 2)]
+    assert guard.check_content("home/dot_x.age", b"TODO-SECRET") != []     # still an age check failure ...
+    assert all(f.rule != "todo-secret" for f in guard.check_content("home/dot_x.age", b"TODO-SECRET"))  # ... text checks skip ciphertext
+
+
+def test_checks_can_be_run_selectively():
+    data = b"token = " + b"ghp_" + b"A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8" + b"\n"
+    assert [f.rule for f in guard.check_content("src/x.py", data, checks=[guard.checks.check_secrets])] == ["github-token"]
+    assert guard.check_content("src/x.py", data, checks=[guard.checks.check_policy]) == []
+
+
+def test_findings_never_carry_content():
+    secret = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"
+    for f in guard.check_content("home/dot_bashrc", f"export GH={secret}\n".encode()):
+        assert secret not in str(f) and secret not in repr(f)

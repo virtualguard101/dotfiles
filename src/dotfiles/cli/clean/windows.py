@@ -12,20 +12,13 @@ import time
 from functools import cache
 from pathlib import Path
 
-from dotfiles import chez, fsutil, sysinfo, ui
-from dotfiles.clean import Ctx, Skip, Target, common, existing, sub_dirs
-from dotfiles.sysinfo import appdata, have, home, localappdata, xdg_cache
-
-
-def _int_env(name: str, default: int) -> int:
-    value = os.environ.get(name, "")
-    return int(value) if value.isdigit() else default
-
-
-TEMP_DAYS = _int_env("TEMP_DAYS", 7)
-STALE_DAYS = _int_env("STALE_DAYS", 180)
-UNCOVERED_MIN_MB = _int_env("UNCOVERED_MIN_MB", 100)
-UNCOVERED_ALWAYS = ("Temp", "Mozilla", "Google", "Microsoft", "BraveSoftware", "CrashDumps")
+from dotfiles.cli.clean import shared as common
+from dotfiles.cli.clean.base import Ctx, Skip, Target, existing, sub_dirs
+from dotfiles.utils import fsutil, platforms, ui
+from dotfiles.utils.common import chez
+from dotfiles.utils.common import config as dotconf
+from dotfiles.utils.platforms import appdata, have, home, localappdata, xdg_cache
+from dotfiles.utils.platforms import windows as winplat
 
 ELECTRON_CACHE_DIRS = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache",
                        "GPUPersistentCache", "GrShaderCache", "GraphiteDawnCache", "ShaderCache")
@@ -38,35 +31,18 @@ BROWSERS = (Path("Microsoft/Edge/User Data"), Path("Google/Chrome/User Data"),
 BROWSER_PROFILE_CACHES = ("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache")
 BROWSER_ROOT_CACHES = ("GrShaderCache", "GraphiteDawnCache", "ShaderCache", "GPUPersistentCache")
 
-# Leftovers from uninstalled apps: detection names (command, "Apps & Features" entry, scoop app, or an
-# existing relative path with /) -> paths (relative to ~). Some detection names are the localized
-# DisplayName values shown in "Apps & Features" on a Chinese-locale Windows; keep them as-is.
-LEFTOVER_MAP = (
-    (("cursor",), ("AppData/Roaming/Cursor",)),
-    (("cursor", "cursor-agent", "AppData/Local/cursor-agent"), (".cursor",)),
-    (("code", "Microsoft Visual Studio Code"), ("AppData/Roaming/Code", ".vscode")),
-    (("chrome", "Google Chrome"), ("AppData/Local/Google/Chrome",)),
-    (("notion",), ("AppData/Roaming/Notion",)),
-    (("Feishu", "飞书", "Lark"), ("AppData/Roaming/LarkShell", "AppData/Roaming/LarkShellSingleton")),
-    (("Docker Desktop",), ("AppData/Roaming/Docker", "AppData/Roaming/Docker Desktop")),
-    (("MongoDB Compass", "mongodb-compass"), ("AppData/Roaming/MongoDB Compass",)),
-    (("Quark", "夸克"), ("AppData/Roaming/Quark", "AppData/Roaming/The Quark Authors")),
-    (("BaiduNetdisk", "百度网盘"), ("AppData/Roaming/BaiduNetdisk", "AppData/Roaming/BaiduYunGuanjia",
-                                     "AppData/Roaming/BaiduYunKernel")),
-    (("WeMeet", "腾讯会议", "TencentMeeting"), ("AppData/Roaming/WeMeetApp",)),
-    (("draw.io",), ("AppData/Roaming/draw.io",)),
-    (("Wireshark",), ("AppData/Roaming/Wireshark",)),
-    (("VMware Workstation", "VMware Player"), ("AppData/Roaming/VMware",)),
-    (("Apifox",), ("AppData/Roaming/apifox",)),
-    (("uTools",), ("AppData/Roaming/uTools",)),
-    (("Clash Party", "Mihomo Party", "mihomo-party"), ("AppData/Roaming/mihomo-party",)),
-    (("MongoDB", "mongodb"), ("AppData/Roaming/mongodb",)),
-    (("Nushell", "nu"), ("AppData/Roaming/nushell",)),
-)
 
 
-def scoop_dir() -> Path:
-    return Path(os.environ["SCOOP"]) if os.environ.get("SCOOP") else home() / "scoop"
+def _c(name: str):
+    """Tunable from dotfiles.toml [clean.windows] (an environment variable may override it)."""
+    return dotconf.get(f"clean.windows.{name}")
+
+
+def leftover_map() -> list[tuple[list[str], list[str]]]:
+    """(detection names, paths relative to ~) from dotfiles.toml [[clean.windows.leftovers]]."""
+    def as_list(v):
+        return [v] if isinstance(v, str) else list(v)
+    return [(as_list(t["detect"]), as_list(t["paths"])) for t in dotconf.get("clean.windows.leftovers")]
 
 
 def temp_dir() -> Path:
@@ -78,12 +54,12 @@ def wu_download() -> Path:
 
 
 def safe_roots() -> list[Path]:
-    return [home(), scoop_dir(), wu_download()]
+    return [home(), winplat.scoop_dir(), wu_download()]
 
 
 def protected() -> list[Path]:
     h = home()
-    return [h, localappdata(), appdata(), temp_dir(), scoop_dir(), xdg_cache(), h / "Documents",
+    return [h, localappdata(), appdata(), temp_dir(), winplat.scoop_dir(), xdg_cache(), h / "Documents",
             h / "Desktop", h / "Downloads", h / ".ssh", chez.REPO]
 
 
@@ -95,16 +71,16 @@ def pid_lock(path: Path) -> bool:
         m = re.search(r"(\d+)", path.read_text(errors="ignore"))
     except OSError:
         return False
-    return bool(m) and sysinfo.pid_alive(int(m.group(1)))
+    return bool(m) and platforms.pid_alive(int(m.group(1)))
 
 
 def electron_busy(d: Path) -> bool:
     if (d / "code.lock").exists():
         return pid_lock(d / "code.lock")
     if (d / "lockfile").exists():
-        return sysinfo.file_locked(d / "lockfile")
+        return platforms.file_locked(d / "lockfile")
     names = [d.name, re.sub(r"\s", "", d.name), *PROCESS_ALIAS.get(d.name, ())]
-    return sysinfo.proc_running(names)
+    return platforms.proc_running(names)
 
 
 def electron_app_dirs() -> list[Path]:
@@ -120,7 +96,7 @@ def electron_app_dirs() -> list[Path]:
 
 def _temp() -> Target:
     def stale() -> list[Path]:
-        cutoff = time.time() - TEMP_DAYS * 86400
+        cutoff = time.time() - _c("temp_days") * 86400
         out = []
         try:
             entries = list(os.scandir(temp_dir()))
@@ -158,13 +134,13 @@ def _temp() -> Target:
             c.deleter.assert_deletable(p)
         ui.dim(f"  + delete {len(items)} top-level entries in %TEMP% ({ui.human(fsutil.size_of(items))})")
 
-    return Target("temp", "default", f"top-level %TEMP% entries older than TEMP_DAYS({TEMP_DAYS}) days (locked files are skipped)",
+    return Target("temp", "default", f"top-level %TEMP% entries older than {_c('temp_days')} days (temp_days) (locked files are skipped)",
                   avail=lambda c: temp_dir().is_dir(), paths=lambda c: stale(), clean=clean)
 
 
 def _scoop() -> Target:
     def stale(c: Ctx) -> list[Path]:
-        apps = sub_dirs(scoop_dir() / "apps")
+        apps = sub_dirs(winplat.scoop_dir() / "apps")
         out: list[Path] = []
         installed: dict[str, str] = {}
         for app in apps:
@@ -180,7 +156,7 @@ def _scoop() -> Target:
                 installed[app.name] = json.loads((cur / "manifest.json").read_text(encoding="utf-8-sig")).get("version", "")
             except (OSError, ValueError):
                 pass
-        cache_dir = scoop_dir() / "cache"
+        cache_dir = winplat.scoop_dir() / "cache"
         if cache_dir.is_dir():
             for f in sorted(cache_dir.iterdir()):
                 if not f.is_file():
@@ -224,7 +200,7 @@ def _browser() -> Target:
             root = localappdata() / rel
             if not root.is_dir():
                 continue
-            if sysinfo.file_locked(root / "lockfile"):
+            if platforms.file_locked(root / "lockfile"):
                 out.append(Skip(f"{rel.parts[1]} is running"))
                 continue
             profiles = [*sub_dirs(root, "Default"), *sub_dirs(root, "Profile *"), *sub_dirs(root, "Guest Profile")]
@@ -243,7 +219,7 @@ def _firefox() -> Target:
     def paths(c: Ctx):
         out: list = []
         for p in sub_dirs(localappdata() / "Mozilla" / "Firefox" / "Profiles"):
-            if sysinfo.file_locked(appdata() / "Mozilla" / "Firefox" / "Profiles" / p.name / "parent.lock"):
+            if platforms.file_locked(appdata() / "Mozilla" / "Firefox" / "Profiles" / p.name / "parent.lock"):
                 out.append(Skip(f"Firefox profile {p.name} is in use"))
                 continue
             out += existing([p / s for s in ("cache2", "startupCache", "thumbnails", "jumpListCache")])
@@ -261,7 +237,7 @@ def _updaters() -> Target:
         for d in sub_dirs(localappdata(), "*-updater"):
             app = re.sub(r"^@[^-]+-", "", re.sub(r"-updater$", "", d.name))
             roaming = appdata() / app
-            if sysinfo.proc_running([app, app.replace("-", ""), app.replace("-", " ")]) or \
+            if platforms.proc_running([app, app.replace("-", ""), app.replace("-", " ")]) or \
                     (roaming.exists() and electron_busy(roaming)):
                 out.append(Skip(f"{app} is running"))
                 continue
@@ -276,7 +252,7 @@ def _cloudmusic() -> Target:
     cache_dir = localappdata() / "NetEase" / "CloudMusic" / "Cache"
     return Target("cloudmusic", "opt", "NetEase Cloud Music playback cache (not downloaded songs; skipped while running)",
                   avail=lambda c: cache_dir.is_dir(),
-                  paths=lambda c: [Skip("NetEase Cloud Music is running")] if sysinfo.proc_running(["cloudmusic"]) else [cache_dir])
+                  paths=lambda c: [Skip("NetEase Cloud Music is running")] if platforms.proc_running(["cloudmusic"]) else [cache_dir])
 
 
 def _crashdumps() -> Target:
@@ -300,7 +276,7 @@ def _nugetpkgs() -> Target:
     busy = ("devenv", "MSBuild", "dotnet")
 
     def clean(c: Ctx):
-        if sysinfo.proc_running(busy):
+        if platforms.proc_running(busy):
             ui.warn("Visual Studio / MSBuild / dotnet is running; skipping")
             return
         if have("dotnet"):
@@ -310,13 +286,13 @@ def _nugetpkgs() -> Target:
 
     return Target("nugetpkgs", "opt", "dotnet nuget locals global-packages --clear (all packages re-download next build)",
                   avail=lambda c: path.is_dir(),
-                  paths=lambda c: [Skip("Visual Studio / MSBuild / dotnet is running")] if sysinfo.proc_running(busy) else [path],
+                  paths=lambda c: [Skip("Visual Studio / MSBuild / dotnet is running")] if platforms.proc_running(busy) else [path],
                   clean=clean)
 
 
 def _recycle() -> Target:
     def size(c: Ctx) -> int:
-        r = sysinfo.powershell("$s=0; (New-Object -ComObject Shell.Application).NameSpace(10).Items() | "
+        r = winplat.powershell("$s=0; (New-Object -ComObject Shell.Application).NameSpace(10).Items() | "
                                "ForEach-Object { $s += [long]$_.Size }; $s")
         try:
             return int(r.stdout.strip().splitlines()[-1])
@@ -327,7 +303,7 @@ def _recycle() -> Target:
         if c.dry:
             ui.dim("  + Clear-RecycleBin -Force")
             return
-        r = sysinfo.powershell("Clear-RecycleBin -Force -ErrorAction Stop")
+        r = winplat.powershell("Clear-RecycleBin -Force -ErrorAction Stop")
         if not r.ok:
             ui.warn(f"failed to empty the Recycle Bin: {r.stderr.strip()[:200]}")
             c.failed = True
@@ -336,7 +312,7 @@ def _recycle() -> Target:
 
 
 def _require_admin(c: Ctx) -> bool:
-    if sysinfo.is_admin():
+    if platforms.is_admin():
         return True
     ui.warn("needs an elevated terminal; skipping")
     c.failed = True
@@ -356,11 +332,11 @@ def _wu() -> Target:
             return
         if not _require_admin(c):
             return
-        sysinfo.powershell("Stop-Service wuauserv, bits -Force")
+        winplat.powershell("Stop-Service wuauserv, bits -Force")
         try:
             c.remove(paths(c))
         finally:
-            sysinfo.powershell("Start-Service wuauserv, bits")
+            winplat.powershell("Start-Service wuauserv, bits")
 
     return Target("wu", "opt", "Windows Update download cache SoftwareDistribution\\Download (needs admin)",
                   avail=lambda c: wu_download().is_dir(), paths=paths, clean=clean)
@@ -444,8 +420,8 @@ def _installed_names() -> tuple[str, ...]:
                         continue
     except ImportError:
         pass
-    names += sysinfo.powershell("Get-AppxPackage -ErrorAction SilentlyContinue | ForEach-Object Name").stdout.split()
-    names += [d.name for d in sub_dirs(scoop_dir() / "apps")]
+    names += winplat.powershell("Get-AppxPackage -ErrorAction SilentlyContinue | ForEach-Object Name").stdout.split()
+    names += [d.name for d in sub_dirs(winplat.scoop_dir() / "apps")]
     return tuple(names)
 
 
@@ -468,7 +444,7 @@ def app_installed(names: tuple[str, ...]) -> bool:
 def leftovers() -> None:
     ui.section("Leftover dirs of uninstalled apps (delete manually once confirmed useless)")
     any_ = False
-    for names, rels in LEFTOVER_MAP:
+    for names, rels in leftover_map():
         if app_installed(names):
             continue
         for rel in rels:
@@ -480,9 +456,9 @@ def leftovers() -> None:
     if not any_:
         ui.ok("none")
 
-    ui.section(f"Electron config dirs with no writes for {STALE_DAYS} days")
+    ui.section(f"Electron config dirs with no writes for {_c('stale_days')} days")
     any_ = False
-    cutoff = time.time() - STALE_DAYS * 86400
+    cutoff = time.time() - _c("stale_days") * 86400
     for d in electron_app_dirs():
         newest = 0.0
         for p in [d, *d.glob("*"), *d.glob("*/*")]:
