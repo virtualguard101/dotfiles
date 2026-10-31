@@ -11,36 +11,17 @@ import tempfile
 from fnmatch import fnmatch
 from pathlib import Path
 
-from dotfiles import chez, sysinfo, ui
+from dotfiles.utils import platforms, ui
+from dotfiles.utils.common import chez
+from dotfiles.utils.common import config as dotconf
 
-# /etc files or directories included explicitly (directories contribute only files not owned by any package)
-ETC_EXTRA = [
-    "/etc/docker/daemon.json", "/etc/timeshift/timeshift.json",
-    "/etc/sddm.conf", "/etc/sddm.conf.d", "/etc/mkinitcpio.d/linux-zen.preset",
-    "/etc/locale.conf", "/etc/vconsole.conf", "/etc/hostname", "/etc/zsh/zshrc", "/etc/environment",
-    "/etc/pacman.d/hooks", "/etc/systemd/system", "/etc/systemd/journald.conf.d",
-    "/etc/systemd/logind.conf.d", "/etc/modprobe.d", "/etc/sysctl.d", "/etc/udev/rules.d",
-    "/etc/X11/xorg.conf.d", "/etc/NetworkManager/conf.d", "/etc/environment.d",
-    # drop-in dirs for local settings that would otherwise edit package files (and cause .pacnew)
-    "/etc/profile.d", "/etc/ssh/sshd_config.d",
-]
-# /etc paths that are always encrypted (usually root-readable, needs sudo)
-ETC_SECRET = [
-    "/etc/NetworkManager/system-connections", "/etc/crypttab", "/etc/sudoers", "/etc/sudoers.d",
-    "/etc/mihomo/config.yaml", "/etc/wireguard",
-]
-# Never backed up: account databases, host keys, generated files; restoring them does more harm than good
-ETC_EXCLUDE = [
-    "/etc/passwd", "/etc/group", "/etc/shadow", "/etc/gshadow", "/etc/subuid", "/etc/subgid",
-    "/etc/machine-id", "/etc/resolv.conf", "/etc/ssh/ssh_host_*",
-    "*.pacnew", "*.pacsave", "*.bak", "*.bak.*", "*~",
-]
-# Bound to hardware / disk layout on restore: show the diff only, install only when named explicitly
-HARDWARE_BOUND = [
-    "/etc/fstab", "/etc/crypttab", "/etc/default/grub", "/etc/mkinitcpio.conf", "/etc/mkinitcpio.d/*",
-    "/etc/X11/xorg.conf.d/*", "/etc/modprobe.d/*",
-]
-SUDOERS = ["/etc/sudoers", "/etc/sudoers.d/*"]
+# The lists (extra / secret / exclude / hardware_bound) live in dotfiles.toml [etc].
+SUDOERS = ["/etc/sudoers", "/etc/sudoers.d/*"]   # validated with visudo before install (logic, not data)
+
+
+def _list(name: str) -> list[str]:
+    return list(dotconf.get(f"etc.{name}"))
+
 
 
 def _match(path: str, patterns: list[str]) -> bool:
@@ -55,24 +36,24 @@ class Sudo:
     def ensure(cls) -> bool:
         if cls.ready:
             return True
-        if sysinfo.run(["sudo", "-n", "true"]).ok:
+        if platforms.run(["sudo", "-n", "true"]).ok:
             cls.ready = True
-        elif cls.prompt and os.isatty(0) and sysinfo.run_live(["sudo", "-v"]) == 0:
+        elif cls.prompt and os.isatty(0) and platforms.run_live(["sudo", "-v"]) == 0:
             cls.ready = True
         return cls.ready
 
 
 def _owned_by_packages() -> set[str]:
-    if not sysinfo.have("pacman"):
+    if not platforms.have("pacman"):
         return set()
-    return {line for line in sysinfo.run(["pacman", "-Qlq"]).stdout.splitlines() if line.startswith("/etc/")}
+    return {line for line in platforms.run(["pacman", "-Qlq"]).stdout.splitlines() if line.startswith("/etc/")}
 
 
 def _modified_package_files() -> list[str]:
     """Package config files modified by the user (pacman's [modified] mark)."""
-    if not sysinfo.have("pacman"):
+    if not platforms.have("pacman"):
         return []
-    r = sysinfo.run(["pacman", "-Qii"], env={"LC_ALL": "C"})
+    r = platforms.run(["pacman", "-Qii"], env={"LC_ALL": "C"})
     return sorted(set(re.findall(r"(/etc/\S+) \[modified\]", r.stdout)))
 
 
@@ -84,10 +65,10 @@ def _files_under(path: str) -> list[str]:
         if os.access(p, os.R_OK | os.X_OK):
             return sorted(str(f) for f in p.rglob("*") if f.is_file() and not f.is_symlink() and f.stat().st_size < 1024 * 1024)
         if Sudo.ensure():
-            return sorted(sysinfo.run(["sudo", "find", path, "-type", "f", "-size", "-1024k"]).stdout.split("\n")[:-1])
+            return sorted(platforms.run(["sudo", "find", path, "-type", "f", "-size", "-1024k"]).stdout.split("\n")[:-1])
         ui.warn(f"cannot list {path} (needs sudo)")
         return []
-    if not p.exists() and Sudo.ensure() and sysinfo.run(["sudo", "test", "-f", path]).ok:
+    if not p.exists() and Sudo.ensure() and platforms.run(["sudo", "test", "-f", path]).ok:
         return [path]
     return []
 
@@ -95,19 +76,20 @@ def _files_under(path: str) -> list[str]:
 def collect_targets() -> dict[str, str]:
     """path -> plain | secret."""
     owned = _owned_by_packages()
+    exclude = _list("exclude")
     out: dict[str, str] = {}
     for f in _modified_package_files():
-        if not _match(f, ETC_EXCLUDE):
+        if not _match(f, exclude):
             out.setdefault(f, "plain")
-    for p in ETC_EXTRA:
+    for p in _list("extra"):
         is_dir = Path(p).is_dir()
         for f in _files_under(p):
-            if (is_dir and f in owned) or _match(f, ETC_EXCLUDE):
+            if (is_dir and f in owned) or _match(f, exclude):
                 continue
             out.setdefault(f, "plain")
-    for p in ETC_SECRET:
+    for p in _list("secret"):
         for f in _files_under(p):
-            if not _match(f, ETC_EXCLUDE):
+            if not _match(f, exclude):
                 out[f] = "secret"
     return dict(sorted(out.items()))
 
@@ -122,18 +104,18 @@ def status() -> None:
         for name in sorted(files):
             if name.endswith((".pacnew", ".pacsave")):
                 ui.info(f"  {os.path.join(dirpath, name)}")
-    if sysinfo.have("etckeeper") and not Path("/etc/.git").exists():
+    if platforms.have("etckeeper") and not Path("/etc/.git").exists():
         ui.info("etckeeper is installed but not initialized: /etc is backed up in system/; consider removing etckeeper to avoid duplication")
 
 
 class _Stage:
     def __init__(self):
-        self.dir = Path(tempfile.mkdtemp(prefix="chezmoi-etc.", dir=sysinfo.runtime_dir()))
+        self.dir = Path(tempfile.mkdtemp(prefix="chezmoi-etc.", dir=platforms.runtime_dir()))
         os.chmod(self.dir, 0o700)
         self.state = self.dir.with_name(self.dir.name + ".boltdb")
 
-    def cz(self, *args: str) -> sysinfo.Result:
-        return sysinfo.run(["chezmoi", "--source", str(chez.system_source_dir()), "--destination", str(self.dir),
+    def cz(self, *args: str) -> platforms.Result:
+        return platforms.run(["chezmoi", "--source", str(chez.system_source_dir()), "--destination", str(self.dir),
                             "--persistent-state", str(self.state), *args])
 
     def close(self):
@@ -154,7 +136,7 @@ def backup(run) -> None:
     ui.section("/etc -> system/ (separate chezmoi instance)")
     Sudo.prompt = True
     chez.system_source_dir().mkdir(exist_ok=True)
-    from dotfiles.backup import has_secret
+    from dotfiles.cli.backup import has_secret
 
     n = 0
     with _Stage() as stage:
@@ -165,10 +147,10 @@ def backup(run) -> None:
                 mode = stat.S_IMODE(os.stat(path).st_mode)
                 shutil.copyfile(path, dst)
             elif Sudo.ensure():
-                mode = int(sysinfo.run(["sudo", "stat", "-c", "%a", path]).stdout.strip() or "600", 8)
+                mode = int(platforms.run(["sudo", "stat", "-c", "%a", path]).stdout.strip() or "600", 8)
                 old = os.umask(0o077)
                 try:
-                    data = sysinfo.run(["sudo", "cat", "--", path])
+                    data = platforms.run(["sudo", "cat", "--", path])
                     if not data.ok:
                         ui.warn(f"failed to read: {path}")
                         continue
@@ -200,7 +182,7 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
     src = chez.system_source_dir() / "etc"
     if not src.is_dir():
         raise ui.Abort("system/etc does not exist: dotfiles backup (without --no-system) has not run on Linux yet")
-    from dotfiles.backup import preflight
+    from dotfiles.cli.backup import preflight
 
     preflight()
     Sudo.prompt = True
@@ -217,26 +199,26 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
             target = "/" + f.relative_to(stage.dir).as_posix()
             if filters and not any(target == p or target.startswith(p.rstrip("/") + "/") for p in filters):
                 continue
-            if sysinfo.run([*rsudo, "cmp", "-s", "--", str(f), target]).ok:
+            if platforms.run([*rsudo, "cmp", "-s", "--", str(f), target]).ok:
                 continue
             changed += 1
             ui.section(target)
             if str(f) in encrypted:
                 ui.info("(encrypted file; the content diff is not shown in the terminal)")
             else:
-                ui.info(sysinfo.run([*rsudo, "diff", "-u", "--label", target, "--label", "backup", "--", target, str(f)]).stdout.rstrip())
-            if _match(target, HARDWARE_BOUND) and target not in filters:
+                ui.info(platforms.run([*rsudo, "diff", "-u", "--label", target, "--label", "backup", "--", target, str(f)]).stdout.rstrip())
+            if _match(target, _list("hardware_bound")) and target not in filters:
                 ui.note("bound to hardware/disk layout: diff only; to install, run dotfiles system-restore --apply " + target)
                 held += 1
                 continue
-            if _match(target, SUDOERS) and not sysinfo.run([*rsudo, "visudo", "-cf", str(f)]).ok:
+            if _match(target, SUDOERS) and not platforms.run([*rsudo, "visudo", "-cf", str(f)]).ok:
                 ui.err("visudo validation failed; not installing (a broken sudoers would lock you out of sudo)")
                 continue
-            mode = sysinfo.run([*rsudo, "stat", "-c", "%a", "--", target]).stdout.strip() or f"{stat.S_IMODE(f.stat().st_mode):o}"
+            mode = platforms.run([*rsudo, "stat", "-c", "%a", "--", target]).stdout.strip() or f"{stat.S_IMODE(f.stat().st_mode):o}"
             cmd = ["sudo", "install", "-D", "-o", "root", "-g", "root", "-m", mode, "--", str(f), target]
             if not apply:
                 ui.dim("  + " + " ".join(cmd))
-            elif sysinfo.run_live(cmd) != 0:
+            elif platforms.run_live(cmd) != 0:
                 ui.warn(f"install failed: {target}")
     if not changed:
         ui.ok("/etc matches the backup")

@@ -4,9 +4,10 @@ import shutil
 
 import pytest
 
-from dotfiles import chez, sysinfo
+from dotfiles.utils import platforms
+from dotfiles.utils.common import chez
 
-needs_chezmoi = pytest.mark.skipif(not sysinfo.have("chezmoi"), reason="requires chezmoi")
+needs_chezmoi = pytest.mark.skipif(not platforms.have("chezmoi"), reason="requires chezmoi")
 
 
 def render_ignore(os_name: str) -> set[str]:
@@ -53,9 +54,9 @@ def test_register_platform_keeps_header(tmp_path, monkeypatch):
     shutil.copy(chez.platforms_file(), f)
     header = f.read_text(encoding="utf-8").split("[platforms]")[0]
     monkeypatch.setattr(chez, "platforms_file", lambda: f)
-    assert chez.register_platform(".config/kwinrc", "linux", dry=False)
-    assert not chez.register_platform(".config/kwinrc", "linux", dry=False)   # already registered
+    assert chez.register_platform(".config/dotfiles-test/never-registered.conf", "linux", dry=False)
+    assert not chez.register_platform(".config/dotfiles-test/never-registered.conf", "linux", dry=False)   # already registered
     assert not chez.register_platform(".config/fcitx5/new", "linux", dry=False)  # covered by the directory entry
     text = f.read_text(encoding="utf-8")
     assert text.startswith(header)
-    assert chez.load_platforms()["linux"].count(".config/kwinrc") == 1
+    assert chez.load_platforms()["linux"].count(".config/dotfiles-test/never-registered.conf") == 1

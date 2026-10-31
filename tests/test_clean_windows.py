@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from dotfiles import clean, sysinfo, ui
-from dotfiles.clean import windows as win
+from dotfiles.cli import clean
+from dotfiles.cli.clean import windows as win
+from dotfiles.utils import platforms, ui
 
 
 @pytest.fixture
@@ -17,14 +18,14 @@ def env(tmp_path, monkeypatch):
     local, roaming, temp = home / "AppData" / "Local", home / "AppData" / "Roaming", home / "AppData" / "Local" / "Temp"
     for d in (local, roaming, temp):
         d.mkdir(parents=True)
-    for mod in (win, sysinfo):
+    for mod in (win, platforms):
         for name, value in (("home", home), ("localappdata", local), ("appdata", roaming)):
             if hasattr(mod, name):
                 monkeypatch.setattr(mod, name, lambda v=value: v)
     monkeypatch.setenv("TEMP", str(temp))
     monkeypatch.setenv("SCOOP", str(home / "scoop"))
-    monkeypatch.setattr(sysinfo, "proc_running", lambda names: False)
-    monkeypatch.setattr(sysinfo, "file_locked", lambda p: False)
+    monkeypatch.setattr(platforms, "proc_running", lambda names: False)
+    monkeypatch.setattr(platforms, "file_locked", lambda p: False)
     monkeypatch.setattr(win, "pid_lock", lambda p: False)
     return home, local, roaming, temp
 

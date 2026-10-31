@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dotfiles import fsutil, ui
+from dotfiles.utils import fsutil, ui
 
 
 @pytest.fixture

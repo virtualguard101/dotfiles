@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from dotfiles import backup, cli, restore
+from dotfiles import cli
+from dotfiles.cli import backup, restore
 
 
 def test_ssh_config_parsing(tmp_path, monkeypatch):

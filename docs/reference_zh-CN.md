@@ -1,7 +1,7 @@
 # 参考手册
 
 `dotfiles` 各命令的行为、规则与可调整项。快速上手见根目录 [README_zh-CN.md](../README_zh-CN.md)。
-英文版：[reference.md](reference.md)。
+英文版：[reference.md](reference.md)。代码结构见 [architecture_zh-CN.md](architecture_zh-CN.md)。
 
 所有命令都通过 uv 运行：`uv run dotfiles <子命令>`（在仓库内），或 `uv run --project ~/.local/share/chezmoi --frozen --no-dev dotfiles <子命令>`（在任意目录）。工具只依赖 Python 标准库，`--no-dev` 时不需要访问 PyPI。
 
@@ -119,7 +119,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 | `chezmoi add --secrets error` 被 chezmoi 内置扫描拦下 | 同上，改为加密 |
 | 其余 | 明文 `chezmoi add` |
 
-候选清单在 `src/dotfiles/backup.py` 的 `LINUX` / `WINDOWS` 中：`track`（推荐托管，目录展开为其中小于1 MiB 的普通文件）、`secret`（一律加密）、`exclude`（展开目录时跳过的文件名模式）。
+候选清单在 `dotfiles.toml` 的 `[backup.linux]` / `[backup.windows]` 中：`track`（推荐托管，目录展开为其中小于 1 MiB 的普通文件）、`secret`（一律加密）、`exclude`（展开目录时跳过的文件名模式）、`ignore`（永远不加入也不提示的候选：确切路径、目录或相对 `~` 的通配符）。见 [3.8](#38-dotfilestoml-与-dotfiles-config)。
 
 ### 3.3 平台归属
 
@@ -159,21 +159,21 @@ uv run dotfiles check
 
 `/etc` 使用一个独立的 chezmoi 实例：源目录是仓库根目录的 `system/`，目标是 `$XDG_RUNTIME_DIR` 下的临时暂存区（tmpfs，用完即删）。root 才能读的文件通过 `sudo cat` 读入暂存区，因此需要在交互终端中运行；没有终端时这些文件会被跳过并给出警告。
 
-收集的目标（`src/dotfiles/system_etc.py`）：
+收集的目标（清单在 `dotfiles.toml` 的 `[etc]` 中）：
 
 - pacman 标记为 `[modified]` 的软件包配置文件；
 
-- `ETC_EXTRA` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
+- `extra` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
 
-- `ETC_SECRET` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密；
+- `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密；
 
-- 排除 `ETC_EXCLUDE`：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.bak` 等。
+- 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.bak` 等。
 
 恢复（`system-restore` 与 restore 的 `system` 步骤）：
 
 - 解密到暂存区后逐个与 `/etc` 比较，显示差异（加密文件只提示有差异，不显示内容）。
 
-- `HARDWARE_BOUND` 中的文件（`fstab`、`crypttab`、`default/grub`、`mkinitcpio.conf`、`mkinitcpio.d/*`、`X11/xorg.conf.d/*`、`modprobe.d/*`）只显示差异，必须在命令行中显式指定路径才会安装：新系统的磁盘 UUID、加密布局和硬件通常不同。
+- `hardware_bound` 中的文件（`fstab`、`crypttab`、`default/grub`、`mkinitcpio.conf`、`mkinitcpio.d/*`、`X11/xorg.conf.d/*`、`modprobe.d/*`）只显示差异，必须在命令行中显式指定路径才会安装：新系统的磁盘 UUID、加密布局和硬件通常不同。
 
 - `sudoers` 与 `sudoers.d/*` 安装前用 `visudo -cf` 校验，失败则不安装。
 
@@ -181,7 +181,26 @@ uv run dotfiles check
 
 ### 3.7 audit
 
-检查一律加密清单中的文件、`.pypirc`、`.netrc`、`.git-credentials`、`~/.ssh`（及其中的私钥）、`~/.gnupg`、私钥文件及其目录。Linux 要求文件 600、目录 700；Windows 要求 ACL 中只有当前用户、SYSTEM、Administrators。`--apply` 时收紧。
+检查 `backup.<os>.secret` 中的文件、`.pypirc`、`.netrc`、`.git-credentials`、`~/.ssh`（及其中的私钥）、`~/.gnupg`、私钥文件及其目录。Linux 要求文件 600、目录 700；Windows 要求 ACL 中只有当前用户、SYSTEM、Administrators。`--apply` 时收紧。
+
+### 3.8 dotfiles.toml 与 `dotfiles config`
+
+备份与清理的清单和阈值以数据形式放在仓库顶层的 `dotfiles.toml` 中（在 `home/` 之外，不会被部署）。
+schema（键、类型、说明、可覆盖的环境变量）在 `src/dotfiles/utils/common/config.py` 中；`dotfiles check` 会拒绝未知的
+键（拼写错误）和错误的类型。
+
+```
+dotfiles config list [前缀]          列出所有键的值和说明（例如 list backup.linux）
+dotfiles config get 键               查看一个值
+dotfiles config add 键 值...         追加到列表      例如 add backup.linux.ignore .config/spectaclerc
+dotfiles config remove 键 值...      从列表中删除
+dotfiles config set 键 值            设置数字或字符串，例如 set clean.linux.thumbnail_days 30
+dotfiles config path                 文件位置
+```
+
+写入是逐行编辑：数组保持每行一项，手写的注释和顺序都会保留；结果会先重新解析并校验，通过后才替换原文件。
+表数组（`[[clean.paths]]`、`[[clean.<os>.leftovers]]`）需要手动编辑。两个平台共用这个文件，像其他数据改动
+一样提交即可（[workflows_zh-CN.md](workflows_zh-CN.md)）。
 
 ---
 
@@ -241,18 +260,18 @@ dotfiles clean leftovers
 | `lsp` | default | `~/.cache/typescript`、`~/.cache/jedi`（语言服务运行时跳过） |
 | `wine` | default | wine-mono/gecko 安装包与 winetricks 缓存 |
 | `kde` | default | DrKonqi 崩溃报告、KRunner 书签副本、AppStream/Discover 缓存（Discover 运行时保留） |
-| `thumbnails` | default | 超过 `THUMBNAIL_DAYS` 天未访问的缩略图（`--deep`：全部） |
+| `thumbnails` | default | 超过 `thumbnail_days` 天未访问的缩略图（`--deep`：全部） |
 | `zcompdump` | default | 旧 zsh 版本遗留的 `~/.zcompdump-*` |
 | `shader` | opt | Mesa/RADV/Qt 着色器缓存 |
 | `trash` | opt | 清空回收站 |
-| `pacman` | opt | `sudo paccache -rk$PACCACHE_KEEP` 与 `-ruk0` |
-| `journal` | opt | `sudo journalctl --vacuum-size=$JOURNAL_MAX` |
+| `pacman` | opt | `sudo paccache -rk<paccache_keep>` 与 `-ruk0` |
+| `journal` | opt | `sudo journalctl --vacuum-size=<journal_max>` |
 
 ### 4.4 Windows 目标
 
 | 目标 | 层级 | 动作 |
 |---|---|---|
-| `temp` | default | `%TEMP%` 中超过 `TEMP_DAYS` 天未修改的顶层条目（目录中有新文件则保留；被占用的文件跳过） |
+| `temp` | default | `%TEMP%` 中超过 `temp_days` 天未修改的顶层条目（目录中有新文件则保留；被占用的文件跳过） |
 | `scoop` | default | `scoop cleanup -a -k`（`--deep` 额外 `scoop cache rm -a`） |
 | `electron` | default | `%APPDATA%\<App>` 下的 Chromium 缓存；VS Code 系（含 Cursor、Windsurf、Kiro、Trae）还有 CachedData 等 |
 | `browser` | default | Edge / Chrome / Brave 各配置文件的缓存与着色器缓存 |
@@ -266,16 +285,23 @@ dotfiles clean leftovers
 | `wu` | opt | 停止 wuauserv、bits 后清空 `SoftwareDistribution\Download`（需要管理员） |
 | `dism` | opt | `DISM /Online /Cleanup-Image /StartComponentCleanup`（需要管理员） |
 
-### 4.5 环境变量
+### 4.5 可调整项
 
-| 变量 | 默认 | 作用 |
-|---|---|---|
-| `THUMBNAIL_DAYS` | 90 | Linux `thumbnails` 的天数阈值 |
-| `TEMP_DAYS` | 7 | Windows `temp` 的天数阈值 |
-| `STALE_DAYS` | 180 | `leftovers` 判定久未使用的天数 |
-| `JOURNAL_MAX` | 1G | `journal` 清理后保留的大小 |
-| `PACCACHE_KEEP` | 1 | `pacman` 每个包保留的版本数 |
-| `UNCOVERED_MIN_MB` | 10（Linux）/ 100（Windows） | `scan` 列出未覆盖项的最小体积 |
+在 `dotfiles.toml` 中设置（[3.8](#38-dotfilestoml-与-dotfiles-config)）；设置了对应的环境变量时，本次运行以环境变量为准。
+
+| 键 | 默认 | 环境变量 | 作用 |
+|---|---|---|---|
+| `clean.linux.thumbnail_days` | 90 | `THUMBNAIL_DAYS` | Linux `thumbnails` 的天数阈值 |
+| `clean.windows.temp_days` | 7 | `TEMP_DAYS` | Windows `temp` 的天数阈值 |
+| `clean.<os>.stale_days` | 180 | `STALE_DAYS` | `leftovers` 判定久未使用的天数 |
+| `clean.linux.journal_max` | 1G | `JOURNAL_MAX` | `journal` 清理后保留的大小 |
+| `clean.linux.paccache_keep` | 1 | `PACCACHE_KEEP` | `pacman` 每个包保留的版本数 |
+| `clean.<os>.uncovered_min_mb` | 10（Linux）/ 100（Windows） | `UNCOVERED_MIN_MB` | `scan` 列出未覆盖项的最小体积 |
+| `clean.<os>.uncovered_always` | | | `scan` 永远不报告为"未覆盖"的缓存目录名 |
+| `[[clean.<os>.leftovers]]` | | | `detect` 中的名称都未安装时，`leftovers` 报告 `paths` |
+| `clean.disabled` | `[]` | | 永远不列出、不运行的目标 |
+| `clean.opt` | `[]` | | 从 default 层移到 opt 层的目标 |
+| `[[clean.paths]]` | | | 额外的纯路径目标：`id`、`tier`、`desc`、`paths`（可用 `~/`）、可选 `os`；每个路径仍要通过 [4.1](#41-安全措施) 的范围检查 |
 
 同时遵循各工具自身的位置变量：`XDG_*`、`CARGO_HOME`、`VCPKG_ROOT`、`GRADLE_USER_HOME`、
 `PRE_COMMIT_HOME`、`BUN_INSTALL`、`NUGET_HTTP_CACHE_PATH`、`NUGET_PACKAGES`、`SCOOP` 等。
@@ -335,7 +361,7 @@ pre-commit install-hooks          # 可选：预先构建环境（首次会下�
 | `.pre-commit-config.yaml` | hook 列表，远程 hook 固定到具体版本 |
 | `.gitleaks.toml` | 沿用 gitleaks 内置规则，补充 WakaTime 规则，跳过 `encrypted_*.age` 密文 |
 | `.gitattributes` | 统一 LF 换行（不受 Windows `core.autocrlf` 影响）；`*.age`、`*.ptb` 不做转换；`*.bat`、`*.cmd` 用 CRLF |
-| `src/dotfiles/guard.py` | 本仓库专用规则；既是 Python 包的模块，也由 pre-commit 直接执行，因此只用标准库 |
+| `src/dotfiles/utils/common/guard/` | 本仓库专用规则（`checks.py`）；`dotfiles backup` / `check` 导入它，pre-commit 直接执行它（`python src/dotfiles/utils/common/guard …`），因此只用标准库。新的检查接入它的 `CHECKS` 注册表（[architecture_zh-CN.md](architecture_zh-CN.md#4-guard扩展接口)） |
 
 ### 5.2 检查内容
 
@@ -374,7 +400,7 @@ pre-commit install-hooks          # 可选：预先构建环境（首次会下�
 |---|---|
 | 敏感文件被明文添加了 | `git restore --staged <源文件>`，`chezmoi forget <目标>`，再 `chezmoi add --encrypt <目标>` |
 | 明文配置里混进了 token | 把 token 移到加密文件或环境变量中，或把整个文件改为加密托管 |
-| 误报 | 在该行末尾加 `gitleaks:allow`（两者都认），或调整 `guard.py` / `.gitleaks.toml` |
+| 误报 | 在该行末尾加 `gitleaks:allow`（两者都认），或调整 `utils/common/guard/checks.py` / `.gitleaks.toml` |
 | 用 `--no-verify` 提交但未推送 | pre-push 会拦下；`git reset --soft <上一个干净的提交>` 后重新整理 |
 | 已经推送 | 立即**轮换该凭据**；改写 git 历史无法撤回已公开的内容 |
 
@@ -425,7 +451,7 @@ uv run dotfiles guard prune-stash --max-age-minutes 0
 
 2. `dotfiles backup -n`：检查漂移——上次 apply 之后本地改过的文件（apply 会覆盖它们）。要保留就用 `dotfiles backup --commit` 收回仓库，或直接改源文件。
 
-3. `dotfiles restore --apply --only dotfiles`：部署源状态；将被覆盖的文件先备份到 `~/.local/state/dotfiles/pre-apply-*`。
+3. 先 `dotfiles apply` 预览，再 `dotfiles apply --apply`：部署源状态；将被覆盖的文件先备份到 `~/.local/state/dotfiles/pre-apply-*`（[6.4](#64-dotfiles-apply)）。
 
 4. 需要收紧权限时 `dotfiles audit --apply`，最后用 `dotfiles doctor` 与 `dotfiles check` 确认。
 
@@ -482,6 +508,24 @@ chezmoi add ~/.config/foo/bar.conf         # 敏感内容用 `chezmoi add --encr
 # 然后在 platforms.toml 的 linux / windows / shared 中登记 ".config/foo"（或具体文件）
 uv run dotfiles check
 ```
+
+### 6.4 dotfiles apply
+
+`backup` 的反方向：把仓库的源状态部署到 `~`。
+
+```
+dotfiles apply [目标...]             预览（默认）
+dotfiles apply --apply [目标...]     部署
+```
+
+- 预览列出每个待部署的变更（`A` 新增、`D` 删除、`M` 修改）。明文目标显示 diff；**加密目标只显示一行，
+  从不在屏幕上解密**。`!` 标记的是上次 apply 之后你在本地改过的文件——部署会覆盖它，所以要保留的改动
+  先用 `dotfiles backup` 或 `chezmoi merge` 处理（[6.3](#63-需要手动合并的场景)）。
+- `--apply` 先完整预演一遍（解密或模板失败时什么都不写），把将被覆盖的文件复制到
+  `~/.local/state/dotfiles/pre-apply-*`，再运行 `chezmoi apply`。它与 restore 的 `dotfiles` 步骤是同一份
+  代码（`src/dotfiles/utils/common/deploy.py`）。
+- `目标` 把范围限制在 `~` 下的部分路径（chezmoi 托管的文件或目录）。
+- 不包括 externals 和 `/etc`：分别用 `dotfiles restore --only externals` 和 `dotfiles system-restore`。
 
 ---
 

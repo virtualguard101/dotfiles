@@ -13,21 +13,23 @@ home/                     两个平台的 dotfiles（chezmoi 源状态）
   .chezmoidata/platforms.toml   每个目标的平台归属；.chezmoiignore 据此生成
 system/                   Linux /etc 的备份（独立的 chezmoi 实例，不部署到 ~）
 packages/                 软件包清单：archpkg.txt / scoopfile.json / winget.json
+dotfiles.toml             备份与清理的清单和阈值（数据；可用 dotfiles config 编辑）
 src/dotfiles/             Python 工具（只用标准库）
 bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
 docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
+docs/architecture.md      架构：工具的组织方式、分层规则、如何扩展
 ```
 
 根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。
 
 ## 设计原则
 
-- **chezmoi 负责文件读写，Python 工具负责决策**：`~` 与源状态之间的所有转换（属性前缀、加密、模板渲染、忽略规则）都由 chezmoi 完成。`dotfiles` 决定交给 chezmoi 哪些文件、要不要加密、结果能不能提交，然后调用 chezmoi 执行。工具自己只写 `platforms.toml` 和 `packages/` 下的软件包清单。
+- **chezmoi 负责文件读写，Python 工具负责决策**：`~` 与源状态之间的所有转换（属性前缀、加密、模板渲染、忽略规则）都由 chezmoi 完成。`dotfiles` 决定交给 chezmoi 哪些文件、要不要加密、结果能不能提交，然后调用 chezmoi 执行。工具自己只写 `platforms.toml`、`dotfiles.toml`（通过 `dotfiles config`）和 `packages/` 下的软件包清单。
 
-- **源状态就是备份清单**：`home/` 下有的就是托管的，`backup` 会对它们全部执行 re-add。`src/dotfiles/backup.py` 里的 `track` / `secret` 清单只用来发现新文件；`platforms.toml` 只规定每个托管目标在哪个平台部署。
+- **源状态就是备份清单**：`home/` 下有的就是托管的，`backup` 会对它们全部执行 re-add。`dotfiles.toml` 里的 `track` / `secret` 清单只用来发现新文件（`ignore` 用来屏蔽永远不想备份的候选）；`platforms.toml` 只规定每个托管目标在哪个平台部署。
 
-- **每个命令只有一个方向**：`backup` 只把 `~` 写进仓库，`restore` / `chezmoi apply` 只把仓库写进 `~`。`backup` 从不部署，从不从源状态删除（停止托管用 `chezmoi forget`，并删掉 `platforms.toml` 里的对应条目），从不合并模板（只报告漂移），也从不推送。
+- **每个命令只有一个方向**：`backup` 只把 `~` 写进仓库，`apply` / `restore` / `chezmoi apply` 只把仓库写进 `~`。`backup` 从不部署，从不从源状态删除（停止托管用 `chezmoi forget`，并删掉 `platforms.toml` 里的对应条目），从不合并模板（只报告漂移），也从不推送。
 
 - **原生 chezmoi 用法同样适用**：`chezmoi add`、`re-add`、`edit` 产生的源文件和 `backup` 产生的完全一样。漏掉的步骤（目标没登记、敏感文件被明文添加）会被 `dotfiles check` 和提交 hook 拦下，不管改动是从哪条路径来的，规则都由它们执行。
 
@@ -87,6 +89,8 @@ bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 win
 uv run dotfiles doctor                 # 检测环境：工具链、加密配置、仓库与 hooks、缺少的软件包
 uv run dotfiles backup -n              # 预览备份
 uv run dotfiles backup --commit        # 备份并提交（不推送）；之后 git push
+uv run dotfiles apply                  # 预览把仓库中的改动部署到 ~ 会改变什么
+uv run dotfiles apply --apply          # 部署（被覆盖的文件先备份）
 uv run dotfiles clean scan             # 查看可清理的缓存
 uv run dotfiles clean run --apply      # 清理 default 层
 ```
@@ -97,12 +101,14 @@ uv run dotfiles clean run --apply      # 清理 default 层
 |---|---|
 | `doctor [--json]` | 环境检测（只读），缺少必需条件时退出码为 1 |
 | `restore [--apply] [--only …] [--skip …] [--key-file 路径] [--yes]` | 重装后恢复，默认只显示计划 |
+| `apply [--apply] [目标…]` | 把仓库部署到 `~`（backup 的反方向）：先显示 diff，加密目标从不解密显示 |
 | `status` | 备份状态：漂移、未托管的候选、软件包清单、权限 |
 | `backup [-n] [--no-system] [--commit]` | re-add 已托管文件 → 添加候选 → `/etc`（Linux）→ 软件包清单 → 安全检查 |
 | `check` | 安全检查：明文密钥、`.age` 格式、必须加密的目标、平台归属 |
 | `audit [--apply]` | 敏感文件权限（Linux 600/700，Windows ACL） |
 | `system-restore [--apply] [/etc/路径…]` | Linux：对比 `system/` 与当前 `/etc`，按需安装 |
 | `clean scan / list / run / leftovers` | 缓存清理，`run` 默认只预览，`--apply` 执行 |
+| `config list / get / add / remove / set` | `dotfiles.toml` 中的清单与阈值；编辑时保留注释 |
 
 所有修改性操作默认只预览。完整说明见 [docs/reference_zh-CN.md](docs/reference_zh-CN.md)。
 

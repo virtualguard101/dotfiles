@@ -1,7 +1,7 @@
 # Reference
 
 Behavior, rules and tunables of the `dotfiles` commands. Quick start in the top-level
-[README.md](../README.md). Chinese version: [reference_zh-CN.md](reference_zh-CN.md).
+[README.md](../README.md). Chinese version: [reference_zh-CN.md](reference_zh-CN.md). Code layout: [architecture.md](architecture.md).
 
 Run everything through uv: `uv run dotfiles <command>` (inside the repo), or `uv run --project ~/.local/share/chezmoi --frozen --no-dev dotfiles <command>` (anywhere). The tool depends only on the Python standard library; with `--no-dev` it never touches PyPI.
 
@@ -119,9 +119,11 @@ For each file in the candidate list, in order:
 | `chezmoi add --secrets error` blocked by chezmoi's built-in scan | same, switched to encrypted |
 | otherwise | plain `chezmoi add` |
 
-The candidate lists live in `src/dotfiles/backup.py` as `LINUX` / `WINDOWS`: `track` (recommended
-for tracking; directories expand to regular files under 1 MiB), `secret` (always encrypted),
-`exclude` (filename patterns skipped when expanding directories).
+The candidate lists live in `dotfiles.toml` under `[backup.linux]` / `[backup.windows]`: `track`
+(recommended for tracking; directories expand to regular files under 1 MiB), `secret` (always
+encrypted), `exclude` (filename patterns skipped when expanding directories) and `ignore`
+(candidates never added nor reported: an exact path, a directory, or a glob relative to `~`). See
+[3.8](#38-dotfilestoml-and-dotfiles-config).
 
 ### 3.3 Platform ownership
 
@@ -161,21 +163,21 @@ Same-name targets needed on both platforms with different content: make it a tem
 
 `/etc` uses a separate chezmoi instance: the source dir is `system/` at the repo top, the destination is a staging area under `$XDG_RUNTIME_DIR` (tmpfs, deleted afterwards). Files only root can read are read in via `sudo cat`, so run it in an interactive terminal; without a terminal those files are skipped with a warning.
 
-Collected targets (`src/dotfiles/system_etc.py`):
+Collected targets (lists in `dotfiles.toml` `[etc]`):
 
 - package config files marked `[modified]` by pacman;
 
-- paths in `ETC_EXTRA` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
+- paths in `extra` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
 
-- paths in `ETC_SECRET`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
+- paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
 
-- everything in `ETC_EXCLUDE` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.bak`, etc.
+- everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.bak`, etc.
 
 Restore (`system-restore`, and restore's `system` step):
 
 - decrypts into the staging area and compares each file with `/etc`, showing diffs (encrypted files only report that they differ, without content).
 
-- Files in `HARDWARE_BOUND` (`fstab`, `crypttab`, `default/grub`, `mkinitcpio.conf`, `mkinitcpio.d/*`, `X11/xorg.conf.d/*`, `modprobe.d/*`) show diffs only and must be named explicitly on the command line to install: a new system's disk UUIDs, encryption layout and hardware usually differ.
+- Files in `hardware_bound` (`fstab`, `crypttab`, `default/grub`, `mkinitcpio.conf`, `mkinitcpio.d/*`, `X11/xorg.conf.d/*`, `modprobe.d/*`) show diffs only and must be named explicitly on the command line to install: a new system's disk UUIDs, encryption layout and hardware usually differ.
 
 - `sudoers` and `sudoers.d/*` are validated with `visudo -cf` before installing; on failure they are not installed.
 
@@ -183,7 +185,27 @@ Restore (`system-restore`, and restore's `system` step):
 
 ### 3.7 audit
 
-Checks the always-encrypt list's files, `.pypirc`, `.netrc`, `.git-credentials`, `~/.ssh` (and the private keys inside), `~/.gnupg`, key files and their directories. Linux requires files 600 and dirs 700; Windows requires the ACL to contain only the user, SYSTEM and Administrators. Tightened with `--apply`.
+Checks the files of `backup.<os>.secret`, `.pypirc`, `.netrc`, `.git-credentials`, `~/.ssh` (and the private keys inside), `~/.gnupg`, key files and their directories. Linux requires files 600 and dirs 700; Windows requires the ACL to contain only the user, SYSTEM and Administrators. Tightened with `--apply`.
+
+### 3.8 dotfiles.toml and `dotfiles config`
+
+The backup and cleanup lists and tunables are data in `dotfiles.toml` at the repo top (outside
+`home/`, so never deployed). The schema — keys, types, descriptions, environment overrides — lives in
+`src/dotfiles/utils/common/config.py`; `dotfiles check` rejects unknown keys (typos) and wrong types.
+
+```
+dotfiles config list [PREFIX]        every key with its value and description (e.g. list backup.linux)
+dotfiles config get KEY              one value
+dotfiles config add KEY VALUE...     append to a list      e.g. add backup.linux.ignore .config/spectaclerc
+dotfiles config remove KEY VALUE...  remove from a list
+dotfiles config set KEY VALUE        set a number or string, e.g. set clean.linux.thumbnail_days 30
+dotfiles config path                 where the file is
+```
+
+Writes edit the file line by line: arrays stay one item per line, hand-written comments and ordering
+are kept, and the result is re-parsed and validated before it replaces the file. Arrays of tables
+(`[[clean.paths]]`, `[[clean.<os>.leftovers]]`) are edited by hand. The file is shared by both
+platforms; commit it like any other data change ([workflows.md](workflows.md)).
 
 ---
 
@@ -243,18 +265,18 @@ dotfiles clean leftovers
 | `lsp` | default | `~/.cache/typescript`, `~/.cache/jedi` (skipped while a language server runs) |
 | `wine` | default | wine-mono/gecko installers and winetricks caches |
 | `kde` | default | DrKonqi crash reports, KRunner bookmark copies, AppStream/Discover caches (Discover's kept while it runs) |
-| `thumbnails` | default | thumbnails not accessed for `THUMBNAIL_DAYS` days (`--deep`: all) |
+| `thumbnails` | default | thumbnails not accessed for `thumbnail_days` days (`--deep`: all) |
 | `zcompdump` | default | `~/.zcompdump-*` left over from older zsh versions |
 | `shader` | opt | Mesa/RADV/Qt shader caches |
 | `trash` | opt | empty the trash |
-| `pacman` | opt | `sudo paccache -rk$PACCACHE_KEEP` and `-ruk0` |
-| `journal` | opt | `sudo journalctl --vacuum-size=$JOURNAL_MAX` |
+| `pacman` | opt | `sudo paccache -rk<paccache_keep>` and `-ruk0` |
+| `journal` | opt | `sudo journalctl --vacuum-size=<journal_max>` |
 
 ### 4.4 Windows targets
 
 | Target | Tier | Action |
 |---|---|---|
-| `temp` | default | top-level `%TEMP%` entries older than `TEMP_DAYS` days (a dir with newer files inside is kept; locked files are skipped) |
+| `temp` | default | top-level `%TEMP%` entries older than `temp_days` days (a dir with newer files inside is kept; locked files are skipped) |
 | `scoop` | default | `scoop cleanup -a -k` (`--deep` also `scoop cache rm -a`) |
 | `electron` | default | Chromium caches under `%APPDATA%\<App>`; VS Code-family (Code, Cursor, Windsurf, Kiro, Trae) also CachedData etc. |
 | `browser` | default | profile and shader caches of Edge / Chrome / Brave |
@@ -268,16 +290,24 @@ dotfiles clean leftovers
 | `wu` | opt | stops wuauserv and bits, then empties `SoftwareDistribution\Download` (needs admin) |
 | `dism` | opt | `DISM /Online /Cleanup-Image /StartComponentCleanup` (needs admin) |
 
-### 4.5 Environment variables
+### 4.5 Tunables
 
-| Variable | Default | Effect |
-|---|---|---|
-| `THUMBNAIL_DAYS` | 90 | day threshold for Linux `thumbnails` |
-| `TEMP_DAYS` | 7 | day threshold for Windows `temp` |
-| `STALE_DAYS` | 180 | days without writes for `leftovers` |
-| `JOURNAL_MAX` | 1G | journal size kept after `journal` |
-| `PACCACHE_KEEP` | 1 | versions kept per package by `pacman` |
-| `UNCOVERED_MIN_MB` | 10 (Linux) / 100 (Windows) | minimum size for `scan` to list uncovered items |
+Set in `dotfiles.toml` ([3.8](#38-dotfilestoml-and-dotfiles-config)); the environment variable, when
+set, overrides the file for one run.
+
+| Key | Default | Environment | Effect |
+|---|---|---|---|
+| `clean.linux.thumbnail_days` | 90 | `THUMBNAIL_DAYS` | day threshold for Linux `thumbnails` |
+| `clean.windows.temp_days` | 7 | `TEMP_DAYS` | day threshold for Windows `temp` |
+| `clean.<os>.stale_days` | 180 | `STALE_DAYS` | days without writes for `leftovers` |
+| `clean.linux.journal_max` | 1G | `JOURNAL_MAX` | journal size kept after `journal` |
+| `clean.linux.paccache_keep` | 1 | `PACCACHE_KEEP` | versions kept per package by `pacman` |
+| `clean.<os>.uncovered_min_mb` | 10 (Linux) / 100 (Windows) | `UNCOVERED_MIN_MB` | minimum size for `scan` to list uncovered items |
+| `clean.<os>.uncovered_always` | | | cache dir names `scan` never reports as uncovered |
+| `[[clean.<os>.leftovers]]` | | | `detect` names -> `paths` reported by `leftovers` when none of the names is installed |
+| `clean.disabled` | `[]` | | target ids never listed or run |
+| `clean.opt` | `[]` | | target ids moved from the default tier to opt |
+| `[[clean.paths]]` | | | extra path-only targets: `id`, `tier`, `desc`, `paths` (`~/` allowed), optional `os`; every path still passes the scope check of [4.1](#41-safety-measures) |
 
 Tool-specific location variables are honored too: `XDG_*`, `CARGO_HOME`, `VCPKG_ROOT`, `GRADLE_USER_HOME`, `PRE_COMMIT_HOME`, `BUN_INSTALL`, `NUGET_HTTP_CACHE_PATH`, `NUGET_PACKAGES`,
 `SCOOP`, etc.
@@ -337,7 +367,7 @@ pre-commit install-hooks          # optional: pre-build the envs (first run down
 | `.pre-commit-config.yaml` | hook list, remote hooks pinned to exact versions |
 | `.gitleaks.toml` | gitleaks built-in rules plus a WakaTime rule; skips `encrypted_*.age` ciphertext |
 | `.gitattributes` | LF line endings everywhere (immune to Windows `core.autocrlf`); `*.age`, `*.ptb` untouched; `*.bat`, `*.cmd` use CRLF |
-| `src/dotfiles/guard.py` | repo-specific rules; both a package module and executed directly by pre-commit, so standard library only |
+| `src/dotfiles/utils/common/guard/` | repo-specific rules (`checks.py`); imported by `dotfiles backup` / `check` and run directly by pre-commit (`python src/dotfiles/utils/common/guard …`), so standard library only. New checks plug into its `CHECKS` registry ([architecture.md](architecture.md#4-guard-the-extension-interface)) |
 
 ### 5.2 What is checked
 
@@ -374,7 +404,7 @@ Output contains only `file:line` and the rule name.
 |---|---|
 | a sensitive file was added in plaintext | `git restore --staged <source>`, `chezmoi forget <target>`, then `chezmoi add --encrypt <target>` |
 | a token slipped into a plaintext config | move the token to an encrypted file or an env var, or track the whole file encrypted |
-| false positive | add a trailing `gitleaks:allow` comment (both tools honor it), or adjust `guard.py` / `.gitleaks.toml` |
+| false positive | add a trailing `gitleaks:allow` comment (both tools honor it), or adjust `utils/common/guard/checks.py` / `.gitleaks.toml` |
 | committed with `--no-verify`, not yet pushed | pre-push will catch it; `git reset --soft <last clean commit>` and redo |
 | already pushed | **rotate that credential immediately**; rewriting git history cannot un-publish it |
 
@@ -424,7 +454,7 @@ Pulling (e.g. after `dev` is merged into `main`) needs no re-initialization — 
 
 2. `dotfiles backup -n`: check for drift — live files modified since the last apply (apply would overwrite them). Keep wanted changes with `dotfiles backup --commit`, or edit the source files directly.
 
-3. `dotfiles restore --apply --only dotfiles`: deploys the source state; files about to be overwritten are backed up to `~/.local/state/dotfiles/pre-apply-*` first.
+3. `dotfiles apply` to preview, then `dotfiles apply --apply`: deploys the source state; files about to be overwritten are backed up to `~/.local/state/dotfiles/pre-apply-*` first ([6.4](#64-dotfiles-apply)).
 
 4. `dotfiles audit --apply` if permissions need tightening, then `dotfiles doctor` and `dotfiles check` to confirm.
 
@@ -481,6 +511,26 @@ chezmoi add ~/.config/foo/bar.conf         # or `chezmoi add --encrypt` for sens
 # then register ".config/foo" (or the concrete file) in platforms.toml under linux / windows / shared
 uv run dotfiles check
 ```
+
+### 6.4 dotfiles apply
+
+The reverse of `backup`: deploys the repo's source state into `~`.
+
+```
+dotfiles apply [TARGET...]            preview (default)
+dotfiles apply --apply [TARGET...]    deploy
+```
+
+- The preview lists every pending change (`A` added, `D` deleted, `M` modified). Plaintext targets
+  show their diff; **encrypted targets get one line and are never decrypted on screen**. A `!` marks a
+  file you edited locally since the last apply — applying overwrites it, so keep such edits first with
+  `dotfiles backup` or `chezmoi merge` ([6.3](#63-cases-that-need-a-manual-merge)).
+- `--apply` rehearses the whole apply first (nothing is written if decryption or a template fails),
+  copies the files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs
+  `chezmoi apply`. It is the same code as restore's `dotfiles` step (`src/dotfiles/utils/common/deploy.py`).
+- `TARGET` limits it to some paths under `~` (files or directories chezmoi manages).
+- Externals and `/etc` are not included: use `dotfiles restore --only externals` and
+  `dotfiles system-restore`.
 
 ---
 

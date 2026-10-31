@@ -18,7 +18,7 @@ How branches are used and which path each kind of change takes. Command details 
 
 ### 2.1 Daily backups: commit straight to `main`, on each machine
 
-Dotfile content, the manifests in `packages/` and the `/etc` backup:
+Dotfile content, the manifests in `packages/`, the `/etc` backup, and `dotfiles.toml` edits that add entries or tune thresholds (`dotfiles config add backup.linux.track …`, `… ignore …`, `config set clean.…`):
 
 ```bash
 git pull --rebase
@@ -36,7 +36,7 @@ The one common conflict is `platforms.toml`, when both machines register new tar
 
 ### 2.2 Tool, rules and shared config: `dev` -> PR -> `main`
 
-This covers `src/`, `tests/`, `bootstrap.*`, `.chezmoiignore`, `.chezmoi.toml.tmpl`, shared templates (e.g. `.gitconfig.tmpl`), moving a target between platforms in `platforms.toml`, and the guard rules. A mistake here breaks recovery on both platforms. Before merging, at least:
+This covers `src/`, `tests/`, `bootstrap.*`, `.chezmoiignore`, `.chezmoi.toml.tmpl`, shared templates (e.g. `.gitconfig.tmpl`), moving a target between platforms in `platforms.toml`, removing entries from the protective lists in `dotfiles.toml` (`backup.<os>.secret`, `etc.secret`, `etc.exclude`), and the guard rules. A mistake here breaks recovery on both platforms. Before merging, at least:
 
 ```bash
 uv run pytest && uv run dotfiles check

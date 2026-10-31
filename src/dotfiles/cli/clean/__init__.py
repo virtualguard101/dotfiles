@@ -1,130 +1,60 @@
-"""Cache cleanup engine: table-driven targets, preview by default. Per-platform target tables
-live in linux.py / windows.py.
-
-Each target provides:
-  paths(ctx)  paths that would be deleted/pruned this run (used for size reporting); Skip("reason")
-              marks something skipped because an app is running etc.
-  clean(ctx)  perform the cleanup (only prints in dry-run); defaults to deleting the paths() output
-  avail(ctx)  optional: return False when the target does not apply (tool not installed)
-  size(ctx)   optional: override the size statistic (bytes; -1 when it cannot be measured)
-"""
+"""dotfiles clean: table-driven cache cleanup, preview by default. Engine types live in
+base.py, per-platform target tables in linux.py / windows.py, shared toolchain targets in shared.py."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable, Iterable
+from dotfiles.cli.clean.base import (
+    Ctx,
+    Target,
+    measure,
+    path_target,
+    split_paths,
+    sub_dirs,
+)
+from dotfiles.utils import fsutil, platforms, ui
+from dotfiles.utils.common import config as dotconf
 
-from dotfiles import fsutil, sysinfo, ui
-
-
-class Skip(str):
-    """A skip note inside paths()."""
-
-
-@dataclass
-class Ctx:
-    deep: bool = False
-    dry: bool = True
-    deleter: fsutil.Deleter | None = None
-    failed: bool = False
-
-    def cmd(self, *argv: str) -> bool:
-        """Run a cleanup command; only prints in dry-run. Failures are recorded, not raised."""
-        if self.dry:
-            ui.dim(f"  + {' '.join(argv)}")
-            return True
-        if not sysinfo.have(argv[0]):
-            ui.warn(f"{argv[0]} not found (continuing)")
-            self.failed = True
-            return False
-        rc = sysinfo.run_live(list(argv))
-        if rc != 0:
-            ui.warn(f"command failed (continuing): {' '.join(argv)}")
-            self.failed = True
-        return rc == 0
-
-    def remove(self, paths: Iterable[Path | str]) -> None:
-        assert self.deleter is not None
-        self.deleter.remove(paths)
-
-
-Paths = Iterable["Path | Skip"]
-
-
-@dataclass
-class Target:
-    id: str
-    tier: str            # default | opt
-    desc: str
-    paths: Callable[[Ctx], Paths]
-    clean: Callable[[Ctx], None] | None = None
-    avail: Callable[[Ctx], bool] | None = None
-    size: Callable[[Ctx], int] | None = None
-    extra: dict = field(default_factory=dict)
-
-    def available(self, ctx: Ctx) -> bool:
-        if self.avail is None:
-            return True
-        try:
-            return bool(self.avail(ctx))
-        except Exception:
-            return False
-
-    def run_clean(self, ctx: Ctx) -> None:
-        if self.clean is not None:
-            self.clean(ctx)
-            return
-        clean_from_paths(ctx, self.paths(ctx))
-
-
-def clean_from_paths(ctx: Ctx, items: Paths) -> None:
-    for p in items:
-        if isinstance(p, Skip):
-            ui.warn(f"{p}, skipping")
-        elif p:
-            ctx.remove([p])
-
-
-def split_paths(items: Paths) -> tuple[list[Path], list[str]]:
-    paths, skips = [], []
-    for p in items:
-        if isinstance(p, Skip):
-            skips.append(str(p))
-        elif p:
-            paths.append(Path(p))
-    return paths, skips
-
-
-def measure(t: Target, ctx: Ctx) -> tuple[int, list[str]]:
-    try:
-        paths, skips = split_paths(t.paths(ctx))
-    except Exception as e:   # a failed measurement must not affect other targets
-        return -1, [f"measurement failed: {e}"]
-    size = t.size(ctx) if t.size else fsutil.size_of(paths)
-    return size, skips
-
-
-def existing(paths: Iterable[Path]) -> list[Path]:
-    return [p for p in paths if p and p.exists()]
-
-
-def sub_dirs(path: Path, pattern: str = "*") -> list[Path]:
-    try:
-        return sorted(p for p in path.glob(pattern) if p.is_dir() and not fsutil.is_link(p))
-    except OSError:
-        return []
+__all__ = ["Ctx", "Target", "cmd_leftovers", "cmd_list", "cmd_run", "cmd_scan"]
 
 
 # ---------------------------------------------------------------- platform module
 
 def platform():
-    if sysinfo.IS_WINDOWS:
-        from dotfiles.clean import windows as mod
-    elif sysinfo.IS_LINUX:
-        from dotfiles.clean import linux as mod
+    if platforms.IS_WINDOWS:
+        from dotfiles.cli.clean import windows as mod
+    elif platforms.IS_LINUX:
+        from dotfiles.cli.clean import linux as mod
     else:
-        raise ui.Abort(f"unsupported platform: {sysinfo.OS_NAME}", 2)
+        raise ui.Abort(f"unsupported platform: {platforms.OS_NAME}", 2)
     return mod
+
+
+def targets(mod) -> list[Target]:
+    """The platform's built-in targets adjusted by dotfiles.toml [clean]: `disabled` ids are dropped,
+    `opt` ids move to the opt tier, and [[clean.paths]] adds path-only targets."""
+    builtin = mod.targets()
+    ids = {t.id for t in builtin}
+    disabled, opt = set(dotconf.get("clean.disabled")), set(dotconf.get("clean.opt"))
+    out = []
+    for t in builtin:
+        if t.id in disabled:
+            continue
+        if t.id in opt:
+            t.tier = "opt"
+        out.append(t)
+    for spec in dotconf.get("clean.paths"):
+        if spec.get("os") not in (None, platforms.OS_NAME):
+            continue
+        if spec["id"] in ids:
+            raise ui.Abort(f"dotfiles.toml [[clean.paths]] id {spec['id']!r} clashes with a built-in target", 2)
+        if spec["tier"] not in ("default", "opt"):
+            raise ui.Abort(f"dotfiles.toml [[clean.paths]] {spec['id']}: tier must be default or opt", 2)
+        ids.add(spec["id"])
+        if spec["id"] not in disabled:
+            out.append(path_target(spec, platforms.home()))
+    unknown = (disabled | opt) - ids
+    if unknown:
+        ui.warn(f"dotfiles.toml [clean] names unknown targets: {', '.join(sorted(unknown))}")
+    return out
 
 
 def make_ctx(mod, *, dry: bool, deep: bool) -> Ctx:
@@ -136,7 +66,7 @@ def make_ctx(mod, *, dry: bool, deep: bool) -> Ctx:
 def cmd_list() -> int:
     mod = platform()
     ui.info(f"{ui.pad('target', 12)}{ui.pad('tier', 9)}description")
-    for t in mod.targets():
+    for t in targets(mod):
         ui.info(f"{ui.pad(t.id, 12)}{ui.pad(t.tier, 9)}{t.desc}")
     return 0
 
@@ -150,7 +80,7 @@ def cmd_scan(deep: bool) -> int:
     ui.section("Cleanup targets (run executes the default tier by default; sizes with --deep: scan --deep)")
     ui.info(f"{ui.pad('target', 12)}{ui.pad('tier', 9)}{ui.pad('size', 10)}{ui.pad('state', 10)}description")
     total = 0
-    for t in mod.targets():
+    for t in targets(mod):
         if not t.available(ctx):
             ui.dim(f"{ui.pad(t.id, 12)}{ui.pad(t.tier, 9)}{ui.pad('-', 10)}{ui.pad('n/a', 10)}{t.desc}")
             continue
@@ -175,12 +105,12 @@ def cmd_scan(deep: bool) -> int:
 
 def scan_uncovered(mod) -> None:
     """Large subdirectories of the cache roots covered by no target: hints that a target may be missing."""
-    min_mb = mod.UNCOVERED_MIN_MB
+    min_mb = dotconf.get(f"clean.{platforms.OS_NAME}.uncovered_min_mb")
     roots = mod.uncovered_roots()
     ui.section(f"Entries >= {min_mb}M in {' and '.join(fsutil.tilde(r) for r in roots)} covered by no target")
     ctx = make_ctx(mod, dry=True, deep=True)   # judge coverage by the --deep path set
-    covered = {n.lower() for n in mod.UNCOVERED_ALWAYS}
-    for t in mod.targets():
+    covered = {n.lower() for n in dotconf.get(f"clean.{platforms.OS_NAME}.uncovered_always")}
+    for t in targets(mod):
         if not t.available(ctx):
             continue
         try:
@@ -216,21 +146,21 @@ def cmd_leftovers() -> int:
 
 def cmd_run(selection: list[str], exclude: list[str], apply: bool, deep: bool) -> int:
     mod = platform()
-    targets = {t.id: t for t in mod.targets()}
-    order = list(targets)
+    by_id = {t.id: t for t in targets(mod)}
+    order = list(by_id)
     ids: list[str] = []
     for s in selection or ["default"]:
         if s == "all":
             ids += order
         elif s in ("default", "opt"):
-            ids += [i for i in order if targets[i].tier == s]
-        elif s in targets:
+            ids += [i for i in order if by_id[i].tier == s]
+        elif s in by_id:
             ids.append(s)
         else:
             raise ui.Abort(f"unknown target: {s} (see clean list)", 2)
     excl = {x for e in exclude for x in e.split(",") if x}
     for s in excl:
-        if s not in targets:
+        if s not in by_id:
             raise ui.Abort(f"unknown target: {s}", 2)
 
     ctx = make_ctx(mod, dry=not apply, deep=deep)
@@ -244,7 +174,7 @@ def cmd_run(selection: list[str], exclude: list[str], apply: bool, deep: bool) -
         if i in done or i in excl:
             continue
         done.add(i)
-        t = targets[i]
+        t = by_id[i]
         ui.section(i)
         if not t.available(ctx):
             ui.info("  not applicable (not installed or no data)")

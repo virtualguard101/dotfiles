@@ -24,6 +24,14 @@ status:
 backup *args:
     {{ dot }} backup {{ args }}
 
+# deploy the repo into ~ (reverse of backup); e.g. just apply / just apply --apply ~/.zshrc
+apply *args:
+    {{ dot }} apply {{ args }}
+
+# backup and cleanup lists in dotfiles.toml; e.g. just config list / just config add backup.linux.ignore PATH
+config *args:
+    {{ dot }} config {{ args }}
+
 # security check
 check:
     {{ dot }} check

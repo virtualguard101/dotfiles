@@ -1,0 +1,319 @@
+# Backup and cleanup lists for the `dotfiles` tool (data only; the schema lives in src/dotfiles/utils/common/config.py).
+# Shared by both platforms; per-platform lists are in their own tables.
+#
+# Edit by hand, or with `dotfiles config add|remove|set KEY VALUE` (comments and order are kept;
+# arrays stay one item per line). `dotfiles config list` shows every key with its description,
+# `dotfiles check` validates the file. Arrays of tables ([[...]]) are edited by hand.
+
+# ---------------------------------------------------------------- home backup (dotfiles backup)
+# track:   recommended configs, relative to ~ (directories expand to regular files < 1 MiB)
+# secret:  always tracked encrypted (also covered by dotfiles audit)
+# exclude: file-name patterns skipped when a tracked directory is expanded
+# ignore:  candidates never added and never reported (exact path, directory, or glob relative to ~)
+
+[backup.linux]
+track = [
+  ".zshenv",
+  ".bash_profile",
+  ".profile",
+  ".tool-versions",
+  ".config/user-dirs.dirs",
+  ".config/mimeapps.list",
+  ".config/kdeglobals",
+  ".config/kwinrc",
+  ".config/kglobalshortcutsrc",
+  ".config/kxkbrc",
+  ".config/konsolerc",
+  ".config/dolphinrc",
+  ".config/spectaclerc",
+  ".local/share/konsole",
+  ".config/ghostty",
+  ".config/bottom",
+  ".config/htop",
+  ".config/gh/config.yml",
+  ".config/systemd/user",
+  ".config/autostart",
+  ".local/share/fcitx5/rime/default.custom.yaml",
+  ".aria2/aria2.conf",
+]
+secret = [
+  ".wakatime.cfg",
+  ".npmrc",
+  ".config/gh/hosts.yml",
+  ".docker/config.json",
+]
+exclude = [
+  "*.tbcache",
+  "*.lock",
+  "*.log",
+  "*.bak",
+  "*~",
+  "*_history",
+]
+ignore = []
+
+[backup.windows]
+track = [
+  ".gitconfig",
+  ".wslconfig",
+  ".config/scoop/config.json",
+  "Documents/PowerShell/Microsoft.PowerShell_profile.ps1",
+  "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
+  "AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json",
+  "AppData/Roaming/Code/User/settings.json",
+  "AppData/Roaming/Code/User/keybindings.json",
+  "Documents/PowerToys/Backup",
+]
+secret = [
+  ".wakatime.cfg",
+  ".docker/config.json",
+  ".claude/settings.json",
+  "AppData/Roaming/GitHub CLI/hosts.yml",
+  "AppData/Roaming/rclone/rclone.conf",
+  ".npmrc",
+  ".pypirc",
+  "_netrc",
+  ".git-credentials",
+]
+exclude = [
+  "*.tbcache",
+  "*.lock",
+  "*.log",
+  "*.bak",
+  "*~",
+  "*_history",
+]
+ignore = []
+
+# ---------------------------------------------------------------- Linux /etc backup (separate chezmoi instance in system/)
+
+[etc]
+# files or dirs included explicitly; dirs contribute only files no package owns (drop-ins, custom units)
+extra = [
+  "/etc/docker/daemon.json",
+  "/etc/timeshift/timeshift.json",
+  "/etc/sddm.conf",
+  "/etc/sddm.conf.d",
+  "/etc/mkinitcpio.d/linux-zen.preset",
+  "/etc/locale.conf",
+  "/etc/vconsole.conf",
+  "/etc/hostname",
+  "/etc/zsh/zshrc",
+  "/etc/environment",
+  "/etc/pacman.d/hooks",
+  "/etc/systemd/system",
+  "/etc/systemd/journald.conf.d",
+  "/etc/systemd/logind.conf.d",
+  "/etc/modprobe.d",
+  "/etc/sysctl.d",
+  "/etc/udev/rules.d",
+  "/etc/X11/xorg.conf.d",
+  "/etc/NetworkManager/conf.d",
+  "/etc/environment.d",
+  "/etc/profile.d",
+  "/etc/ssh/sshd_config.d",
+]
+# always encrypted (usually root-readable, read with sudo)
+secret = [
+  "/etc/NetworkManager/system-connections",
+  "/etc/crypttab",
+  "/etc/sudoers",
+  "/etc/sudoers.d",
+  "/etc/mihomo/config.yaml",
+  "/etc/wireguard",
+]
+# never backed up: account databases, host keys, generated files; restoring them does more harm than good
+exclude = [
+  "/etc/passwd",
+  "/etc/group",
+  "/etc/shadow",
+  "/etc/gshadow",
+  "/etc/subuid",
+  "/etc/subgid",
+  "/etc/machine-id",
+  "/etc/resolv.conf",
+  "/etc/ssh/ssh_host_*",
+  "*.pacnew",
+  "*.pacsave",
+  "*.bak",
+  "*.bak.*",
+  "*~",
+]
+# restore shows a diff only and installs these only when named on the command line
+hardware_bound = [
+  "/etc/fstab",
+  "/etc/crypttab",
+  "/etc/default/grub",
+  "/etc/mkinitcpio.conf",
+  "/etc/mkinitcpio.d/*",
+  "/etc/X11/xorg.conf.d/*",
+  "/etc/modprobe.d/*",
+]
+
+# ---------------------------------------------------------------- cache cleanup (dotfiles clean)
+# disabled: target ids never run or listed;  opt: ids moved from the default tier to opt
+# Thresholds can be overridden per run with the environment variable named in `dotfiles config list`.
+
+[clean]
+disabled = []
+opt = []
+
+[clean.linux]
+thumbnail_days = 90
+stale_days = 180
+paccache_keep = 1
+journal_max = "1G"
+uncovered_min_mb = 10
+uncovered_always = [
+  "yay",
+  "paru",
+  "mozilla",
+  "typescript",
+  "jedi",
+  "thumbnails",
+]
+# leftover dirs of uninstalled apps: detect = pacman packages or commands (any hit = installed)
+
+[[clean.linux.leftovers]]
+detect = ["cursor-bin", "cursor"]
+paths = [".config/Cursor"]
+
+[[clean.linux.leftovers]]
+detect = ["google-chrome", "google-chrome-stable"]
+paths = [".config/google-chrome", ".cache/google-chrome"]
+
+[[clean.linux.leftovers]]
+detect = ["chromium"]
+paths = [".config/chromium", ".cache/chromium"]
+
+[[clean.linux.leftovers]]
+detect = ["visual-studio-code-bin", "code"]
+paths = [".config/Code", ".vscode"]
+
+[[clean.linux.leftovers]]
+detect = ["discord"]
+paths = [".config/discord"]
+
+[[clean.linux.leftovers]]
+detect = ["notion-app-electron"]
+paths = [".config/Notion"]
+
+[[clean.linux.leftovers]]
+detect = ["obsidian"]
+paths = [".config/obsidian"]
+
+[[clean.linux.leftovers]]
+detect = ["feishu-bin"]
+paths = [".config/LarkShell", ".cache/LarkShell"]
+
+[[clean.linux.leftovers]]
+detect = ["telegram-desktop"]
+paths = [".local/share/TelegramDesktop"]
+
+[[clean.linux.leftovers]]
+detect = ["steam"]
+paths = [".local/share/Steam"]
+
+[[clean.linux.leftovers]]
+detect = ["wine"]
+paths = [".wine", ".cache/wine"]
+
+[clean.windows]
+temp_days = 7
+stale_days = 180
+uncovered_min_mb = 100
+uncovered_always = [
+  "Temp",
+  "Mozilla",
+  "Google",
+  "Microsoft",
+  "BraveSoftware",
+  "CrashDumps",
+]
+# detect = commands, "Apps & Features" names, scoop apps, or an existing relative path containing /.
+# Some names are the localized DisplayName values of a Chinese-locale Windows; keep them as-is.
+
+[[clean.windows.leftovers]]
+detect = ["cursor"]
+paths = ["AppData/Roaming/Cursor"]
+
+[[clean.windows.leftovers]]
+detect = ["cursor", "cursor-agent", "AppData/Local/cursor-agent"]
+paths = [".cursor"]
+
+[[clean.windows.leftovers]]
+detect = ["code", "Microsoft Visual Studio Code"]
+paths = ["AppData/Roaming/Code", ".vscode"]
+
+[[clean.windows.leftovers]]
+detect = ["chrome", "Google Chrome"]
+paths = ["AppData/Local/Google/Chrome"]
+
+[[clean.windows.leftovers]]
+detect = ["notion"]
+paths = ["AppData/Roaming/Notion"]
+
+[[clean.windows.leftovers]]
+detect = ["Feishu", "飞书", "Lark"]
+paths = ["AppData/Roaming/LarkShell", "AppData/Roaming/LarkShellSingleton"]
+
+[[clean.windows.leftovers]]
+detect = ["Docker Desktop"]
+paths = ["AppData/Roaming/Docker", "AppData/Roaming/Docker Desktop"]
+
+[[clean.windows.leftovers]]
+detect = ["MongoDB Compass", "mongodb-compass"]
+paths = ["AppData/Roaming/MongoDB Compass"]
+
+[[clean.windows.leftovers]]
+detect = ["Quark", "夸克"]
+paths = ["AppData/Roaming/Quark", "AppData/Roaming/The Quark Authors"]
+
+[[clean.windows.leftovers]]
+detect = ["BaiduNetdisk", "百度网盘"]
+paths = ["AppData/Roaming/BaiduNetdisk", "AppData/Roaming/BaiduYunGuanjia", "AppData/Roaming/BaiduYunKernel"]
+
+[[clean.windows.leftovers]]
+detect = ["WeMeet", "腾讯会议", "TencentMeeting"]
+paths = ["AppData/Roaming/WeMeetApp"]
+
+[[clean.windows.leftovers]]
+detect = ["draw.io"]
+paths = ["AppData/Roaming/draw.io"]
+
+[[clean.windows.leftovers]]
+detect = ["Wireshark"]
+paths = ["AppData/Roaming/Wireshark"]
+
+[[clean.windows.leftovers]]
+detect = ["VMware Workstation", "VMware Player"]
+paths = ["AppData/Roaming/VMware"]
+
+[[clean.windows.leftovers]]
+detect = ["Apifox"]
+paths = ["AppData/Roaming/apifox"]
+
+[[clean.windows.leftovers]]
+detect = ["uTools"]
+paths = ["AppData/Roaming/uTools"]
+
+[[clean.windows.leftovers]]
+detect = ["Clash Party", "Mihomo Party", "mihomo-party"]
+paths = ["AppData/Roaming/mihomo-party"]
+
+[[clean.windows.leftovers]]
+detect = ["MongoDB", "mongodb"]
+paths = ["AppData/Roaming/mongodb"]
+
+[[clean.windows.leftovers]]
+detect = ["Nushell", "nu"]
+paths = ["AppData/Roaming/nushell"]
+
+# ---------------------------------------------------------------- extra path-only cleanup targets
+# Every path still passes the scope check (under ~ or a tool dir, never a protected dir).
+# [[clean.paths]]
+# id = "myapp"
+# tier = "opt"                      # default | opt
+# desc = "MyApp download cache"
+# paths = ["~/.cache/myapp/downloads"]
+# os = "linux"                     # optional: linux | windows

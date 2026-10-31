@@ -9,9 +9,9 @@ import tomllib
 from functools import cache
 from pathlib import Path
 
-from dotfiles import sysinfo, ui
+from dotfiles.utils import platforms, ui
 
-REPO = Path(__file__).resolve().parents[2]   # src/dotfiles/chez.py -> repo top
+REPO = Path(__file__).resolve().parents[4]   # src/dotfiles/utils/common/chez.py -> repo top
 PLATFORMS = ("linux", "windows")
 DEFAULT_IDENTITY = Path(".config") / "chezmoi" / "key.txt"   # relative to ~; where new machines put the key
 
@@ -37,7 +37,7 @@ def packages_dir() -> Path:
 # ---------------------------------------------------------------- chezmoi calls
 
 def require_chezmoi() -> None:
-    if not sysinfo.have("chezmoi"):
+    if not platforms.have("chezmoi"):
         raise ui.Abort("chezmoi not found (run bootstrap first)", 2)
 
 
@@ -49,12 +49,12 @@ def base_args(os_override: str | None = None) -> list[str]:
     return args
 
 
-def cz(*args: str, os_override: str | None = None, **kw) -> sysinfo.Result:
-    return sysinfo.run([*base_args(os_override), *args], **kw)
+def cz(*args: str, os_override: str | None = None, **kw) -> platforms.Result:
+    return platforms.run([*base_args(os_override), *args], **kw)
 
 
 def cz_live(*args: str, **kw) -> int:
-    return sysinfo.run_live([*base_args(), *args], **kw)
+    return platforms.run_live([*base_args(), *args], **kw)
 
 
 def cz_lines(*args: str, os_override: str | None = None) -> list[str]:
@@ -73,7 +73,7 @@ def dump_config() -> dict:
 
 
 def config_file() -> Path:
-    return sysinfo.xdg_config() / "chezmoi" / "chezmoi.toml"
+    return platforms.xdg_config() / "chezmoi" / "chezmoi.toml"
 
 
 def age_identities(config: dict | None = None) -> list[Path]:
@@ -95,7 +95,7 @@ def template_recipients() -> list[str]:
 
 def recipient_of(identity: Path) -> str | None:
     """Derive the public key from a private key via chezmoi's bundled age (no standalone age needed)."""
-    r = sysinfo.run(["chezmoi", "age-keygen", "-y", str(identity)], timeout=30)
+    r = platforms.run(["chezmoi", "age-keygen", "-y", str(identity)], timeout=30)
     if not r.ok:
         return None
     m = re.search(r"age1[0-9a-z]+", r.stdout)
@@ -135,10 +135,10 @@ def covering(target: str, entries: list[str]) -> str | None:
     return None
 
 
-def owner_of(target: str, platforms: dict[str, list[str]] | None = None) -> str | None:
-    platforms = platforms or load_platforms()
+def owner_of(target: str, owners: dict[str, list[str]] | None = None) -> str | None:
+    owners = owners or load_platforms()
     for name in ("shared", *PLATFORMS):
-        if covering(target, platforms.get(name, [])):
+        if covering(target, owners.get(name, [])):
             return name
     return None
 
@@ -146,20 +146,20 @@ def owner_of(target: str, platforms: dict[str, list[str]] | None = None) -> str 
 def register_platform(target: str, platform: str, dry: bool) -> bool:
     """Register a newly tracked target under the current platform. Rewrites only the arrays, keeping
     the file's header comment."""
-    platforms = load_platforms()
-    if owner_of(target, platforms):
+    owners = load_platforms()
+    if owner_of(target, owners):
         return False
-    platforms.setdefault(platform, []).append(target)
+    owners.setdefault(platform, []).append(target)
     if dry:
         return True
     text = platforms_file().read_text(encoding="utf-8")
     head = text[: text.index("[platforms]")]
     body = ["[platforms]"]
-    for name in ("shared", *PLATFORMS, *sorted(set(platforms) - {"shared", *PLATFORMS})):
-        if name not in platforms:
+    for name in ("shared", *PLATFORMS, *sorted(set(owners) - {"shared", *PLATFORMS})):
+        if name not in owners:
             continue
         body.append(f"{name} = [")
-        body += [f"  {json.dumps(t, ensure_ascii=False)}," for t in sorted(set(platforms[name]))]
+        body += [f"  {json.dumps(t, ensure_ascii=False)}," for t in sorted(set(owners[name]))]
         body.append("]")
     with open(platforms_file(), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(head + "\n".join(body) + "\n")
@@ -168,17 +168,17 @@ def register_platform(target: str, platform: str, dry: bool) -> bool:
 
 def check_platforms() -> list[str]:
     """Every target managed in a platform's view must be declared in exactly one ownership list."""
-    platforms = load_platforms()
+    owners = load_platforms()
     problems = []
     seen: dict[str, str] = {}
-    for name, entries in platforms.items():
+    for name, entries in owners.items():
         for e in entries:
             if e in seen:
                 problems.append(f"{e} is registered in both {seen[e]} and {name}")
             seen[e] = name
     for os_name in PLATFORMS:
         for target in managed(include="files,symlinks,externals", exclude="", os_override=os_name):
-            owner = owner_of(target, platforms)
+            owner = owner_of(target, owners)
             if owner is None:
                 problems.append(f"{target} (managed in the {os_name} view) has no entry in platforms.toml")
             elif owner not in ("shared", os_name):
@@ -188,8 +188,8 @@ def check_platforms() -> list[str]:
 
 # ---------------------------------------------------------------- git
 
-def git(*args: str) -> sysinfo.Result:
-    return sysinfo.run(["git", "-C", str(repo()), *args])
+def git(*args: str) -> platforms.Result:
+    return platforms.run(["git", "-C", str(repo()), *args])
 
 
 def tracked(path: Path) -> bool:
