@@ -1,0 +1,12 @@
+# /dev/nvme0n1p6 LABEL=vgarch
+UUID=d49bc13a-dfaa-4524-9718-8cdd2c55258b	/         	btrfs     	rw,relatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvol=/@	0 0
+
+# /dev/nvme0n1p6 LABEL=vgarch
+UUID=d49bc13a-dfaa-4524-9718-8cdd2c55258b	/home     	btrfs     	rw,relatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvol=/@home	0 0
+
+# /dev/nvme0n1p1
+UUID=E165-5BFF      	/boot     	vfat      	rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro	0 2
+
+# /dev/nvme0n1p5
+UUID=4d146932-2693-481f-b6f2-b5b260a2d716	none      	swap      	defaults  	0 0
+

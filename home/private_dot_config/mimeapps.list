@@ -1,0 +1,37 @@
+[Added Associations]
+application/pdf=firefox.desktop;google-chrome.desktop;
+x-scheme-handler/clash=clash-verge.desktop;clash-verge-handler.desktop;
+x-scheme-handler/clash-verge=clash-verge.desktop;clash-verge-handler.desktop;
+x-scheme-handler/http=firefox.desktop;
+x-scheme-handler/https=firefox.desktop;
+x-scheme-handler/chrome=firefox.desktop;
+text/html=firefox.desktop;
+application/x-extension-htm=firefox.desktop;
+application/x-extension-html=firefox.desktop;
+application/x-extension-shtml=firefox.desktop;
+application/xhtml+xml=firefox.desktop;
+application/x-extension-xhtml=firefox.desktop;
+application/x-extension-xht=firefox.desktop;
+
+[Default Applications]
+application/pdf=firefox.desktop;
+x-scheme-handler/clash=clash-verge.desktop;
+x-scheme-handler/clash-verge=clash-verge.desktop;
+text/html=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/obsidian=obsidian.desktop
+x-scheme-handler/mihomo=mihomo-party.desktop
+x-scheme-handler/clash-nyanpasu=clash-nyanpasu-handler.desktop
+x-scheme-handler/chatbox=xyz.chatboxapp.app.desktop
+x-scheme-handler/siyuan=SiYuan.desktop
+x-scheme-handler/chrome=firefox.desktop
+application/x-extension-htm=firefox.desktop
+application/x-extension-html=firefox.desktop
+application/x-extension-shtml=firefox.desktop
+application/xhtml+xml=firefox.desktop
+application/x-extension-xhtml=firefox.desktop
+application/x-extension-xht=firefox.desktop
+x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+x-scheme-handler/notion=notion.desktop
+x-scheme-handler/ccswitch=cc-switch-handler.desktop

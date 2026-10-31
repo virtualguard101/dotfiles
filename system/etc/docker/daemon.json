@@ -1,0 +1,9 @@
+{
+  "proxies": {
+    "http-proxy": "http://127.0.0.1:7897",
+    "https-proxy": "http://127.0.0.1:7897"
+  },
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io"
+  ]
+}
