@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Iterator
 
@@ -77,7 +78,24 @@ ENCRYPT_REQUIRED = [
 ]
 ENCRYPT_EXEMPT = ["*.pub", ".ssh/known_hosts*", ".env.example", "*/.env.example"]
 
-HOME_PATH_RX = re.compile(rb"(/(?:home)/[^/\s\"']+/|/(?:Users)/[^/\s\"']+/|[A-Za-z]:\\Users\\[^\\\s\"']+\\)")
+def home_path_rx(home: Path | None = None) -> re.Pattern[bytes]:
+    """This machine's home directory as a file may spell it: the literal path, plus the Windows
+    drive-letter (plain or JSON-escaped) and MSYS (/c/Users/...) forms of the same user name.
+    Only the current user counts: generic examples such as /home/username or C:\\Users\\alice in
+    comments and tests say nothing about this machine and are not reported."""
+    home = home or Path.home()
+    if not home.name:                       # home is a filesystem root: nothing meaningful to match
+        return re.compile(rb"(?!)")
+    leaf = re.escape(os.fsencode(home.name))
+    literal = re.escape(os.fsencode(str(home)))
+    sep = rb"(?:\\\\|\\|/)"
+    return re.compile(rb"(?i)(?:" + literal + rb"|(?:[a-z]:|/[a-z])" + sep + rb"users" + sep + leaf
+                      + rb")(?![\w.-])")
+
+
+@cache
+def _this_home_rx() -> re.Pattern[bytes]:
+    return home_path_rx()
 
 AGE_ARMOR_BEGIN = b"-----BEGIN AGE ENCRYPTED FILE-----"
 AGE_ARMOR_END = b"-----END AGE ENCRYPTED FILE-----"
@@ -268,7 +286,7 @@ def check_content(path: str, data: bytes, mode: str = "100644") -> list[Finding]
         return f
     for no, rule in secret_lines(data):
         f.append(Finding("error", rule, path, no))
-    m = HOME_PATH_RX.search(data)
+    m = _this_home_rx().search(data)
     if m:
         no = data.count(b"\n", 0, m.start()) + 1
         f.append(Finding("warn", "absolute-home-path", path, no))

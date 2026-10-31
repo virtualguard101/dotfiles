@@ -362,7 +362,7 @@ pre-commit install-hooks          # 可选：预先构建环境（首次会下�
 | `age-without-encrypted-prefix` / `encrypted-prefix-without-age` | 错误 | `encrypted_` 前缀与 `.age` 后缀没有成对出现 |
 | `must-encrypt(<目标>)` | 错误 | 目标属于必须加密的类别却没有加密（`ENCRYPT_REQUIRED` / `ENCRYPT_EXEMPT`） |
 | 密钥规则名（如 `github-token`） | 错误 | 明文匹配 `SECRET_RULES`；`backup` 判断是否加密时用的是同一套规则 |
-| `absolute-home-path` | 警告 | 含绝对家目录路径，在另一台机器上无效 |
+| `absolute-home-path` | 警告 | 含本机的家目录（字面路径，或同一用户的 `C:\Users\<用户>`、JSON 转义形式、`/c/Users/<用户>`），在另一台机器上无效。`/home/username` 这类通用示例不会报告 |
 
 `ENCRYPT_REQUIRED` 覆盖：`.ssh/*`（`*.pub`、`known_hosts*` 除外）、`.gnupg/*`、`.pypirc`、`.npmrc`、`.netrc`/`_netrc`、`.git-credentials`、`.docker/config.json`、gh 的 `hosts.yml`、`.wakatime.cfg`、`.aws/credentials`、`.kube/config`、rclone 配置、`*.pem`/`*.key`/`*.p12`/`*.pfx`、`id_rsa`/`id_ecdsa`/`id_ed25519`、`.env*`（`.env.example` 除外），以及 `system/` 下的 `/etc/shadow*`、`/etc/sudoers*`、`/etc/crypttab`、NetworkManager 连接、WireGuard、SSH 主机密钥、mihomo 配置。
 

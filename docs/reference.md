@@ -362,7 +362,7 @@ The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Dep
 | `age-without-encrypted-prefix` / `encrypted-prefix-without-age` | error | the `encrypted_` prefix and the `.age` suffix do not come in pairs |
 | `must-encrypt(<target>)` | error | the target belongs to a must-encrypt category but is not encrypted (`ENCRYPT_REQUIRED` / `ENCRYPT_EXEMPT`) |
 | secret rule names (e.g. `github-token`) | error | plaintext matching `SECRET_RULES`; `backup` uses the same rules to decide on encryption |
-| `absolute-home-path` | warning | contains an absolute home path, invalid on another machine |
+| `absolute-home-path` | warning | contains this machine's home directory (literal path, or the same user as `C:\Users\<user>`, JSON-escaped or `/c/Users/<user>`), which is invalid on another machine. Generic examples such as `/home/username` are not reported |
 
 `ENCRYPT_REQUIRED` covers: `.ssh/*` (except `*.pub`, `known_hosts*`), `.gnupg/*`, `.pypirc`, `.npmrc`, `.netrc`/`_netrc`, `.git-credentials`, `.docker/config.json`, gh's `hosts.yml`, `.wakatime.cfg`, `.aws/credentials`, `.kube/config`, rclone configs, `*.pem`/`*.key`/`*.p12`/ `*.pfx`, `id_rsa`/`id_ecdsa`/`id_ed25519`, `.env*` (except `.env.example`), plus `/etc/shadow*`, `/etc/sudoers*`, `/etc/crypttab`, NetworkManager connections, WireGuard, SSH host keys and the mihomo config under `system/`.
 

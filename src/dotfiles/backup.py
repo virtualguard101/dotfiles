@@ -87,16 +87,9 @@ def expand(rel: str, prof: Profile) -> list[Path]:
     return out
 
 
-def _home_path_rx() -> re.Pattern[str]:
-    """Absolute home paths: the literal current home, plus Windows drive-letter, JSON-escaped and /c/Users forms."""
-    leaf = re.escape(home().name)
-    literal = re.escape(str(home()))
-    return re.compile(rf"(?i)(?:{literal}(?![\w.-])|(?:[a-z]:|/[a-z])(?:\\\\|\\|/)users(?:\\\\|\\|/){leaf}(?![\w.-]))")
-
-
 def has_home_path(path: Path) -> bool:
     try:
-        return bool(_home_path_rx().search(path.read_text(encoding="utf-8", errors="ignore")))
+        return bool(guard.home_path_rx(home()).search(path.read_bytes()))
     except OSError:
         return False
 
