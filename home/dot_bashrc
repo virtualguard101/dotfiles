@@ -13,6 +13,6 @@ alias grep='grep --color=auto'
 PS1='[\u@\h \W]\$ '
 . "$HOME/.cargo/env"
 export PATH="$HOME/.local/bin:$PATH"
-. /home/virtualguard/.asdf/asdf.sh
-. /home/virtualguard/.asdf/completions/asdf.bash
+. $HOME/.asdf/asdf.sh
+. $HOME/.asdf/completions/asdf.bash
 export PATH="$HOME/.npm-global/bin:$PATH"
