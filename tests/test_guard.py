@@ -61,3 +61,27 @@ def test_scan_exit_codes(tmp_path):
     dirty.write_text(f"token = {FAKE_GH}\n")
     assert guard.cmd_scan([str(clean)], quiet=True) == 0
     assert guard.cmd_scan([str(dirty)], quiet=True) == 1
+
+
+@pytest.mark.parametrize("text, hit", [
+    ("/home/alice/x", True),
+    ("/home/alice", True),
+    (r"C:\Users\alice\x", True),
+    (r'"C:\\Users\\alice\\x"', True),                  # JSON-escaped
+    ("/c/Users/alice/x", True),                         # MSYS
+    ("/home/alicex/y", False),                          # a different user that merely shares a prefix
+    ("/home/username/file", False),                     # generic example in a comment
+    (r"C:\Users\bob\x", False),
+    ("$HOME/x", False),
+    ("~/x", False),
+])
+def test_home_path_only_matches_this_user(text, hit):
+    assert bool(guard.home_path_rx(guard.Path("/home/alice")).search(text.encode())) is hit, text
+
+
+def test_home_path_rule_ignores_examples_but_flags_this_home(monkeypatch):
+    monkeypatch.setattr(guard, "_this_home_rx", lambda: guard.home_path_rx(guard.Path("/home/alice")))
+    def rules(data: bytes) -> list[str]:
+        return [f.rule for f in guard.check_content("src/x.py", data)]
+    assert "absolute-home-path" not in rules(b'# says "set by /home/username/file"\n')
+    assert "absolute-home-path" in rules(b"cache = '/home/alice/.cache'\n")
