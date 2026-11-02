@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Callable, Iterable, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 MAX_BYTES = 5 * 1024 * 1024
 SKIPPED_MODES = ("120000", "160000")     # symlink, submodule: nothing to read
@@ -39,6 +39,7 @@ class FileContext:
     path: str                   # relative to the repo top, with /
     data: bytes
     mode: str = "100644"        # git file mode
+    owners: Optional[Dict[str, List[str]]] = None   # [platforms] of platforms.toml from the same snapshot
     _target: object = field(default=..., repr=False)
 
     @property

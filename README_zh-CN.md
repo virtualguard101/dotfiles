@@ -11,7 +11,8 @@ Python 工具 `dotfiles`，用来做环境检测、重装后恢复、日常备�
 home/                     两个平台的 dotfiles（chezmoi 源状态）
   .chezmoi.toml.tmpl      chezmoi init 时生成配置（加密方式、私钥路径、公钥）
   .chezmoidata/platforms.toml   每个目标的平台归属；.chezmoiignore 据此生成
-system/                   Linux /etc 的备份（独立的 chezmoi 实例，不部署到 ~）
+system/<发行版>/          Linux /etc 的备份，每个发行版一份，例如 system/arch（独立的 chezmoi 实例，
+                          不部署到 ~）
 packages/                 软件包清单：archpkg.txt / scoopfile.json / winget.json
 dotfiles.toml             备份与清理的清单和阈值（数据；可用 dotfiles config 编辑）
 src/dotfiles/             Python 工具（只用标准库）
@@ -19,6 +20,7 @@ bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆�
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
 docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
 docs/architecture.md      架构：工具的组织方式、分层规则、如何扩展
+todo.md                   进行中的迁移笔记（Kali），完成后删除
 ```
 
 根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。
@@ -63,7 +65,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 --apply    # �
 
 ### 恢复流程概览
 
-bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 winget），并通过 HTTPS 把仓库克隆到
+bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Debian / Kali 用 apt + pipx，Windows 用 winget；Windows 上带 `--apply` 时还会在你确认后安装 scoop），并通过 HTTPS 把仓库克隆到
 `~/.local/share/chezmoi`，其余都由 `dotfiles restore` 完成：
 
 | 步骤 | 内容 |
@@ -71,8 +73,8 @@ bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Windows 用 win
 | `key` | 把私钥写到 `~/.config/chezmoi/key.txt`（仅本人可读），并校验它与仓库公钥匹配 |
 | `config` | 由 `home/.chezmoi.toml.tmpl` 生成 chezmoi 配置 |
 | `dotfiles` | 先完整预演一次解密（失败则一个文件都不写），再备份将被覆盖的已有文件到 `~/.local/state/dotfiles/pre-apply-*`，最后 `chezmoi apply` |
-| `system` | Linux：恢复 `/etc`；`fstab`、`crypttab`、`default/grub` 等与硬件绑定的文件只显示差异，`sudoers` 先经 `visudo` 校验 |
-| `packages` | Linux：pacman 安装官方仓库中的包，AUR 包交给 paru/yay；Windows：`winget import` 与 `scoop import` |
+| `system` | Linux：从本发行版的备份（`system/<发行版>/`）恢复 `/etc`，没有本发行版的备份时跳过；`fstab`、`crypttab`、`default/grub` 等与硬件绑定的文件只显示差异，`sudoers` 先经 `visudo` 校验 |
+| `packages` | Arch：pacman 安装官方仓库中的包，AUR 包交给 paru/yay（其他发行版跳过）；Windows：`winget import` 与 `scoop import` |
 | `externals` | 拉取 nvim 配置等外部仓库；git 代理连不上时（代理软件还没装）临时改为直连 |
 | `ssh` | 为 `~/.ssh/config` 引用的每把缺失的私钥生成新密钥（私钥不备份），并可用 gh 把 GitHub 用的公钥登记上去 |
 | `shell` | Linux：把登录 shell 改为 zsh |

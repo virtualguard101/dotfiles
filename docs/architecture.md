@@ -107,8 +107,10 @@ utils/common/guard/
 
 A check is a pure function `check(ctx: FileContext) -> Iterable[Finding]`. `FileContext` gives it
 the repo path, the bytes, the git mode, the deployment target (`ctx.target`) and the text for text
-checks (`ctx.text`, `None` for ciphertext, binaries and large files). The built-in checks — `age`,
-`policy` (must-encrypt), `secrets`, `home path` — are listed in `checks.CHECKS` in report order.
+checks (`ctx.text`, `None` for ciphertext, binaries and large files), plus the `[platforms]` table
+of `platforms.toml` read from the same snapshot (`ctx.owners`). The built-in checks — `age`, `policy`
+(must-encrypt), `secrets`, `ownership` (every `~` target has a platform owner), `home path` — are
+listed in `checks.CHECKS` in report order.
 
 Adding a security check: write the function, append it to `CHECKS`, add tests. Because checks are
 pure, the same check runs unchanged on the index (pre-commit), every commit about to be pushed
@@ -130,9 +132,10 @@ The interface is constrained on purpose:
 | What | Where | Written by |
 |---|---|---|
 | Backup/cleanup lists and tunables | `dotfiles.toml` (repo top) | you, or `dotfiles config add/remove/set` |
-| Platform owner of every managed target | `home/.chezmoidata/platforms.toml` | `backup` (registers new targets), you |
+| Platform owner of every managed target (`[platforms]`), environment tags a target requires (`[requires]`) | `home/.chezmoidata/platforms.toml` | `backup` (registers unowned targets), you (`shared`, `[requires]`) |
+| This machine's environment tags | `[data] tags` in the chezmoi config | `chezmoi init`, detected by `home/.chezmoi.toml.tmpl` |
 | Dotfiles (source state) | `home/` (`.chezmoiroot`) | chezmoi (`add`, `re-add`, `edit`), via `backup` |
-| /etc backup | `system/` | `backup` through a second chezmoi instance |
+| /etc backup | `system/<distro>/` (os-release `ID`; `system/windows/` reserved) | `backup` through a second chezmoi instance |
 | Package manifests | `packages/` | `backup` |
 | Commit-check rules (must-encrypt, secret patterns) | `utils/common/guard/checks.py` | code, on purpose (section 4) |
 | chezmoi config | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init` from `home/.chezmoi.toml.tmpl` |
@@ -194,3 +197,10 @@ can be limited to some targets and shows diffs first.
 
 New: `dotfiles apply`, `dotfiles config`, `backup.<os>.ignore`, `[clean] disabled/opt`,
 `[[clean.paths]]`, the guard check registry, and the layering tests.
+
+0.4.0 completes the ownership model: `backup` registers unowned targets and guard's `ownership`
+check rejects them at commit time (issue #8); `[requires]` with per-machine tags keeps
+environment-specific targets (e.g. KDE configs) off machines without that environment; `/etc`
+moved from `system/etc` to `system/<distro>/etc`, so each distro only backs up and restores its
+own; `bootstrap.sh` installs prerequisites with apt + pipx on Debian / Kali, and `bootstrap.ps1`
+can install scoop.

@@ -109,13 +109,14 @@ def status() -> None:
 
 
 class _Stage:
-    def __init__(self):
+    def __init__(self, source: Path | None = None):
+        self.source = source or chez.system_source_dir()
         self.dir = Path(tempfile.mkdtemp(prefix="chezmoi-etc.", dir=platforms.runtime_dir()))
         os.chmod(self.dir, 0o700)
         self.state = self.dir.with_name(self.dir.name + ".boltdb")
 
     def cz(self, *args: str) -> platforms.Result:
-        return platforms.run(["chezmoi", "--source", str(chez.system_source_dir()), "--destination", str(self.dir),
+        return platforms.run(["chezmoi", "--source", str(self.source), "--destination", str(self.dir),
                             "--persistent-state", str(self.state), *args])
 
     def close(self):
@@ -135,7 +136,7 @@ class _Stage:
 def backup(run) -> None:
     ui.section("/etc -> system/ (separate chezmoi instance)")
     Sudo.prompt = True
-    chez.system_source_dir().mkdir(exist_ok=True)
+    chez.system_source_dir().mkdir(parents=True, exist_ok=True)
     from dotfiles.cli.backup import has_secret
 
     n = 0
@@ -178,10 +179,18 @@ def backup(run) -> None:
     ui.ok(f"processed {n} /etc files (staging area was on tmpfs; now removed)")
 
 
-def cmd_restore(apply: bool, filters: list[str]) -> int:
-    src = chez.system_source_dir() / "etc"
-    if not src.is_dir():
-        raise ui.Abort("system/etc does not exist: dotfiles backup (without --no-system) has not run on Linux yet")
+def available_distros() -> list[str]:
+    """Distros that have an /etc backup under system/."""
+    root = chez.system_root()
+    return sorted(d.name for d in root.iterdir() if (d / "etc").is_dir()) if root.is_dir() else []
+
+
+def cmd_restore(apply: bool, filters: list[str], distro: str | None = None) -> int:
+    source = chez.system_source_dir(distro)
+    if not (source / "etc").is_dir():
+        have = ", ".join(available_distros()) or "none"
+        raise ui.Abort(f"no /etc backup for {source.name} in system/ (available: {have}); "
+                       "pick one with --distro, or run dotfiles backup on this distro first")
     from dotfiles.cli.backup import preflight
 
     preflight()
@@ -190,7 +199,8 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
     if apply and not rsudo:
         raise ui.Abort("installing into /etc needs sudo")
     changed = held = 0
-    with _Stage() as stage:
+    ui.info(f"source: system/{source.name}")
+    with _Stage(source) as stage:
         r = stage.cz("apply", "--force", "--no-tty")
         if not r.ok:
             raise ui.Abort(f"failed to decrypt system/: {r.stderr.strip()[:300]}")

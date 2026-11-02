@@ -170,9 +170,15 @@ def run_dotfiles(o: Options) -> None:
 # ---------------------------------------------------------------- system config (Linux /etc)
 
 def check_system(o: Options) -> tuple[str, str]:
-    if not (chez.system_source_dir() / "etc").is_dir():
-        return SKIP, "no /etc backup in system/ yet (created by running dotfiles backup once on Linux)"
-    return TODO, "compares /etc with the backup; hardware-bound files (fstab etc.) show diffs only and are never installed automatically"
+    source = chez.system_source_dir()
+    if not (source / "etc").is_dir():
+        from dotfiles.cli.etc import available_distros
+        others = available_distros()
+        hint = (f"; backups exist for {', '.join(others)} (dotfiles system-restore --distro NAME, only if it fits)"
+                if others else "")
+        return SKIP, f"no /etc backup for {source.name} in system/{hint}"
+    return TODO, (f"compares /etc with system/{source.name}; hardware-bound files (fstab etc.) show diffs only "
+                  "and are never installed automatically")
 
 
 def run_system(o: Options) -> None:
@@ -233,8 +239,9 @@ def check_packages(o: Options) -> tuple[str, str]:
     if not parts:
         return DONE, "all packages in winget.json and scoopfile.json are installed"
     if scoop and not have("scoop"):
-        return BLOCKED, ("; ".join(parts) + ". Install scoop first per https://scoop.sh "
-                         "(its official install script must be run; this tool will not run it for you)")
+        return BLOCKED, ("; ".join(parts) + ". Install scoop first: rerun bootstrap.ps1 --apply from a regular "
+                         "(non-admin) PowerShell, which downloads the official installer and runs it after you "
+                         "confirm, or follow https://scoop.sh")
     return TODO, "; ".join(parts)
 
 

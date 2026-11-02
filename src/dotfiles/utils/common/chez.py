@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import tomllib
 from functools import cache
 from pathlib import Path
 
 from dotfiles.utils import platforms, ui
+from dotfiles.utils.common.guard.paths import covering, parse_tables
 
 REPO = Path(__file__).resolve().parents[4]   # src/dotfiles/utils/common/chez.py -> repo top
 PLATFORMS = ("linux", "windows")
@@ -26,8 +26,18 @@ def source_state_dir() -> Path:
     return repo() / (REPO / ".chezmoiroot").read_text(encoding="utf-8").strip()
 
 
-def system_source_dir() -> Path:
+def system_root() -> Path:
+    """system/: system configuration outside ~, one subdirectory per distro (system/<distro>/etc);
+    system/windows/ is reserved for Windows system settings."""
     return repo() / "system"
+
+
+def system_source_dir(distro: str | None = None) -> Path:
+    """Source dir of the separate chezmoi instance for /etc on this distro (or the given one)."""
+    if distro is None:
+        from dotfiles.utils.platforms import linux as linplat
+        distro = linplat.distro()
+    return system_root() / distro
 
 
 def packages_dir() -> Path:
@@ -41,24 +51,30 @@ def require_chezmoi() -> None:
         raise ui.Abort("chezmoi not found (run bootstrap first)", 2)
 
 
-def base_args(os_override: str | None = None) -> list[str]:
+def base_args(os_override: str | None = None, tags: list[str] | None = None) -> list[str]:
+    """chezmoi with this repo as the source; os_override / tags render another machine's view."""
     # --no-pager: chezmoi blocks forever when its pager quits before reading all output
     args = ["chezmoi", "--no-pager", "--source", str(repo())]
+    data: dict = {}
     if os_override:
-        args += ["--override-data", json.dumps({"chezmoi": {"os": os_override}})]
+        data["chezmoi"] = {"os": os_override}
+    if tags is not None:
+        data["tags"] = list(tags)
+    if data:
+        args += ["--override-data", json.dumps(data)]
     return args
 
 
-def cz(*args: str, os_override: str | None = None, **kw) -> platforms.Result:
-    return platforms.run([*base_args(os_override), *args], **kw)
+def cz(*args: str, os_override: str | None = None, tags: list[str] | None = None, **kw) -> platforms.Result:
+    return platforms.run([*base_args(os_override, tags), *args], **kw)
 
 
 def cz_live(*args: str, **kw) -> int:
     return platforms.run_live([*base_args(), *args], **kw)
 
 
-def cz_lines(*args: str, os_override: str | None = None) -> list[str]:
-    r = cz(*args, os_override=os_override)
+def cz_lines(*args: str, os_override: str | None = None, tags: list[str] | None = None) -> list[str]:
+    r = cz(*args, os_override=os_override, tags=tags)
     if not r.ok:
         raise ui.Abort(f"chezmoi {' '.join(args)} failed: {r.stderr.strip()[:300]}")
     return [line for line in r.stdout.splitlines() if line.strip()]
@@ -103,13 +119,13 @@ def recipient_of(identity: Path) -> str | None:
 
 
 def managed(include: str = "files", exclude: str = "externals", os_override: str | None = None,
-            absolute: bool = False) -> list[str]:
+            absolute: bool = False, tags: list[str] | None = None) -> list[str]:
     args = ["managed", "-i", include]
     if exclude:
         args += ["-x", exclude]
     if absolute:
         args += ["-p", "absolute"]
-    return cz_lines(*args, os_override=os_override)
+    return cz_lines(*args, os_override=os_override, tags=tags)
 
 
 def is_managed(target: Path) -> bool:
@@ -122,17 +138,25 @@ def platforms_file() -> Path:
     return source_state_dir() / ".chezmoidata" / "platforms.toml"
 
 
+def _tables() -> dict[str, dict[str, list[str]]]:
+    return parse_tables(platforms_file().read_text(encoding="utf-8"))
+
+
 def load_platforms() -> dict[str, list[str]]:
-    data = tomllib.loads(platforms_file().read_text(encoding="utf-8")).get("platforms", {})
-    return {k: list(v) for k, v in data.items()}
+    """[platforms]: owner (shared / linux / windows) -> targets."""
+    return _tables().get("platforms", {})
 
 
-def covering(target: str, entries: list[str]) -> str | None:
-    """The declaration covering target (the same path, or a directory target containing it)."""
-    for e in entries:
-        if target == e or target.startswith(e.rstrip("/") + "/"):
-            return e
-    return None
+def load_requires() -> dict[str, list[str]]:
+    """[requires]: environment tag -> targets deployed only on machines that have the tag."""
+    return _tables().get("requires", {})
+
+
+def machine_tags() -> list[str] | None:
+    """Tags of this machine from the chezmoi config ([data] tags, written by `chezmoi init`);
+    None when the config predates tags."""
+    tags = (dump_config().get("data") or {}).get("tags")
+    return [str(t) for t in tags] if isinstance(tags, list) else None
 
 
 def owner_of(target: str, owners: dict[str, list[str]] | None = None) -> str | None:
@@ -143,32 +167,44 @@ def owner_of(target: str, owners: dict[str, list[str]] | None = None) -> str | N
     return None
 
 
+def _render_table(name: str, table: dict[str, list[str]], order: tuple[str, ...]) -> list[str]:
+    lines = [f"[{name}]"]
+    for key in (*[k for k in order if k in table], *sorted(set(table) - set(order))):
+        lines.append(f"{key} = [")
+        lines += [f"  {json.dumps(t, ensure_ascii=False)}," for t in sorted(set(table[key]))]
+        lines.append("]")
+    return lines
+
+
 def register_platform(target: str, platform: str, dry: bool) -> bool:
-    """Register a newly tracked target under the current platform. Rewrites only the arrays, keeping
-    the file's header comment."""
+    """Register a newly tracked target under the given platform. Rewrites only the [platforms]
+    table; the header comment and every other table ([requires], ...) are kept as written."""
     owners = load_platforms()
     if owner_of(target, owners):
         return False
     owners.setdefault(platform, []).append(target)
     if dry:
         return True
-    text = platforms_file().read_text(encoding="utf-8")
-    head = text[: text.index("[platforms]")]
-    body = ["[platforms]"]
-    for name in ("shared", *PLATFORMS, *sorted(set(owners) - {"shared", *PLATFORMS})):
-        if name not in owners:
-            continue
-        body.append(f"{name} = [")
-        body += [f"  {json.dumps(t, ensure_ascii=False)}," for t in sorted(set(owners[name]))]
-        body.append("]")
+    lines = platforms_file().read_text(encoding="utf-8").splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.strip() == "[platforms]")
+    # array items never start with "[", so the next line that does is the next table header
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip().startswith("[")), len(lines))
+    while end > start + 1 and not lines[end - 1].strip():   # keep the blank line before the next table
+        end -= 1
+    new = lines[:start] + _render_table("platforms", owners, ("shared", *PLATFORMS)) + lines[end:]
     with open(platforms_file(), "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(head + "\n".join(body) + "\n")
+        fh.write("\n".join(new) + "\n")
     return True
 
 
+_TAG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
 def check_platforms() -> list[str]:
-    """Every target managed in a platform's view must be declared in exactly one ownership list."""
+    """Every target managed in a platform's view must be declared in exactly one ownership list;
+    every [requires] entry must use a well-formed tag and overlap an owned entry."""
     owners = load_platforms()
+    requires = load_requires()
     problems = []
     seen: dict[str, str] = {}
     for name, entries in owners.items():
@@ -176,8 +212,16 @@ def check_platforms() -> list[str]:
             if e in seen:
                 problems.append(f"{e} is registered in both {seen[e]} and {name}")
             seen[e] = name
+    owned = [e for entries in owners.values() for e in entries]
+    for tag, entries in requires.items():
+        if not _TAG.match(tag):
+            problems.append(f"[requires] tag {tag!r} must match {_TAG.pattern}")
+        for e in entries:
+            if not any(covering(e, [o]) or covering(o, [e]) for o in owned):
+                problems.append(f"[requires] {tag}: {e} matches no entry in [platforms]")
+    every_tag = sorted(requires)   # render each OS view with all tags so every target is visible
     for os_name in PLATFORMS:
-        for target in managed(include="files,symlinks,externals", exclude="", os_override=os_name):
+        for target in managed(include="files,symlinks,externals", exclude="", os_override=os_name, tags=every_tag):
             owner = owner_of(target, owners)
             if owner is None:
                 problems.append(f"{target} (managed in the {os_name} view) has no entry in platforms.toml")

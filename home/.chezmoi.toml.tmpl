@@ -4,6 +4,18 @@
   ~/.config/chezmoi/key.txt on a new machine; existing machines keep their old location
   (the last candidate that exists, in order).
 */ -}}
+{{- /*
+  Environment tags of this machine, available to templates as .tags. Targets listed under a tag in
+  .chezmoidata/platforms.toml [requires] deploy only where the tag is present. Detected here, at
+  `chezmoi init`: rerun it after installing or removing a desktop environment.
+*/ -}}
+{{- $tags := list -}}
+{{- if hasKey .chezmoi "osRelease" -}}
+{{-   with .chezmoi.osRelease.id }}{{ $tags = append $tags (lower .) }}{{ end -}}
+{{-   if hasKey .chezmoi.osRelease "idLike" }}{{ $tags = concat $tags (splitList " " (lower .chezmoi.osRelease.idLike)) }}{{ end -}}
+{{- end -}}
+{{- if lookPath "plasmashell" }}{{ $tags = append $tags "kde" }}{{ end -}}
+{{- if lookPath "gnome-shell" }}{{ $tags = append $tags "gnome" }}{{ end -}}
 {{- $identity := joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt" -}}
 {{- range list (joinPath .chezmoi.homeDir "secret" "chezmoi_age_key.txt") (joinPath .chezmoi.homeDir "vg101" "secret" "chezmoi_age_key.txt") -}}
 {{-   if stat . }}{{ $identity = . }}{{ end -}}
@@ -18,3 +30,6 @@ encryption = "age"
 [edit]
     command = "code"
     args = ["--wait"]
+
+[data]
+    tags = [{{ range $i, $t := $tags | compact | uniq }}{{ if $i }}, {{ end }}{{ $t | quote }}{{ end }}]

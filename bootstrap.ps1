@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 <#
-Fresh-machine bootstrap (Windows): installs git / chezmoi / uv via winget, clones the
-dotfiles repo into chezmoi's default source dir, then hands over to `dotfiles restore`.
+Fresh-machine bootstrap (Windows): installs git / chezmoi / uv via winget (and, with --apply,
+scoop via its official installer after you confirm), clones the dotfiles repo into chezmoi's
+default source dir, then hands over to `dotfiles restore`.
 Everything else lives in Python; this script only does what must happen before uv exists.
 
 This file is intentionally ASCII-only: Windows PowerShell 5.1 (the only shell on a fresh
@@ -42,6 +43,33 @@ foreach ($tool in $packages.Keys) {
   if ($LASTEXITCODE -ne 0) { Die "winget install $($packages[$tool]) failed (exit $LASTEXITCODE)" }
   Refresh-Path
   if (-not (Have $tool)) { Die "$tool installed but not on PATH; open a new terminal and rerun" }
+}
+
+# scoop restores scoopfile.json. It has no winget package; its official installer is a remote
+# script, so it is downloaded to a file you can read and only run after you confirm (or pass --yes).
+# Only with --apply: the plan does not need scoop.
+$applying = $RestoreArgs -contains '--apply'
+$assumeYes = ($RestoreArgs -contains '--yes') -or ($RestoreArgs -contains '-y')
+if ($applying -and -not (Have 'scoop')) {
+  $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+           ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if ($admin) {
+    Log 'scoop not installed: it refuses an administrator session; rerun from a regular PowerShell to install it'
+  } else {
+    $installer = Join-Path ([IO.Path]::GetTempPath()) 'install-scoop.ps1'
+    Log "downloading the scoop installer to $installer (read it before confirming)"
+    Invoke-RestMethod -Uri 'https://get.scoop.sh' -OutFile $installer
+    $answer = if ($assumeYes) { 'y' } else { Read-Host 'run the scoop installer now? [y/N]' }
+    if ($answer -match '^(y|yes)$') {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $installer
+      if ($LASTEXITCODE -ne 0) { Die "scoop installer failed (exit $LASTEXITCODE)" }
+      Refresh-Path
+      if (-not (Have 'scoop')) { Die 'scoop installed but not on PATH; open a new terminal and rerun' }
+    } else {
+      Log 'skipped scoop; the packages step will stop until it is installed'
+    }
+    Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
+  }
 }
 
 # ---------------------------------------------------------------- 2. repository

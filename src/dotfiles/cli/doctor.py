@@ -174,6 +174,16 @@ def check_chezmoi(rep: Report) -> None:
         rep.add(s, "config file", "ok" if cur == exp else "warn", str(chez.config_file()),
                 "" if cur == exp else "differs from the template output: dotfiles restore --apply --only config")
     cfg = cur or {}
+    tags = (cfg.get("data") or {}).get("tags")
+    want = ((exp or {}).get("data") or {}).get("tags")
+    if tags is None:
+        rep.add(s, "tags", "warn", "not in the config (written before tags existed)",
+                "dotfiles restore --apply --only config")
+    else:
+        rep.add(s, "tags", "ok" if want is None or sorted(tags) == sorted(want) else "warn",
+                ", ".join(tags) or "(none)",
+                "" if want is None or sorted(tags) == sorted(want)
+                else f"detected now: {', '.join(want)}; rerun chezmoi init (dotfiles restore --apply --only config)")
     rep.add(s, "encryption", "ok" if cfg.get("encryption") == "age" else "fail", cfg.get("encryption", "not set"))
     identity = Path((cfg.get("age") or {}).get("identity") or (exp or {}).get("age", {}).get("identity", ""))
     if not identity.name:

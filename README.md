@@ -9,7 +9,8 @@ An Arch Linux and Windows config repository built on [chezmoi](https://www.chezm
 home/                     dotfiles for both platforms (chezmoi source state)
   .chezmoi.toml.tmpl      generates the chezmoi config at init (encryption, key path, recipient)
   .chezmoidata/platforms.toml   platform ownership per target; .chezmoiignore derives from it
-system/                   Linux /etc backup (separate chezmoi instance, never deployed to ~)
+system/<distro>/          Linux /etc backup per distro, e.g. system/arch (separate chezmoi instance,
+                          never deployed to ~)
 packages/                 package manifests: archpkg.txt / scoopfile.json / winget.json
 dotfiles.toml             backup and cleanup lists and tunables (data; `dotfiles config` edits it)
 src/dotfiles/             the Python tool (standard library only)
@@ -19,6 +20,7 @@ docs/reference.md         detailed reference: command behavior, encryption and p
                           cleanup targets, commit checks
 docs/workflows.md         branch roles and which path each kind of change takes
 docs/architecture.md      how the tool is organized, layering rules, where to extend it
+todo.md                   in-progress migration notes (Kali); removed when done
 ```
 
 Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.
@@ -65,7 +67,7 @@ Do not pipe straight into `curl … | bash` or `irm … | iex`: stdin is then no
 
 ### Recovery Flow Overview
 
-bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) and clones the public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
+bootstrap only installs git, chezmoi and uv (pacman on Arch, apt + pipx on Debian / Kali, winget on Windows; with `--apply` on Windows also scoop, after you confirm) and clones the public repo over HTTPS into `~/.local/share/chezmoi`; everything else is done by
 `dotfiles restore`:
 
 | Step | What it does |
@@ -73,8 +75,8 @@ bootstrap only installs git, chezmoi and uv (pacman on Arch, winget on Windows) 
 | `key` | writes the key to `~/.config/chezmoi/key.txt` (owner-only permissions) and validates it against the repo's public key |
 | `config` | generates the chezmoi config from `home/.chezmoi.toml.tmpl` |
 | `dotfiles` | rehearses decryption once (nothing is written on failure), backs up files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs `chezmoi apply` |
-| `system` | Linux: restores `/etc`; hardware-bound files (`fstab`, `crypttab`, `default/grub`, ...) show diffs only; `sudoers` is validated with `visudo` first |
-| `packages` | Linux: pacman installs packages from configured repos, AUR packages go to paru/yay; Windows: `winget import` and `scoop import` |
+| `system` | Linux: restores `/etc` from this distro's backup (`system/<distro>/`; skipped on a distro without one); hardware-bound files (`fstab`, `crypttab`, `default/grub`, ...) show diffs only; `sudoers` is validated with `visudo` first |
+| `packages` | Arch: pacman installs packages from configured repos, AUR packages go to paru/yay (skipped on other distros); Windows: `winget import` and `scoop import` |
 | `externals` | fetches external repos such as the nvim config; temporarily connects directly when the git proxy is unreachable |
 | `ssh` | generates any private key referenced by `~/.ssh/config` that is missing (keys are never backed up), and can register the GitHub public key via `gh` |
 | `shell` | Linux: sets the login shell to zsh |

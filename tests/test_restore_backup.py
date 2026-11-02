@@ -102,3 +102,40 @@ def test_summarize_diff_hides_ciphertext_keeps_plaintext():
     assert "modified home/dot_x.age" in out
     assert "-old\n+new" in out
     assert backup.summarize_diff("") == ""
+
+
+def test_backup_registers_unowned_targets(tmp_path, monkeypatch):
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import chez
+    f = tmp_path / "platforms.toml"
+    f.write_text('# header\n[platforms]\nshared = [\n  ".gitconfig",\n]\n\n[requires]\nkde = [\n  ".config/kwinrc",\n]\n',
+                 encoding="utf-8")
+    monkeypatch.setattr(chez, "platforms_file", lambda: f)
+    monkeypatch.setattr(chez, "managed", lambda **kw: [".gitconfig", ".config/new/app.conf"])
+    assert backup.register_unowned(backup.Runner(dry=True)) == [".config/new/app.conf"]
+    assert ".config/new/app.conf" not in f.read_text(encoding="utf-8")          # dry run writes nothing
+    assert backup.register_unowned(backup.Runner(dry=False)) == [".config/new/app.conf"]
+    assert chez.load_platforms()[platforms.OS_NAME] == [".config/new/app.conf"]
+    assert chez.load_requires() == {"kde": [".config/kwinrc"]}
+    assert backup.register_unowned(backup.Runner(dry=False)) == []              # idempotent
+
+
+@pytest.mark.parametrize("release, distro", [
+    ({"ID": "arch"}, "arch"), ({"ID": "Kali", "ID_LIKE": "debian"}, "kali"), ({}, "linux"), ({"ID": "a/b"}, "linux"),
+])
+def test_distro_names_the_etc_backup(monkeypatch, release, distro):
+    from dotfiles.utils.platforms import linux as linplat
+    monkeypatch.setattr(linplat, "os_release", lambda: release)
+    assert linplat.distro() == distro
+
+
+def test_restore_skips_etc_from_another_distro(tmp_path, monkeypatch):
+    from dotfiles.utils.common import chez
+    from dotfiles.utils.platforms import linux as linplat
+    (tmp_path / "arch" / "etc").mkdir(parents=True)
+    monkeypatch.setattr(chez, "system_root", lambda: tmp_path)
+    monkeypatch.setattr(linplat, "distro", lambda: "kali")
+    state, detail = restore.check_system(None)
+    assert state == restore.SKIP and "kali" in detail and "arch" in detail
+    monkeypatch.setattr(linplat, "distro", lambda: "arch")
+    assert restore.check_system(None)[0] == restore.TODO

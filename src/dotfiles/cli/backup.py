@@ -332,6 +332,23 @@ def backup_managed(run: Runner) -> None:
     ui.ok("re-add done")
 
 
+def register_unowned(run: Runner) -> list[str]:
+    """Managed targets with no owner in platforms.toml (e.g. added with plain `chezmoi add`) are in
+    this machine's source state, so they belong to this platform: register them here. Without an
+    owner .chezmoiignore hides them from no platform, and they would deploy everywhere (issue #8)."""
+    owners = chez.load_platforms()
+    unowned = [t for t in chez.managed(include="files,symlinks,externals", exclude="")
+               if chez.owner_of(t, owners) is None]
+    if not unowned:
+        return []
+    ui.section("Register platform owners")
+    for t in unowned:
+        chez.register_platform(t, platforms.OS_NAME, run.dry)
+        ui.info(f"  {platforms.OS_NAME:<8}{t}")
+    ui.note("move a target to `shared` in home/.chezmoidata/platforms.toml by hand if both platforms need it")
+    return unowned
+
+
 def add_candidate(run: Runner, f: Path, kind: str, managed: set[str]) -> None:
     if os.path.normcase(str(f)) in managed:
         return
@@ -467,7 +484,8 @@ def backup_packages(dry: bool) -> None:
 
 # ---------------------------------------------------------------- check
 
-def gate() -> bool:
+def gate(pending: frozenset[str] = frozenset()) -> bool:
+    """`pending`: targets a dry run would register (their missing owner is not a problem then)."""
     ui.section("Security check")
     bad = False
     for i in chez.age_identities():
@@ -481,7 +499,8 @@ def gate() -> bool:
             bad = True
     finally:
         os.chdir(cwd)
-    problems = chez.check_platforms()
+    problems = [p for p in chez.check_platforms()
+                if not any(p.startswith(f"{t} (managed in the ") for t in pending)]
     for p in problems:
         ui.err(f"platform ownership: {p}")
     if problems:
@@ -505,12 +524,13 @@ def cmd_backup(dry: bool, with_system: bool, commit: bool) -> int:
     preflight()
     run = Runner(dry)
     backup_managed(run)
+    pending = frozenset(register_unowned(run)) if dry else frozenset()
     backup_candidates(run)
     if with_system and platforms.IS_LINUX:
         from dotfiles.cli import etc
         etc.backup(run)
     backup_packages(dry)
-    passed = gate()
+    passed = gate(pending)
     ui.section("Repo status")
     ui.info(chez.git("status", "--short").stdout.rstrip() or "(no changes)")
     if not passed:

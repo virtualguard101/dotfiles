@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Fresh-machine bootstrap (Arch Linux): installs git / chezmoi / uv, clones the repo into chezmoi's
-# default source dir, then hands over to `dotfiles restore`. Everything else lives in Python; this
-# script only does what must happen before uv exists.
+# Fresh-machine bootstrap (Linux): installs git / chezmoi / uv (pacman on Arch; apt + pipx on
+# Debian / Kali), clones the repo into chezmoi's default source dir, then hands over to
+# `dotfiles restore`. Everything else lives in Python; this script only does what must happen
+# before uv exists.
 #
 # Usage (download, read, then run; do not curl | bash — the key prompt needs a terminal):
 #   curl -fsSLO https://raw.githubusercontent.com/virtualguard101/dotfiles/main/bootstrap.sh
@@ -35,9 +36,33 @@ for tool in git chezmoi uv; do
   command -v "$tool" >/dev/null 2>&1 || need+=("$tool")
 done
 if (( ${#need[@]} )); then
-  command -v pacman >/dev/null 2>&1 || die "missing ${need[*]}; install them with your package manager and retry"
-  log "installing ${need[*]} (pacman, official repos)"
-  sudo pacman -S --needed "${need[@]}"
+  if command -v pacman >/dev/null 2>&1; then
+    log "installing ${need[*]} (pacman, official repos)"
+    sudo pacman -S --needed "${need[@]}"
+  elif command -v apt-get >/dev/null 2>&1; then
+    # Debian / Kali: git and chezmoi are packaged; uv is not, so it comes from PyPI through pipx
+    apt=()
+    for tool in "${need[@]}"; do
+      case $tool in
+        uv) command -v pipx >/dev/null 2>&1 || apt+=(pipx) ;;
+        *) apt+=("$tool") ;;
+      esac
+    done
+    if (( ${#apt[@]} )); then
+      log "installing ${apt[*]} (apt)"
+      sudo apt-get install -y "${apt[@]}"
+    fi
+    if ! command -v uv >/dev/null 2>&1; then
+      log "installing uv (pipx)"
+      pipx install uv
+      export PATH="$HOME/.local/bin:$PATH"
+    fi
+  else
+    die "missing ${need[*]}; install them with your package manager and retry"
+  fi
+  for tool in git chezmoi uv; do
+    command -v "$tool" >/dev/null 2>&1 || die "$tool is still missing after the install; open a new shell and retry"
+  done
 fi
 
 # ---------------------------------------------------------------- 2. repository

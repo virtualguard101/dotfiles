@@ -14,8 +14,9 @@ FAKE_GH = "ghp_" + "a1B2" * 9   # built at runtime: the full token never appears
     ("home/readonly_Documents/PowerToys/Backup/x.ptb", "Documents/PowerToys/Backup/x.ptb"),
     ("home/AppData/Roaming/Code/User/keybindings.json", "AppData/Roaming/Code/User/keybindings.json"),
     ("home/literal_dot_npmrc", "dot_npmrc"),
-    ("system/etc/sudoers", "/etc/sudoers"),
-    ("system/etc/grub.d/executable_40_custom", "/etc/grub.d/40_custom"),
+    ("system/etc/sudoers", "/etc/sudoers"),                      # legacy layout without a distro
+    ("system/arch/etc/sudoers", "/etc/sudoers"),
+    ("system/kali/etc/grub.d/executable_40_custom", "/etc/grub.d/40_custom"),
     # not deployment targets: repo-root tooling and chezmoi's own config
     ("src/dotfiles/utils/common/guard/checks.py", None),
     ("packages/archpkg.txt", None),
@@ -112,3 +113,64 @@ def test_findings_never_carry_content():
     secret = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"
     for f in guard.check_content("home/dot_bashrc", f"export GH={secret}\n".encode()):
         assert secret not in str(f) and secret not in repr(f)
+
+
+# ---------------------------------------------------------------- platform ownership (issue #8)
+
+OWNERS = {"shared": [".gitconfig"], "linux": [".config/fcitx5", ".zshrc"], "windows": ["AppData"]}
+
+
+@pytest.mark.parametrize("source, owned", [
+    ("home/dot_zshrc", True),
+    ("home/private_dot_config/private_fcitx5/profile", True),         # inside a directory entry
+    ("home/dot_config/foo/bar.conf", False),                           # added with plain chezmoi add
+    ("home/dot_config/fcitx5x/a", False),                              # a sibling, not inside the entry
+    ("system/arch/etc/hosts", True),                                   # /etc: per distro, not platform-owned
+    ("src/dotfiles/cli/backup.py", True),                              # not a deployment target
+    ("home/.chezmoidata/platforms.toml", True),
+])
+def test_ownership_check(monkeypatch, source, owned):
+    monkeypatch.setattr(guard.paths, "_SOURCE_ROOT", "home")
+    rules = [f.rule for f in guard.check_content(source, b"x\n", owners=OWNERS)]
+    assert (not any(r.startswith("no-platform-owner") for r in rules)) is owned, rules
+
+
+def test_ownership_check_needs_owners(monkeypatch):
+    monkeypatch.setattr(guard.paths, "_SOURCE_ROOT", "home")
+    assert guard.check_content("home/dot_config/foo/bar.conf", b"x\n") == []    # e.g. scan, or no platforms.toml
+
+
+def test_invalid_platforms_toml_is_an_error():
+    findings = []
+    assert guard.cli.owners_from(b"[platforms\nlinux = [", findings) is None
+    assert [f.rule for f in findings] == ["platforms-toml-invalid"]
+
+
+TRICKY = """# header with [brackets] and "quotes"
+[platforms]
+shared = [".gitconfig"]          # inline array, comment with ] and #
+linux = [
+  ".config/a b",   # trailing comment ]
+  "escaped \\"quote\\"",
+  ".local/share/konsole/配置方案 1.profile",
+]
+note = "a scalar is ignored"
+
+[requires]
+kde = [
+  ".config/kwinrc",
+]
+"""
+
+
+def test_platforms_parser_fallback_matches_tomllib(monkeypatch):
+    import sys
+    real = guard.parse_tables(TRICKY)
+    assert real["platforms"]["linux"][1] == 'escaped "quote"'
+    monkeypatch.setitem(sys.modules, "tomllib", None)      # Python < 3.11: no tomllib
+    assert guard.parse_tables(TRICKY) == real
+    repo_file = (Path(__file__).resolve().parents[1] / "home" / ".chezmoidata" / "platforms.toml").read_text(encoding="utf-8")
+    monkeypatch.delitem(sys.modules, "tomllib")
+    expected = guard.parse_tables(repo_file)
+    monkeypatch.setitem(sys.modules, "tomllib", None)
+    assert guard.parse_tables(repo_file) == expected
