@@ -35,6 +35,11 @@
       "Info": ""
     },
     {
+      "Name": "gh",
+      "Source": "main",
+      "Info": ""
+    },
+    {
       "Name": "maven",
       "Source": "main",
       "Info": ""

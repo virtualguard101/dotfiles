@@ -11,7 +11,7 @@
 */ -}}
 {{- $tags := list -}}
 {{- if hasKey .chezmoi "osRelease" -}}
-{{-   with .chezmoi.osRelease.id }}{{ $tags = append $tags (lower .) }}{{ end -}}
+{{-   if hasKey .chezmoi.osRelease "id" }}{{ $tags = append $tags (lower .chezmoi.osRelease.id) }}{{ end -}}
 {{-   if hasKey .chezmoi.osRelease "idLike" }}{{ $tags = concat $tags (splitList " " (lower .chezmoi.osRelease.idLike)) }}{{ end -}}
 {{- end -}}
 {{- if lookPath "plasmashell" }}{{ $tags = append $tags "kde" }}{{ end -}}

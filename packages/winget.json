@@ -88,6 +88,9 @@
           "PackageIdentifier": "Microsoft.Outlook"
         },
         {
+          "PackageIdentifier": "Microsoft.PowerShell"
+        },
+        {
           "PackageIdentifier": "Microsoft.UI.Xaml.2.8"
         },
         {
