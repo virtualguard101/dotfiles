@@ -13,15 +13,17 @@ Checks (checks.CHECKS, in report order):
   age       *.age must be real age ciphertext; chezmoi's encrypted_ prefix and .age suffix must come in pairs
   policy    sensitive targets (SSH, credential files, /etc/sudoers, ...) must be stored as encrypted_*.age
   secret    plaintext files must not contain secret patterns
+  owner     every ~ target needs a platform owner in .chezmoidata/platforms.toml (read from the
+            same snapshot: the index, the pushed commit or the worktree)
   warn      this machine's home directory written out (does not block the commit)
 
 Layout: base.py (Finding, FileContext: the extension interface), checks.py (rule data, built-in
-checks, the CHECKS registry), paths.py (source path -> deployment target), git.py (index / pushed
-commits / worktree), cli.py (subcommands, report). Extensions follow two rules: stdlib and this
-package only (pre-commit runs before uv or a venv exist), and checks are registered in code only, so
-nothing outside the code can relax them. Output contains only file:line and the rule name; the
-matched content is never printed. A line containing "gitleaks:allow" or "pragma: allowlist secret"
-is skipped by the secret check.
+checks, the CHECKS registry), paths.py (source path -> deployment target, platforms.toml parsing),
+git.py (index / pushed commits / worktree), cli.py (subcommands, report). Extensions follow two
+rules: stdlib and this package only (pre-commit runs before uv or a venv exist), and checks are
+registered in code only, so nothing outside the code can relax them. Output contains only
+file:line and the rule name; the matched content is never printed. A line containing
+"gitleaks:allow" or "pragma: allowlist secret" is skipped by the secret check.
 """
 from .base import MAX_BYTES, Check, FileContext, Finding, is_binary
 from .checks import (
@@ -35,11 +37,19 @@ from .checks import (
     secret_lines,
 )
 from .cli import cmd_prune_stash, cmd_push, cmd_scan, cmd_staged, cmd_tree, main, report
-from .paths import is_encrypted_source, source_root, target_of
+from .paths import (
+    covering,
+    is_encrypted_source,
+    load_owners,
+    owners_path,
+    parse_tables,
+    source_root,
+    target_of,
+)
 
 __all__ = [
     "CHECKS", "ENCRYPT_EXEMPT", "ENCRYPT_REQUIRED", "MAX_BYTES", "SECRET_RULES", "Check", "FileContext",
     "Finding", "check_content", "cmd_prune_stash", "cmd_push", "cmd_scan", "cmd_staged", "cmd_tree",
-    "home_path_rx", "is_binary", "is_encrypted_source", "main", "report", "requires_encryption",
-    "secret_lines", "source_root", "target_of",
+    "covering", "home_path_rx", "is_binary", "is_encrypted_source", "load_owners", "main", "owners_path",
+    "parse_tables", "report", "requires_encryption", "secret_lines", "source_root", "target_of",
 ]

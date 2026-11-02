@@ -1,10 +1,15 @@
-# Each managed target (a path relative to ~; directory entries cover everything below) deploys
-# only on its own platform. .chezmoiignore derives its rules from this file, so `chezmoi add` /
-# `re-add` on one platform never reads or overwrites the other platform's source files.
+# Ownership record that chezmoi reads: .chezmoiignore is rendered from this file.
 #
-# - `dotfiles backup` registers new targets under the current platform automatically
-# - `dotfiles check` requires every managed target to be listed exactly once
-# - targets deployed on both platforms (identical, or told apart by templates) go in shared
+# [platforms]  each managed target (a path relative to ~; directory entries cover everything below)
+#              deploys only on its own platform; targets on both platforms (identical, or told
+#              apart by templates) go in shared. `dotfiles backup` registers unowned targets under
+#              the current platform, the commit hooks reject a ~ target without an owner, and
+#              `dotfiles check` requires every managed target to be listed exactly once.
+# [requires]   environment tag -> targets deployed only on machines that have that tag (detected
+#              at `chezmoi init`, see .chezmoi.toml.tmpl; `dotfiles doctor` shows this machine's).
+#              Entries must overlap an entry in [platforms].
+#
+# Edited by hand only to move a target to shared or to change [requires].
 [platforms]
 shared = [
   ".gitconfig",
@@ -65,4 +70,17 @@ windows = [
   ".wakatime.cfg",
   "AppData",
   "Documents/PowerToys",
+]
+
+[requires]
+kde = [
+  ".config/dolphinrc",
+  ".config/kdeglobals",
+  ".config/kglobalshortcutsrc",
+  ".config/konsolerc",
+  ".config/kwinrc",
+  ".config/kxkbrc",
+  ".config/mimeapps.list",
+  ".config/systemd/user/kwallet_auto_unlock.service",
+  ".local/share/konsole",
 ]

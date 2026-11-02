@@ -8,9 +8,10 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .base import SKIPPED_MODES, Check, FileContext, Finding
+from .paths import covering
 
 # ---------------------------------------------------------------- rule data
 
@@ -131,14 +132,26 @@ def check_home_path(ctx: FileContext) -> Iterable[Finding]:
             yield Finding("warn", "absolute-home-path", ctx.path, ctx.text.count(b"\n", 0, m.start()) + 1)
 
 
+def check_ownership(ctx: FileContext) -> Iterable[Finding]:
+    """Every ~ target must have a platform owner in platforms.toml (from the same snapshot); an
+    unregistered target is ignored by no platform and would deploy everywhere. /etc targets under
+    system/ are per distro and not part of platform ownership."""
+    if ctx.owners is None or ctx.target is None or ctx.target.startswith("/"):
+        return
+    if not any(covering(ctx.target, entries) for entries in ctx.owners.values()):
+        yield Finding("error", f"no-platform-owner({ctx.target})", ctx.path)
+
+
 # The registry, in report order. Append new checks here.
-CHECKS: List[Check] = [check_age, check_policy, check_secrets, check_home_path]
+CHECKS: List[Check] = [check_age, check_policy, check_secrets, check_ownership, check_home_path]
 
 
 def check_content(path: str, data: bytes, mode: str = "100644",
-                  checks: Optional[List[Check]] = None) -> List[Finding]:
-    """Run the registered checks (or the given ones) on one file."""
+                  checks: Optional[List[Check]] = None,
+                  owners: Optional[Dict[str, List[str]]] = None) -> List[Finding]:
+    """Run the registered checks (or the given ones) on one file. `owners` enables the ownership
+    check; without it (e.g. `scan`, or a repo without platforms.toml) that check is skipped."""
     if mode in SKIPPED_MODES:
         return []
-    ctx = FileContext(path, data, mode)
+    ctx = FileContext(path, data, mode, owners)
     return [f for check in (CHECKS if checks is None else checks) for f in check(ctx)]

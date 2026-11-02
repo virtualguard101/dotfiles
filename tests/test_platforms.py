@@ -10,8 +10,9 @@ from dotfiles.utils.common import chez
 needs_chezmoi = pytest.mark.skipif(not platforms.have("chezmoi"), reason="requires chezmoi")
 
 
-def render_ignore(os_name: str) -> set[str]:
-    r = chez.cz("execute-template", "--file", str(chez.source_state_dir() / ".chezmoiignore"), os_override=os_name)
+def render_ignore(os_name: str, tags: list[str] | None = None) -> set[str]:
+    r = chez.cz("execute-template", "--file", str(chez.source_state_dir() / ".chezmoiignore"),
+                os_override=os_name, tags=tags)
     assert r.ok, r.stderr
     return {line.strip() for line in r.stdout.splitlines() if line.strip()}
 
@@ -60,3 +61,54 @@ def test_register_platform_keeps_header(tmp_path, monkeypatch):
     text = f.read_text(encoding="utf-8")
     assert text.startswith(header)
     assert chez.load_platforms()["linux"].count(".config/dotfiles-test/never-registered.conf") == 1
+
+
+KDE = {".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"}
+
+
+@needs_chezmoi
+def test_requires_ignores_targets_whose_tag_is_missing():
+    no_tags = render_ignore("linux")                         # config written before tags: no filtering
+    arch = render_ignore("linux", ["arch", "kde"])
+    kali = render_ignore("linux", ["kali", "debian", "gnome"])
+    assert arch == no_tags
+    assert KDE <= kali and not KDE & arch
+    # parents shared with targets this machine keeps stay managed
+    assert {".config", ".local", ".local/share", ".config/systemd", ".config/systemd/user"}.isdisjoint(kali)
+    assert ".config/systemd/user/kwallet_auto_unlock.service" in kali
+    assert render_ignore("windows", ["kde"]) == render_ignore("windows")    # requires never re-enables
+
+
+@needs_chezmoi
+def test_kali_view_drops_only_kde_targets():
+    every = set(chez.managed(include="files", os_override="linux", tags=["arch", "kde"]))
+    kali = set(chez.managed(include="files", os_override="linux", tags=["kali", "debian", "gnome"]))
+    assert kali < every
+    dropped = every - kali
+    requires = chez.load_requires()["kde"]
+    assert all(chez.covering(t, requires) for t in dropped)
+    assert {".zshrc", ".config/fcitx5/profile"} <= kali
+
+
+def test_register_platform_keeps_other_tables(tmp_path, monkeypatch):
+    f = tmp_path / "platforms.toml"
+    shutil.copy(chez.platforms_file(), f)
+    monkeypatch.setattr(chez, "platforms_file", lambda: f)
+    requires = chez.load_requires()
+    assert chez.register_platform(".config/dotfiles-test/x.conf", "linux", dry=False)
+    assert chez.load_requires() == requires and requires
+    assert ".config/dotfiles-test/x.conf" in chez.load_platforms()["linux"]
+    text = f.read_text(encoding="utf-8")
+    assert text.index("[platforms]") < text.index("[requires]")
+    assert "\n\n[requires]" in text                           # the blank line before the next table stays
+
+
+@needs_chezmoi
+def test_check_platforms_validates_requires(tmp_path, monkeypatch):
+    f = tmp_path / "platforms.toml"
+    text = chez.platforms_file().read_text(encoding="utf-8")
+    f.write_text(text + '\nBad_Tag = [".config/kwinrc"]\nnvidia = [".config/not-managed-anywhere"]\n', encoding="utf-8")
+    monkeypatch.setattr(chez, "platforms_file", lambda: f)
+    problems = chez.check_platforms()
+    assert any("Bad_Tag" in p for p in problems)
+    assert any(".config/not-managed-anywhere matches no entry" in p for p in problems)

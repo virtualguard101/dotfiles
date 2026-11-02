@@ -52,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("system-restore", help="Linux: compare system/ backups with the current /etc; --apply installs")
     s.add_argument("--apply", action="store_true", help="actually install (needs sudo)")
     s.add_argument("paths", nargs="*", metavar="/etc/PATH", help="only these paths; hardware-bound files must be named explicitly")
+    s.add_argument("--distro", metavar="NAME", help="restore from system/NAME instead of this distro's backup")
 
     s = sub.add_parser("clean", help="cache cleanup (preview by default)")
     csub = s.add_subparsers(dest="clean_cmd", metavar="<scan|list|run|leftovers>")
@@ -104,7 +105,7 @@ def dispatch(a: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         if not platforms.IS_LINUX:
             raise ui.Abort("system-restore is Linux-only", 2)
         from dotfiles.cli import etc
-        return etc.cmd_restore(apply=a.apply, filters=a.paths)
+        return etc.cmd_restore(apply=a.apply, filters=a.paths, distro=a.distro)
     if a.cmd == "clean":
         from dotfiles.cli import clean
         if a.clean_cmd == "scan":

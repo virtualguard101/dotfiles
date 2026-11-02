@@ -46,7 +46,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 | `key` | 两端 | 模板将选用的私钥路径上有文件，且推导出的公钥与仓库模板中的 recipient 一致 | 从 `--key-file` 或交互输入（文件路径，或直接粘贴私钥行，输入不回显）读取，写入后再次校验；不匹配则删除写入的文件 |
 | `config` | 两端 | chezmoi 源目录是本仓库；`~/.config/chezmoi/chezmoi.toml` 与模板渲染结果一致 | 备份原配置后运行 `chezmoi init` |
 | `dotfiles` | 两端 | `chezmoi status`（不含 externals）是否还有待部署项 | 完整预演 → 备份将被覆盖的已有文件 → `chezmoi apply --force` |
-| `system` | Linux | `system/etc` 是否存在 | 见 [3.6](#36-linux-etc) 的恢复规则（需要确认） |
+| `system` | Linux | 本发行版（os-release 的 `ID`）是否有 `system/<发行版>/etc` | 见 [3.6](#36-linux-etc) 的恢复规则（需要确认）；没有本发行版的备份时跳过 |
 | `packages` | 两端 | 清单中缺少的软件包 | Linux：官方/已配置仓库的包用 `sudo pacman -S --needed`，其余交给 paru/yay，没有 AUR 助手时列出；Windows：`winget import`、`scoop import`（需要确认） |
 | `externals` | 两端 | externals 的目标目录是否存在 | `chezmoi apply --include externals`；git 代理连不上时临时直连 |
 | `ssh` | 两端 | `~/.ssh/id_ed25519` 与 `~/.ssh/config` 中 `IdentityFile` 引用的私钥是否存在 | `ssh-keygen` 生成缺失的密钥（交互设置口令）；`gh` 已登录时可把 GitHub 用的公钥登记上去 |
@@ -131,13 +131,30 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 - `check` 要求两个平台视角下的每个托管目标都恰好被一个列表覆盖。
 
+- **没有归属的目标会被自动登记。** 用原生 `chezmoi add` 加入的目标没有归属，`.chezmoiignore` 不会在任何平台上忽略它，于是它会被部署到所有平台。`dotfiles backup` 会把所有没有归属的托管目标登记到当前平台（`-n` 时只列出）；提交检查会拒绝新增了没有归属的 `~` 目标的提交（`no-platform-owner`，见 [5.2](#52-检查内容)）。把文件和更新后的 `platforms.toml` 放在同一个提交里即可。
+
 手动新增一个只在 Linux 部署的文件：
 
 ```bash
 chezmoi add ~/.config/foo/bar.conf                 # 或 add --encrypt
-# 然后在 platforms.toml 的 linux 列表中加入 ".config/foo"（或具体文件）
-uv run dotfiles check
+uv run dotfiles backup -n                          # 会列在"Register platform owners"下
+uv run dotfiles backup --commit                    # 登记到 linux 并提交
 ```
+
+#### 环境标签：`[requires]`
+
+同一个系统内，机器之间仍有差异：KDE 的配置不该出现在跑 GNOME 的机器上。`[requires]` 表把一个**标签**映射到只在带有该标签的机器上部署的目标：
+
+```toml
+[requires]
+kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
+```
+
+- **机器的标签**由 `home/.chezmoi.toml.tmpl` 在 `chezmoi init` 时检测，写入配置的 `[data] tags`：os-release 的 `ID` 与 `ID_LIKE` 中的各项（例如 `arch`；`kali`、`debian`），`PATH` 中有 `plasmashell` 时加 `kde`，有 `gnome-shell` 时加 `gnome`。`dotfiles doctor` 会显示它们。安装或移除桌面环境后，重新运行 `chezmoi init`（或 `dotfiles restore --apply --only config`）。
+- 没有列在 `[requires]` 中的目标会部署到同一系统的所有机器上，所以大多数目标不需要标签。本机缺少所需标签的目标，会像另一平台的目标一样被忽略（包括只被这类目标使用的父目录）。
+- 在标签功能出现之前生成的配置不做 `[requires]` 过滤；在重新生成配置之前，`doctor` 会一直提示。
+- `check` 会校验标签名（`[a-z0-9-]`），以及每个条目都与 `[platforms]` 中的某个条目有重叠。
+- 预览另一台机器的视角：`chezmoi --override-data '{"chezmoi":{"os":"linux"},"tags":["kali","debian","gnome"]}' managed`。
 
 两端都需要但内容不同的文件：改为模板（例如 `dot_gitconfig.tmpl` 中用 `{{ if eq .chezmoi.os "windows" }}` 区分），登记到 `shared`。
 
@@ -157,7 +174,7 @@ uv run dotfiles check
 
 ### 3.6 Linux /etc
 
-`/etc` 使用一个独立的 chezmoi 实例：源目录是仓库根目录的 `system/`，目标是 `$XDG_RUNTIME_DIR` 下的临时暂存区（tmpfs，用完即删）。root 才能读的文件通过 `sudo cat` 读入暂存区，因此需要在交互终端中运行；没有终端时这些文件会被跳过并给出警告。
+`/etc` 使用一个独立的 chezmoi 实例：源目录是仓库根目录的 `system/<发行版>/`（`<发行版>` 是 os-release 的 `ID`，例如 `system/arch/`；每个发行版只备份和恢复自己的目录，所以另一个发行版的 `/etc` 永远不会被装进来或被覆盖），目标是 `$XDG_RUNTIME_DIR` 下的临时暂存区（tmpfs，用完即删）。root 才能读的文件通过 `sudo cat` 读入暂存区，因此需要在交互终端中运行；没有终端时这些文件会被跳过并给出警告。
 
 收集的目标（清单在 `dotfiles.toml` 的 `[etc]` 中）：
 
@@ -170,6 +187,8 @@ uv run dotfiles check
 - 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.bak` 等。
 
 恢复（`system-restore` 与 restore 的 `system` 步骤）：
+
+- 使用本发行版的备份；`system-restore --distro 名称` 可以显式恢复另一个发行版的备份（例如重装成衍生发行版之后）。没有本发行版的备份时，restore 的 `system` 步骤会跳过。
 
 - 解密到暂存区后逐个与 `/etc` 比较，显示差异（加密文件只提示有差异，不显示内容）。
 
@@ -380,7 +399,7 @@ pre-commit install-hooks          # 可选：预先构建环境（首次会下�
 `--no-verify` 跳过检查的提交，即使后续提交删掉了密钥也一样。
 
 `dotfiles-guard` 的规则（`staged`、`push`、`tree` 三种模式相同）。部署目标按 chezmoi 规则换算：
-`.chezmoiroot` 指定的 `home/` 下是 `~` 的目标，`system/` 下是系统路径，其余文件（工具代码、软件包清单）不是部署目标，但同样做密钥扫描。
+`.chezmoiroot` 指定的 `home/` 下是 `~` 的目标，`system/<发行版>/` 下是系统路径，其余文件（工具代码、软件包清单）不是部署目标，但同样做密钥扫描。
 
 | 规则 | 级别 | 说明 |
 |---|---|---|
@@ -388,6 +407,7 @@ pre-commit install-hooks          # 可选：预先构建环境（首次会下�
 | `age-without-encrypted-prefix` / `encrypted-prefix-without-age` | 错误 | `encrypted_` 前缀与 `.age` 后缀没有成对出现 |
 | `must-encrypt(<目标>)` | 错误 | 目标属于必须加密的类别却没有加密（`ENCRYPT_REQUIRED` / `ENCRYPT_EXEMPT`） |
 | 密钥规则名（如 `github-token`） | 错误 | 明文匹配 `SECRET_RULES`；`backup` 判断是否加密时用的是同一套规则 |
+| `no-platform-owner(<目标>)` | 错误 | `~` 目标在 `platforms.toml` 中没有归属（从同一个快照读取：暂存区、待推送的提交、工作区），否则它会被部署到所有平台（[3.3](#33-平台归属)） |
 | `absolute-home-path` | 警告 | 含本机的家目录（字面路径，或同一用户的 `C:\Users\<用户>`、JSON 转义形式、`/c/Users/<用户>`），在另一台机器上无效。`/home/username` 这类通用示例不会报告 |
 
 `ENCRYPT_REQUIRED` 覆盖：`.ssh/*`（`*.pub`、`known_hosts*` 除外）、`.gnupg/*`、`.pypirc`、`.npmrc`、`.netrc`/`_netrc`、`.git-credentials`、`.docker/config.json`、gh 的 `hosts.yml`、`.wakatime.cfg`、`.aws/credentials`、`.kube/config`、rclone 配置、`*.pem`/`*.key`/`*.p12`/`*.pfx`、`id_rsa`/`id_ecdsa`/`id_ed25519`、`.env*`（`.env.example` 除外），以及 `system/` 下的 `/etc/shadow*`、`/etc/sudoers*`、`/etc/crypttab`、NetworkManager 连接、WireGuard、SSH 主机密钥、mihomo 配置。
@@ -434,7 +454,7 @@ uv run dotfiles guard prune-stash --max-age-minutes 0
 | `chezmoi edit <目标>` | 打开 `home/` 下的源文件；加密文件自动解密编辑、保存时重新加密 |
 | `chezmoi edit --apply <目标>` | 编辑并一步部署 |
 | `chezmoi re-add` | 重新导入改动的明文目标、重新加密改动的加密目标（`dotfiles backup` 内部就是包的它） |
-| `chezmoi add <文件>` | 照常工作，但新目标必须登记到 `platforms.toml`（[3.3](#33-平台归属)）；`dotfiles check` 会强制校验 |
+| `chezmoi add <文件>` | 照常工作；新目标需要在 `platforms.toml` 中有归属（[3.3](#33-平台归属)）：`dotfiles backup` 会自动登记，登记之前提交检查会拦下它 |
 | `chezmoi managed / diff / verify / forget` | 不受影响；`chezmoi source-path` 解析为 `~/.local/share/chezmoi/home` |
 
 两点注意：
@@ -505,8 +525,8 @@ chezmoi add --encrypt ~/.ssh/config   # 重新导入；encrypted_ 前缀保持�
 
 ```bash
 chezmoi add ~/.config/foo/bar.conf         # 敏感内容用 `chezmoi add --encrypt`
-# 然后在 platforms.toml 的 linux / windows / shared 中登记 ".config/foo"（或具体文件）
-uv run dotfiles check
+uv run dotfiles backup --commit            # 登记到当前平台
+# 两端都要部署的话，手动把条目移到 platforms.toml 的 shared 中
 ```
 
 ### 6.4 dotfiles apply
@@ -548,7 +568,9 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 - **Windows 上尚未实际运行过 Python 版本**：Windows 的清理目标、备份（scoop/winget 导出、ACL 审计）、恢复流程与 `bootstrap.ps1` 是从原 PowerShell 脚本移植或新写的，只在 Linux 上做过文件系统层面的测试与语法解析。原脚本可在提交 `a15c9b5` 中找到（`git show a15c9b5:scripts/clean.ps1`）。首次在 Windows 上使用时，先运行`doctor`、`clean scan`、`status`、`restore`（不加 `--apply`）确认结果。
 
-- **scoop 不会被自动安装**：它的官方安装方式是执行远程脚本，本工具不代为执行；restore 会在缺少 scoop 时停下并给出说明。
+- **scoop 通过它的官方安装脚本安装**：winget 中没有 scoop。`bootstrap.ps1 --apply` 会把安装脚本下载到临时文件并打印路径，方便你先阅读，确认后才执行（`--yes` 跳过询问）；和 scoop 本身一样，它拒绝在管理员会话中安装。缺少 scoop 时，restore 的 packages 步骤会停下并给出说明。
+
+- **每个发行版只有一份 `/etc` 备份**：同一发行版的两台机器共用 `system/<发行版>/`。只在其中一台上备份 `/etc`（另一台用 `backup --no-system`）。
 
 - **archlinuxcn 等第三方仓库**：新系统在恢复 `/etc/pacman.conf` 并安装对应 keyring 之前，这些仓库中的包会被列为"AUR 或未知"。按 restore 的提示处理后重跑 `--only packages` 即可。
 

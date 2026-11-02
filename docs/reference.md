@@ -46,7 +46,7 @@ dotfiles restore [--apply] [--only steps,…] [--skip steps,…] [--key-file pat
 | `key` | both | the template's chosen key path has a file, and its derived public key matches the template's recipient | reads from `--key-file` or interactive input (a file path, or paste the key line, hidden), writes it and validates again; deletes the file on mismatch |
 | `config` | both | the chezmoi source dir is this repo; `~/.config/chezmoi/chezmoi.toml` matches the template render | backs up the old config, then runs `chezmoi init` |
 | `dotfiles` | both | whether `chezmoi status` (excluding externals) has pending items | full rehearsal -> backup of files about to be overwritten -> `chezmoi apply --force` |
-| `system` | Linux | whether `system/etc` exists | restore rules from [3.6](#36-linux-etc) (asks for confirmation) |
+| `system` | Linux | whether `system/<distro>/etc` exists for this distro (os-release `ID`) | restore rules from [3.6](#36-linux-etc) (asks for confirmation); skipped on a distro without a backup |
 | `packages` | both | manifest packages that are missing | Linux: `sudo pacman -S --needed` for packages in configured repos, the rest via paru/yay, listed when no AUR helper exists; Windows: `winget import`, `scoop import` (asks for confirmation) |
 | `externals` | both | whether externals' target dirs exist | `chezmoi apply --include externals`; connects directly when the git proxy is unreachable |
 | `ssh` | both | whether `~/.ssh/id_ed25519` and the private keys referenced by `~/.ssh/config` exist | generates missing keys with `ssh-keygen` (passphrase set interactively); can register the GitHub public key via `gh` when logged in |
@@ -135,13 +135,30 @@ encrypted), `exclude` (filename patterns skipped when expanding directories) and
 
 - `check` requires every target managed in each platform's view to be covered by exactly one list.
 
+- **Unowned targets are registered automatically.** A target added with plain `chezmoi add` has no owner, and `.chezmoiignore` would hide it from no platform, so it would deploy everywhere. `dotfiles backup` registers every unowned managed target under the current platform (`-n` lists them), and the commit hooks reject a commit that adds a `~` target without an owner (`no-platform-owner`, see [5.2](#52-what-is-checked)). Commit the file and the updated `platforms.toml` together.
+
 Manually adding a Linux-only file:
 
 ```bash
 chezmoi add ~/.config/foo/bar.conf                 # or add --encrypt
-# then add ".config/foo" (or the concrete file) to platforms.toml's linux list
-uv run dotfiles check
+uv run dotfiles backup -n                          # lists it under "Register platform owners"
+uv run dotfiles backup --commit                    # registers it under linux and commits
 ```
+
+#### Environment tags: `[requires]`
+
+Within one OS, machines still differ: a KDE config has no business on a GNOME machine. The `[requires]` table maps a **tag** to targets that deploy only on machines with that tag:
+
+```toml
+[requires]
+kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
+```
+
+- **A machine's tags** are detected at `chezmoi init` by `home/.chezmoi.toml.tmpl` and written to the config as `[data] tags`: the os-release `ID` and `ID_LIKE` words (e.g. `arch`; `kali`, `debian`), `kde` when `plasmashell` is on `PATH`, `gnome` when `gnome-shell` is. `dotfiles doctor` shows them. Rerun `chezmoi init` (or `dotfiles restore --apply --only config`) after installing or removing a desktop environment.
+- Targets not listed in `[requires]` deploy on every machine of their OS, so most targets need no tag. A target with a tag the machine lacks is ignored like another platform's target (including parent directories used only by such targets).
+- A config written before tags existed applies no `[requires]` filtering; `doctor` reports it until the config is regenerated.
+- `check` validates tag names (`[a-z0-9-]`) and that each entry overlaps an entry in `[platforms]`.
+- Preview another machine's view: `chezmoi --override-data '{"chezmoi":{"os":"linux"},"tags":["kali","debian","gnome"]}' managed`.
 
 Same-name targets needed on both platforms with different content: make it a template(e.g. distinguish inside `dot_gitconfig.tmpl` with `{{ if eq .chezmoi.os "windows" }}`) and register it in `shared`.
 
@@ -161,7 +178,7 @@ Same-name targets needed on both platforms with different content: make it a tem
 
 ### 3.6 Linux /etc
 
-`/etc` uses a separate chezmoi instance: the source dir is `system/` at the repo top, the destination is a staging area under `$XDG_RUNTIME_DIR` (tmpfs, deleted afterwards). Files only root can read are read in via `sudo cat`, so run it in an interactive terminal; without a terminal those files are skipped with a warning.
+`/etc` uses a separate chezmoi instance: the source dir is `system/<distro>/` at the repo top (`<distro>` is the os-release `ID`, e.g. `system/arch/`; each distro backs up and restores only its own directory, so another distro's `/etc` is never installed or overwritten), the destination is a staging area under `$XDG_RUNTIME_DIR` (tmpfs, deleted afterwards). Files only root can read are read in via `sudo cat`, so run it in an interactive terminal; without a terminal those files are skipped with a warning.
 
 Collected targets (lists in `dotfiles.toml` `[etc]`):
 
@@ -174,6 +191,8 @@ Collected targets (lists in `dotfiles.toml` `[etc]`):
 - everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.bak`, etc.
 
 Restore (`system-restore`, and restore's `system` step):
+
+- uses this distro's backup; `system-restore --distro NAME` restores another one explicitly (e.g. after reinstalling into a derivative). restore's `system` step is skipped on a distro without a backup.
 
 - decrypts into the staging area and compares each file with `/etc`, showing diffs (encrypted files only report that they differ, without content).
 
@@ -384,7 +403,7 @@ At `git commit` (the staged set only):
 
 At `git push`, `dotfiles-guard-push` checks the files added or modified by **every** commit about to be pushed, so commits made with `--no-verify` are caught too — even when a later commit removes the secret.
 
-The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Deployment targets follow chezmoi rules: files under the dir named by `.chezmoiroot` (e.g. `home/`) map to `~` targets, `system/` maps to system paths, and the rest (tool code, package manifests) are not deployment targets but are secret-scanned all the same.
+The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Deployment targets follow chezmoi rules: files under the dir named by `.chezmoiroot` (e.g. `home/`) map to `~` targets, `system/<distro>/` maps to system paths, and the rest (tool code, package manifests) are not deployment targets but are secret-scanned all the same.
 
 | Rule | Level | Meaning |
 |---|---|---|
@@ -392,6 +411,7 @@ The `dotfiles-guard` rules (identical in `staged`, `push` and `tree` modes). Dep
 | `age-without-encrypted-prefix` / `encrypted-prefix-without-age` | error | the `encrypted_` prefix and the `.age` suffix do not come in pairs |
 | `must-encrypt(<target>)` | error | the target belongs to a must-encrypt category but is not encrypted (`ENCRYPT_REQUIRED` / `ENCRYPT_EXEMPT`) |
 | secret rule names (e.g. `github-token`) | error | plaintext matching `SECRET_RULES`; `backup` uses the same rules to decide on encryption |
+| `no-platform-owner(<target>)` | error | a `~` target with no entry in `platforms.toml`, read from the same snapshot (index, pushed commit, worktree); it would deploy on every platform ([3.3](#33-platform-ownership)) |
 | `absolute-home-path` | warning | contains this machine's home directory (literal path, or the same user as `C:\Users\<user>`, JSON-escaped or `/c/Users/<user>`), which is invalid on another machine. Generic examples such as `/home/username` are not reported |
 
 `ENCRYPT_REQUIRED` covers: `.ssh/*` (except `*.pub`, `known_hosts*`), `.gnupg/*`, `.pypirc`, `.npmrc`, `.netrc`/`_netrc`, `.git-credentials`, `.docker/config.json`, gh's `hosts.yml`, `.wakatime.cfg`, `.aws/credentials`, `.kube/config`, rclone configs, `*.pem`/`*.key`/`*.p12`/ `*.pfx`, `id_rsa`/`id_ecdsa`/`id_ed25519`, `.env*` (except `.env.example`), plus `/etc/shadow*`, `/etc/sudoers*`, `/etc/crypttab`, NetworkManager connections, WireGuard, SSH host keys and the mihomo config under `system/`.
@@ -437,7 +457,7 @@ All traditional commands work transparently; chezmoi resolves the real source pa
 | `chezmoi edit <target>` | opens the source file under `home/`; encrypted files are decrypted for editing and re-encrypted on save |
 | `chezmoi edit --apply <target>` | edit and deploy in one step |
 | `chezmoi re-add` | re-imports changed plaintext targets and re-encrypts changed encrypted ones (`dotfiles backup` wraps this) |
-| `chezmoi add <file>` | works as usual, but new targets must be registered in `platforms.toml` ([3.3](#33-platform-ownership)); `dotfiles check` enforces it |
+| `chezmoi add <file>` | works as usual; the new target needs an owner in `platforms.toml` ([3.3](#33-platform-ownership)): `dotfiles backup` registers it, and the commit hooks block it until then |
 | `chezmoi managed / diff / verify / forget` | unaffected; `chezmoi source-path` resolves to `~/.local/share/chezmoi/home` |
 
 Two caveats:
@@ -508,8 +528,8 @@ See also [3.3](#33-platform-ownership):
 
 ```bash
 chezmoi add ~/.config/foo/bar.conf         # or `chezmoi add --encrypt` for sensitive content
-# then register ".config/foo" (or the concrete file) in platforms.toml under linux / windows / shared
-uv run dotfiles check
+uv run dotfiles backup --commit            # registers it under the current platform
+# to deploy it on both platforms, move the entry to shared in platforms.toml by hand
 ```
 
 ### 6.4 dotfiles apply
@@ -553,7 +573,9 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 - **The Python version has never actually run on Windows**: the Windows cleanup targets, backup (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the original PowerShell scripts (or written fresh) and are only tested at the filesystem level on Linux, plus syntax parsing. The original scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`, `status` and `restore` (without `--apply`) to confirm the results.
 
-- **scoop is not installed automatically**: its official install method is a remote script, which this tool will not run for you; restore stops with instructions when scoop is missing.
+- **scoop comes from its official installer script**: there is no winget package. `bootstrap.ps1 --apply` downloads the installer to a temporary file, prints its path so you can read it, and runs it only after you confirm (`--yes` skips the question); it refuses an administrator session, as scoop does. restore's packages step stops with instructions while scoop is missing.
+
+- **One `/etc` backup per distro**: two machines with the same distro share `system/<distro>/`. Back up `/etc` on one of them only (use `backup --no-system` on the other).
 
 - **Third-party repos like archlinuxcn**: on a new system, before `/etc/pacman.conf` is restored and the matching keyring installed, their packages are listed as "AUR or unknown". Handle those as restore instructs, then rerun `--only packages`.
 

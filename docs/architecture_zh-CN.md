@@ -101,7 +101,8 @@ utils/common/guard/
 
 检查是一个纯函数 `check(ctx: FileContext) -> Iterable[Finding]`。`FileContext` 提供仓库内路径、文件字节、
 git 模式、部署目标（`ctx.target`）以及供文本检查使用的内容（`ctx.text`；密文、二进制和大文件为 `None`）。
-内置检查 `age`、`policy`（必须加密）、`secrets`、`home path` 按输出顺序列在 `checks.CHECKS` 中。
+此外还提供从同一个快照读取的 `platforms.toml` 中的 `[platforms]` 表（`ctx.owners`）。内置检查 `age`、`policy`（必须加密）、
+`secrets`、`ownership`（每个 `~` 目标都要有平台归属）、`home path` 按输出顺序列在 `checks.CHECKS` 中。
 
 新增一项安全检查：写一个函数，追加到 `CHECKS`，补上测试。由于检查是纯函数，同一个检查无需改动就能用于
 暂存区（pre-commit）、每个待推送的提交（pre-push）和工作区（`dotfiles check`）。新的*阶段*（例如
@@ -120,9 +121,10 @@ commit-msg）是第二个扩展维度：在 `git.py` 中加一个来源、在 `c
 | 内容 | 位置 | 由谁写入 |
 |---|---|---|
 | 备份 / 清理清单与阈值 | `dotfiles.toml`（仓库顶层） | 你，或 `dotfiles config add/remove/set` |
-| 每个托管目标的平台归属 | `home/.chezmoidata/platforms.toml` | `backup`（登记新目标）、你 |
+| 每个托管目标的平台归属（`[platforms]`）、目标所需的环境标签（`[requires]`） | `home/.chezmoidata/platforms.toml` | `backup`（登记没有归属的目标）、你（`shared`、`[requires]`） |
+| 本机的环境标签 | chezmoi 配置中的 `[data] tags` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 检测 |
 | dotfiles（源状态） | `home/`（`.chezmoiroot`） | chezmoi（`add`、`re-add`、`edit`），经由 `backup` |
-| /etc 备份 | `system/` | `backup`，通过第二个 chezmoi 实例 |
+| /etc 备份 | `system/<发行版>/`（os-release 的 `ID`；`system/windows/` 预留） | `backup`，通过第二个 chezmoi 实例 |
 | 软件包清单 | `packages/` | `backup` |
 | 提交检查规则（必须加密的类别、密钥特征） | `utils/common/guard/checks.py` | 代码，有意为之（第 4 节） |
 | chezmoi 配置 | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 生成 |
@@ -181,3 +183,8 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 
 新增：`dotfiles apply`、`dotfiles config`、`backup.<os>.ignore`、`[clean] disabled/opt`、
 `[[clean.paths]]`、guard 检查注册表，以及分层测试。
+
+0.4.0 补全了归属模型：`backup` 会登记没有归属的目标，guard 的 `ownership` 检查在提交时拦下它们（issue #8）；
+`[requires]` 配合每台机器的标签，让依赖特定环境的目标（例如 KDE 配置）不会部署到没有该环境的机器上；`/etc`
+从 `system/etc` 移到 `system/<发行版>/etc`，每个发行版只备份和恢复自己的目录；`bootstrap.sh` 在 Debian / Kali
+上用 apt + pipx 安装前置工具，`bootstrap.ps1` 可以安装 scoop。

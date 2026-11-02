@@ -71,6 +71,16 @@ def commit_changes(commit: str) -> List[Tuple[str, str, str]]:
     return changes
 
 
+def blob_at(commit: str, path: str) -> Optional[bytes]:
+    """Content of `path` in `commit`, or None when the commit has no such file."""
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{commit}:{path}"], check=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode().strip()
+    except subprocess.CalledProcessError:
+        return None
+    return read_blobs([sha]).get(sha)
+
+
 def worktree_files() -> Iterator[str]:
     """Tracked and unignored new files that exist as regular files."""
     raw = git("ls-files", "-z", "-co", "--exclude-standard")

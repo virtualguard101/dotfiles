@@ -3,9 +3,11 @@
 code, package manifests) is not a deployment target."""
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from .git import git
 
@@ -14,7 +16,7 @@ FILE_PREFIXES = ("encrypted_", "private_", "readonly_", "empty_", "executable_",
                  "after_", "literal_")
 DIR_PREFIXES = ("remove_", "external_", "exact_", "private_", "readonly_", "literal_")
 LEGACY_NON_TARGET_TOP = ("scripts",)   # tool directory ignored in the old layout without .chezmoiroot
-SYSTEM_TOP = "system"                   # source dir for system config like /etc (separate chezmoi instance)
+SYSTEM_TOP = "system"                   # system/<distro>/etc: /etc of one distro (separate chezmoi instance)
 
 
 def _strip_attrs(comp: str, prefixes: tuple) -> tuple:
@@ -52,7 +54,8 @@ def target_of(source: str, root: Optional[str] = None) -> Optional[str]:
     parts = source.split("/")
     system = parts[0] == SYSTEM_TOP
     if system:
-        parts = parts[1:]
+        # system/<distro>/<path> -> /<path>; the legacy layout system/etc/... had no distro component
+        parts = parts[1:] if len(parts) > 1 and parts[1] == "etc" else parts[2:]
     elif root:
         root_parts = root.split("/")
         if parts[:len(root_parts)] != root_parts:
@@ -80,3 +83,73 @@ def target_of(source: str, root: Optional[str] = None) -> Optional[str]:
 
 def is_encrypted_source(source: str) -> bool:
     return Path(source).name.startswith("encrypted_") and source.endswith(".age")
+
+
+# ---------------------------------------------------------------- platform ownership (platforms.toml)
+
+OWNERS_FILE = ".chezmoidata/platforms.toml"   # relative to the source state (the .chezmoiroot dir)
+
+
+def owners_path(root: Optional[str] = None) -> str:
+    """Repo-relative path of platforms.toml."""
+    root = source_root() if root is None else root
+    return f"{root}/{OWNERS_FILE}" if root else OWNERS_FILE
+
+
+def covering(target: str, entries) -> Optional[str]:
+    """The declaration covering target (the same path, or a directory target containing it)."""
+    for e in entries:
+        if target == e or target.startswith(e.rstrip("/") + "/"):
+            return e
+    return None
+
+
+_TABLE = re.compile(r"^\s*\[([^\[\]]+)\]\s*(?:#.*)?$")
+_KEY = re.compile(r"^\s*([A-Za-z0-9_-]+)\s*=")
+_TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|#.*|\[|\]')
+
+
+def parse_tables(text: str) -> Dict[str, Dict[str, List[str]]]:
+    """table -> key -> list of strings. Uses tomllib when present (Python 3.11+); otherwise a small
+    parser for the format platforms.toml is written in (tables whose values are string arrays)."""
+    try:
+        import tomllib
+    except ImportError:
+        tomllib = None
+    if tomllib is not None:
+        data = tomllib.loads(text)
+        return {t: {k: list(v) for k, v in body.items() if isinstance(v, list)}
+                for t, body in data.items() if isinstance(body, dict)}
+    out: Dict[str, Dict[str, List[str]]] = {}
+    table: Optional[str] = None
+    key: Optional[str] = None
+    items: List[str] = []
+    for line in text.splitlines():
+        rest = line
+        if key is None:
+            m = _TABLE.match(line)
+            if m:
+                table = m.group(1).strip()
+                continue
+            m = _KEY.match(line)
+            if not m or table is None:
+                continue
+            key, items, rest = m.group(1), [], line[m.end():]
+            if "[" not in rest:            # a scalar value: not ours
+                key = None
+                continue
+        for tok in _TOKEN.findall(rest):
+            if tok.startswith("#"):
+                break
+            if tok.startswith('"'):
+                items.append(json.loads(tok))
+            elif tok == "]":
+                out.setdefault(table or "", {})[key or ""] = items
+                key = None
+                break
+    return out
+
+
+def load_owners(text: str) -> Dict[str, List[str]]:
+    """The [platforms] table of platforms.toml: owner (shared / linux / windows) -> targets."""
+    return parse_tables(text).get("platforms", {})

@@ -50,3 +50,10 @@ def os_release() -> dict[str, str]:
 def is_arch_like() -> bool:
     rel = os_release()
     return rel.get("ID") == "arch" or "arch" in rel.get("ID_LIKE", "").split()
+
+
+def distro() -> str:
+    """os-release ID (e.g. arch, kali, debian); "linux" when it cannot be read. Names the per-distro
+    /etc backup directory, so it must stay stable across reinstalls (unlike the hostname)."""
+    value = os_release().get("ID", "").strip().lower()
+    return value if value and value.replace("-", "").replace("_", "").isalnum() else "linux"

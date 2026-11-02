@@ -12,6 +12,7 @@ from typing import List, Optional
 from . import git
 from .base import MAX_BYTES, Finding, is_binary
 from .checks import check_content, secret_lines
+from .paths import load_owners, owners_path
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -27,7 +28,15 @@ def report(findings: List[Finding], hint: bool = True) -> int:
         print(f"warning: {x}")
     for x in errors:
         print(f"error:   {x}")
-    if errors and hint:
+    owner = [x for x in errors if x.rule.startswith(("no-platform-owner", "platforms-toml-invalid"))]
+    if owner and hint:
+        print(
+            "\nTargets without a platform owner would deploy on every platform. How to resolve:\n"
+            "  - run dotfiles backup (registers them under this platform), or add them to\n"
+            f"    {owners_path()} by hand (shared / linux / windows)\n"
+            "  - commit the target and the updated platforms.toml together"
+        )
+    if len(owner) < len(errors) and hint:
         print(
             "\nUnencrypted sensitive content detected (values are not printed). How to resolve:\n"
             "  - store the sensitive file encrypted: chezmoi forget <target>, then chezmoi add --encrypt <target>\n"
@@ -38,15 +47,29 @@ def report(findings: List[Finding], hint: bool = True) -> int:
     return 1 if errors else 0
 
 
+def owners_from(data: Optional[bytes], findings: List[Finding], where: str = "") -> Optional[dict]:
+    """Parse platforms.toml content from one snapshot; None (ownership check off) when absent.
+    A file that does not parse is itself an error."""
+    if data is None:
+        return None
+    try:
+        return load_owners(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):     # tomllib.TOMLDecodeError is a ValueError
+        findings.append(Finding("error", "platforms-toml-invalid", owners_path(), where=where))
+        return None
+
+
 def cmd_staged(paths: List[str]) -> int:
     entries = git.index_entries()
     wanted = [p.replace("\\", "/") for p in paths] if paths else list(entries)
     wanted = [p for p in wanted if p in entries]
-    blobs = git.read_blobs([entries[p][1] for p in wanted])
+    own = entries.get(owners_path())
+    blobs = git.read_blobs([entries[p][1] for p in wanted] + ([own[1]] if own else []))
     findings: List[Finding] = []
+    owners = owners_from(blobs.get(own[1]) if own else None, findings)
     for p in wanted:
         mode, sha = entries[p]
-        findings += check_content(p, blobs.get(sha, b""), mode)
+        findings += check_content(p, blobs.get(sha, b""), mode, owners=owners)
     return report(findings)
 
 
@@ -55,8 +78,9 @@ def cmd_push() -> int:
     for commit in git.push_commits():
         changes = git.commit_changes(commit)
         blobs = git.read_blobs([sha for _, _, sha in changes])
+        owners = owners_from(git.blob_at(commit, owners_path()), findings, where=commit[:8])
         for path, mode, sha in changes:
-            for x in check_content(path, blobs.get(sha, b""), mode):
+            for x in check_content(path, blobs.get(sha, b""), mode, owners=owners):
                 x.where = commit[:8]
                 findings.append(x)
     return report([x for x in findings if x.level == "error"])
@@ -64,9 +88,11 @@ def cmd_push() -> int:
 
 def cmd_tree() -> int:
     findings: List[Finding] = []
+    p_own = Path(owners_path())
+    owners = owners_from(p_own.read_bytes() if p_own.is_file() else None, findings)
     for p in git.worktree_files():
         with open(p, "rb") as fh:
-            findings += check_content(p, fh.read())
+            findings += check_content(p, fh.read(), owners=owners)
     return report(findings, hint=False)
 
 
