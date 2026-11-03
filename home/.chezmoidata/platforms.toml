@@ -51,6 +51,7 @@ linux = [
   ".local/share/konsole/Sweet.colorscheme",
   ".local/share/konsole/配置方案 1.profile",
   ".npmrc",
+  ".oh-my-zsh",
   ".p10k.zsh",
   ".profile",
   ".pypirc",
@@ -73,6 +74,11 @@ windows = [
 ]
 
 [requires]
+# Arch only: Kali keeps its own XDG user dirs (some point at ~ there), so the two must not
+# overwrite each other through the shared source file.
+arch = [
+  ".config/user-dirs.dirs",
+]
 kde = [
   ".config/dolphinrc",
   ".config/kdeglobals",

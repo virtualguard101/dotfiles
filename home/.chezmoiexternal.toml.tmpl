@@ -10,6 +10,15 @@
     [".config/nvim".pull]
         args = ["--ff-only"]
 
+# Framework that ~/.zshrc sources ($ZSH/oh-my-zsh.sh). An existing clone (e.g. from the official
+# installer) is only pulled; oh-my-zsh's own updater keeps working alongside.
+[".oh-my-zsh"]
+    type = "git-repo"
+    url = "https://github.com/ohmyzsh/ohmyzsh.git"
+    refreshPeriod = "168h"
+    [".oh-my-zsh".pull]
+        args = ["--ff-only"]
+
 # [".agents"]
 #     type = "git-repo"
 #     url = "https://github.com/virtualguard101/dotagents.git"
