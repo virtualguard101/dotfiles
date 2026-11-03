@@ -1,0 +1,6 @@
+# See https://mirrors.huaweicloud.com/kali-apt-sources/
+Types: deb
+URIs: https://mirrors.huaweicloud.com/kali
+Suites: kali-rolling
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/kali-archive-keyring.gpg

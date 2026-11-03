@@ -181,6 +181,7 @@ mawk
 media-types
 mount
 nano
+ncat
 ncurses-base
 ncurses-bin
 ncurses-term
