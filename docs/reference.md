@@ -198,7 +198,7 @@ Collected targets (lists in `dotfiles.toml` `[etc]`):
 
 - paths in `extra` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
 
-- paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
+- paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too. A file that already matches its backup (content, mode and encryption, compared after decrypting) is left as it is: age output differs on every encryption, so re-adding it would show every encrypted file as modified after each backup;
 
 - everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.dpkg-dist` and the other dpkg / ucf leftovers, `*.bak`, etc. Entries that do not exist on a distro (sddm, mkinitcpio, pacman hooks on Kali; `/etc/apt` on Arch) contribute nothing, so one list serves every distro.
 

@@ -197,3 +197,5 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 
 0.5.1：`deploy` 也会备份 apply 将要删除的目标（`home/.chezmoiremove`，status 为 `D`），停用一个目标和覆盖一个文件
 一样可以恢复。
+
+0.5.2：`/etc` 备份不再重新加密已与 `system/<发行版>` 一致的文件，所以每次备份不会再改写所有加密的 `/etc` 文件。
