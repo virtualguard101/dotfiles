@@ -48,7 +48,7 @@
 - **在 Kali 上备份时先预览**: `backup.linux` 的候选清单 (`dotfiles.toml`) 两台 Linux 机器共用. Kali 上新加入的候选, 也会在 Arch 上部署. 先运行 `dotfiles backup -n` 审阅, 不想要的候选用 `dotfiles config add backup.linux.ignore <路径>` 屏蔽, 或者给它加上标签. `user-dirs.dirs` 和 `mimeapps.list` 在 `-n` 中显示为 `plain` 是正常的: 它们被 `[requires]` 排除, 实际运行时会被跳过.
 - **通用文件在两台机器上共用同一个源文件**: 在 Kali 上 re-add 的改动, 会在 Arch 上 apply 时覆盖 Arch 的版本, 反过来也一样. 内容不同的文件, 要么改成模板 (按 `.chezmoi.osRelease.id` 或 `.tags` 区分), 要么用标签分开.
 - **`/etc`**: Kali 上的 backup 会写入 `system/kali/etc`, 不会影响 `system/arch`. 如果不想备份 Kali 的 `/etc`, 用 `backup --no-system`.
-- 日常备份直接提交到 `main`. 工具或规则的改动走 `dev` → PR → `main` (见 workflows 第 2 节), 开发时用 git worktree (workflows 第 3 节).
+- 日常备份直接提交到 `main`. 工具或规则的改动走 `dev` → PR → `main` (见 workflows 第 2 节), 开发时直接在主检出中 `git switch dev`, 不再另开 worktree; 在 `dev` 上不要 `apply --apply` 或日常 backup (主检出就是 chezmoi 的源目录), 完成后切回 `main` 再部署.
 
 ## 5. 常见陷阱
 
@@ -83,7 +83,7 @@
     sudo pacman -Rns virtualbox-guest-utils open-vm-tools fcitx5-rime rime-ice-git rime-pinyin-moegirl
     uv run dotfiles backup          # 在 main 上: archpkg.txt 随之更新, 再提交
     ```
-- [x] **Kali** (2026-11-04 完成): 第 1-4 步由脚本完成 (单元移到 `~/.local/state/dotfiles/kali-20261104-011810`); 第 5 步因 apply 演练缺少 `--force` 而失败 (本地改过的目标会让 chezmoi 询问, `--no-tty` 下读到 EOF), 什么都没写入. 修复在 dev 的 0.5.3 (620e604, 待开 PR); 部署改在 worktree 中用 0.5.3 完成 (dev 与 main 的 `home/` 无差异), 20 项全部部署, 备份在 `pre-apply-20261104-012025`, 之后 `fcitx5-remote -r`, 删除 4 个空目录. 被覆盖的 6 个 `MM` 项: 5 个 fcitx5 文件是 fcitx5 写回的默认值 (丢了 keyboard-jp 和云拼音), VS Code 只是删掉 Arch 路径. 第 2 步的 "already done" 不是问题: 渲染结果与现有配置相同, 只是模板哈希变了, 手动 `chezmoi init` 后警告消失. 原计划:
+- [x] **Kali** (2026-11-04 完成): 第 1-4 步由脚本完成 (单元移到 `~/.local/state/dotfiles/kali-20261104-011810`); 第 5 步因 apply 演练缺少 `--force` 而失败 (本地改过的目标会让 chezmoi 询问, `--no-tty` 下读到 EOF), 什么都没写入. 修复在 0.5.3 (620e604, 已在本地合并进 main: a4f4779); 部署改在 worktree 中用 0.5.3 完成 (dev 与 main 的 `home/` 无差异), 20 项全部部署, 备份在 `pre-apply-20261104-012025`, 之后 `fcitx5-remote -r`, 删除 4 个空目录. 被覆盖的 6 个 `MM` 项: 5 个 fcitx5 文件是 fcitx5 写回的默认值 (丢了 keyboard-jp 和云拼音), VS Code 只是删掉 Arch 路径. 第 2 步的 "already done" 不是问题: 渲染结果与现有配置相同, 只是模板哈希变了, 手动 `chezmoi init` 后警告消失. 原计划:
   - 重新生成配置;
   - 恢复 oh-my-zsh 的推送地址;
   - 把两个不再管理的用户单元移到 `~/.local/state/dotfiles/kali-*` (`.chezmoiignore` 优先于 `.chezmoiremove`, 被忽略的目标不会被删除, 所以不能靠 `.chezmoiremove`);
