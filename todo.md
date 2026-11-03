@@ -104,7 +104,6 @@ Kali 专用的陷阱（gnome-terminal 和 OSC 52、fcitx5 的语言、`emulate s
 ### 6.3 其他
 
 - [ ] **作废旧的 PyPI token**：修剪时从 `secrets.zsh` 删掉的那个注释掉的旧 `UV_PUBLISH_TOKEN`，曾以加密形式存在于仓库历史中。如果它在 PyPI 上还没有作废，去作废它。
-- [ ] Kali：在 IDA 的 GUI 中通过 Help → License manager 重新选择一次许可证文件，消除每次启动时的提示（kali.md 第 5 节）。
 - [ ] 可选，Kali：合并或删除 3 个 `.dpkg-new` / `.dpkg-old` 文件（`dotfiles status` 会列出来）。
 
 ### 6.4 已完成（摘要，细节见 git 历史）
