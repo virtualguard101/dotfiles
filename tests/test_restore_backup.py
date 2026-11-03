@@ -262,3 +262,19 @@ def test_deploy_backs_up_removed_targets(tmp_path, monkeypatch):
     assert (saved / ".zimrc").read_text(encoding="utf-8") == "zim\n"
     assert (saved / ".config/app/a.conf").read_text(encoding="utf-8") == "a\n"
     assert (saved / ".bashrc").is_file() and not (saved / ".new").exists()
+
+
+def test_rehearse_forces_like_the_real_apply(monkeypatch):
+    """The dry run must pass --force: without it chezmoi prompts before overwriting a locally edited
+    target, the prompt reads EOF under --no-tty, and the rehearsal fails for every such target."""
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import deploy
+    calls = []
+
+    def fake_cz(*args, **kw):
+        calls.append(args)
+        return platforms.Result(0, "", "")
+    monkeypatch.setattr(deploy.chez, "cz", fake_cz)
+    deploy.rehearse()
+    args = calls[0]
+    assert args[0] == "apply" and {"--dry-run", "--force", "--no-tty"} <= set(args)

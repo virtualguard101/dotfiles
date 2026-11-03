@@ -557,7 +557,8 @@ dotfiles apply --apply [TARGET...]    deploy
   show their diff; **encrypted targets get one line and are never decrypted on screen**. A `!` marks a
   file you edited locally since the last apply — applying overwrites it, so keep such edits first with
   `dotfiles backup` or `chezmoi merge` ([6.3](#63-cases-that-need-a-manual-merge)).
-- `--apply` rehearses the whole apply first (nothing is written if decryption or a template fails),
+- `--apply` rehearses the whole apply first (nothing is written if decryption or a template fails;
+  like the real apply it passes `--force`, so locally edited files do not stop it),
   copies the files about to be overwritten or removed to `~/.local/state/dotfiles/pre-apply-*`, then runs
   `chezmoi apply`. It is the same code as restore's `dotfiles` step (`src/dotfiles/utils/common/deploy.py`).
 - `TARGET` limits it to some paths under `~` (files or directories chezmoi manages).
