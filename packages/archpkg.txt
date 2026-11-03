@@ -55,7 +55,6 @@ fcitx5-gtk
 fcitx5-material-color
 fcitx5-pinyin-moegirl
 fcitx5-qt
-fcitx5-rime
 feishu-bin
 filelight
 firefox
@@ -120,7 +119,6 @@ npm
 ntfs-3g
 nushell
 obsidian
-open-vm-tools
 openai-codex
 openssh
 openutau
@@ -144,8 +142,6 @@ python-pipx
 qemu-base
 qemu-system-aarch64
 radeon-profile-git
-rime-ice-git
-rime-pinyin-moegirl
 riscv-gnu-toolchain-bin
 riscv64-elf-binutils
 riscv64-elf-gcc
@@ -180,7 +176,6 @@ vcpkg
 ventoy-bin
 vim
 virtualbox
-virtualbox-guest-utils
 visual-studio-code-bin
 volk
 vulkan-extra-layers
