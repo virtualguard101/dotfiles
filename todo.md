@@ -4,7 +4,6 @@ Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](do
 
 ## 1. 需要你在终端里做的（sudo 或外部服务）
 
-- [ ] **Arch 的 `/etc` 备份**（需要 sudo）：`uv run dotfiles backup -n` 预览，再 `uv run dotfiles backup --commit`，然后 `git push`。0.5.4 起，内容没变的 `sudoers` 等 0440 文件不应再出现在 `git status` 中；如果还出现，说明修复有遗漏。
 - [ ] **Kali**：拉取 0.5.4 后运行一次 `uv run dotfiles backup -n`，确认 `crypttab`、`sudoers`、`sudoers.d/*` 不再被重新加密。
 - [ ] **作废旧的 PyPI token**：修剪时从 `secrets.zsh` 删掉的那个注释掉的旧 `UV_PUBLISH_TOKEN`，曾以加密形式存在于仓库历史中。如果它在 PyPI 上还没有作废，去作废它。
 
