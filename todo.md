@@ -61,7 +61,7 @@
 - 加密文件的内容不经过家目录路径检查. 在加密文件里写死路径不会被发现, `.zshrc` 和 VS Code / Cursor 的 `settings.json` 都出现过这种情况.
 - 在 zsh 中, 把整条命令放进一个变量 (`C="chezmoi --config ..."; $C ...`) 不会按空格拆分. 改用函数, 或者 `${=C}`.
 - 程序运行时会写回自己的配置的 (例如 fcitx5), apply 之后要让它重新加载, 或者先退出它再 apply. fcitx5 最稳妥的做法: `fcitx5-remote -e` 退出 → apply → 重新启动; 之后再退出一次, `chezmoi status` 应当没有 fcitx5 的条目. 列表型的值 (例如 `notifications.conf` 的 `HiddenNotifications`) 写回时顺序不固定, 尽量只保留需要的项.
-- **Arch 下次 `git pull` 之后**: `notifications.conf` 删掉了 rime 的 `fcitx-rime-deploy` (只剩一项, 不再对调顺序). 先 `fcitx5-remote -e`, 再 `dotfiles apply --apply`, 再启动 fcitx5, 否则运行中的 fcitx5 退出时会把两项写回去.
+- **Arch 下次 `git pull` 之后**: `notifications.conf` 删掉了 rime 的 `fcitx-rime-deploy` (只剩一项, 不再对调顺序). `scripts/arch.sh` 在 apply 之后执行 `fcitx5-remote -r`, 否则运行中的 fcitx5 退出时会把两项写回去. 下次注销或重启后确认 `chezmoi status` 中没有 fcitx5 的条目.
 - 依赖 OSC 52 的剪贴板功能 (zellij, tmux, nvim 的远程复制) 在 gnome-terminal 中无效, 要配置 `wl-copy` 之类的外部命令.
 
 ## 6. 待办
@@ -75,7 +75,7 @@
 
 ### 6.2 0.5.0 (已合并, #11) 与修剪 (0.5.1) 合并后
 
-- [ ] **Arch** (修剪已在本机执行, 见 6.3):
+- [x] **Arch** (2026-11-04 核实: 5 个包已卸载, tags 为 `arch, kde, taskdog, zeroclaw`). 之后在 Kali 上的改动 (0.5.3, `gnome` 标签, fcitx5 的 `notifications.conf`) 由 `bash scripts/arch.sh` 预览, `--apply` 执行. 原记录 (修剪已在本机执行, 见 6.3):
   - 合并 0.5.1 的 PR 后 `git switch main && git pull`. 合并之前不要在 `main` 上 `dotfiles apply --apply`: `main` 上还没有 `.chezmoiremove`, 会把已删除的 8 个文件重新部署回来;
   - `uv run dotfiles restore --apply --only config` 重新生成配置, tags 应为 `arch, kde, taskdog, zeroclaw`. 在那之前两个用户单元被视为缺少标签而忽略 (文件不会被删除, backup 遇到它们只会警告);
   - `uv run dotfiles apply` 预览: 应当只有 `.aria2/aria2.conf` (路径改为家目录下), 新建的空文件 `.aria2/aria2.session`, 以及 fcitx5 自己改写的 `notifications.conf` (想保留本机版本就先 `dotfiles backup`);
