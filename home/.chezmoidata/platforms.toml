@@ -23,6 +23,7 @@ linux = [
   ".config/Code",
   ".config/autostart/CC Switch.desktop",
   ".config/autostart/Clash Verge.desktop",
+  ".config/autostart/org.fcitx.Fcitx5.desktop",
   ".config/bottom/bottom.toml",
   ".config/dolphinrc",
   ".config/environment.d",
@@ -73,6 +74,13 @@ windows = [
 # overwrite each other through the shared source file.
 arch = [
   ".config/user-dirs.dirs",
+]
+# GNOME starts fcitx5 through this autostart entry (KDE Wayland has KWin start it). LANGUAGE makes
+# fcitx5 write its config in Chinese like on Arch, where the KDE session sets it (plasma-localerc);
+# fcitx5 rewrites every config file on exit, so otherwise the two machines keep flipping the
+# comments between English and Chinese.
+gnome = [
+  ".config/autostart/org.fcitx.Fcitx5.desktop",
 ]
 kde = [
   ".config/dolphinrc",
