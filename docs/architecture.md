@@ -218,3 +218,8 @@ retiring a target is as recoverable as overwriting one.
 
 0.5.2: `/etc` backup leaves files that already match `system/<distro>` alone instead of re-encrypting
 them, so a backup no longer rewrites every encrypted `/etc` file.
+
+0.5.4: `/etc` backup compares the decrypted content and the attributes `chezmoi add` would record, not
+`chezmoi status`, which also flagged modes attributes cannot express (0440, 0640) and umask-derived
+ones; `apply` makes a running fcitx5 reload the config files it deployed (D-Bus `ReloadConfig` /
+`ReloadAddonConfig`), so fcitx5 no longer writes its old config back on exit.

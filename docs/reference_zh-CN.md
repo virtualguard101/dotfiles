@@ -194,7 +194,7 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 
 - `extra` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
 
-- `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密。与备份一致的文件（解密后比较内容、权限和是否加密）保持不动：age 每次加密的输出都不同，重新加入会让每个加密文件在每次备份后都显示为已修改；
+- `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密。与备份一致的文件（解密后的内容相同，`chezmoi add` 会记录的属性也相同：是否加密、`private_`、`readonly_`、`executable_`）保持不动。不比较精确的权限：属性表示不了 0440、0640，其余的权限 chezmoi 按 umask 推算（umask 002 下是 0664）。否则age 每次加密的输出都不同，重新加入会让每个加密文件在每次备份后都显示为已修改；
 
 - 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.dpkg-dist` 等 dpkg / ucf 遗留文件、`*.bak` 等。某个发行版上不存在的条目（Kali 上的 sddm、mkinitcpio、pacman hook；Arch 上的 `/etc/apt`）不贡献任何文件，所以一份清单可以给所有发行版共用。
 
@@ -556,8 +556,26 @@ dotfiles apply --apply [目标...]     部署
 - `--apply` 先完整预演一遍（解密或模板失败时什么都不写；预演与正式部署一样带 `--force`，本地改过的文件不会让它中断），把将被覆盖或删除的文件复制到
   `~/.local/state/dotfiles/pre-apply-*`，再运行 `chezmoi apply`。它与 restore 的 `dotfiles` 步骤是同一份
   代码（`src/dotfiles/utils/common/deploy.py`）。
+- 部署了 `~/.config/fcitx5` 下的文件后，会通过 D-Bus 让正在运行的 fcitx5 重新加载它们（`config` / `profile`
+  用 `ReloadConfig`，每个 `conf/<插件>.conf` 用 `ReloadAddonConfig <插件>`；全局的重新加载不包括插件配置）。
+  fcitx5 把配置保存在内存中，退出时写回文件，不重新加载的话，下次注销就会撤销这次部署。
 - `目标` 把范围限制在 `~` 下的部分路径（chezmoi 托管的文件或目录）。
 - 不包括 externals 和 `/etc`：分别用 `dotfiles restore --only externals` 和 `dotfiles system-restore`。
+
+### 6.5 常见陷阱
+
+两台 Linux 同步时遇到的问题；只与某台机器有关的见 [arch.md](arch.md) 和 [kali.md](kali.md)。
+
+- 不要在配置文件中写 `$HOME` 或 `~`，除非确认那个程序会展开它：zellij 的 `layout_dir` 和 aria2 不会，zsh、systemd 的 `%h`、npm 的 `${HOME}` 会。都不行时改用模板 `{{ .chezmoi.homeDir }}`。
+- shell 启动文件中的 `.` / `source` 都要先检查文件是否存在：两台机器装的工具不同，而且失败的 `.` 会中止 POSIX 登录 shell。
+- `chezmoi re-add` 会把本地权限写回源状态：某个程序把文件改写成 644 后直接 re-add，源文件会丢掉 `private_`。用 `dotfiles backup`（它会先收紧权限），或者先 `chmod 600` 再 re-add。
+- `chezmoi diff` 输出很长时，在 pager 中按 q 退出会让 chezmoi 卡住。用 `--no-pager | less -R`，或者用 `dotfiles apply` 预览。
+- `re-add` 不处理模板目标：改动要手动合并进 `.tmpl`（[6.3](#63-需要手动合并的场景)）。
+- 加密文件的内容不经过家目录路径检查：在加密文件里写死路径不会被发现（以前的 `.zshrc` 和 VS Code 的 `settings.json` 都出现过）。
+- 在 zsh 中，把整条命令放进一个变量（`C="chezmoi --config …"; $C …`）不会按空格拆分。改用函数，或者 `${=C}`。
+- 会写回自己配置的程序（fcitx5），apply 之后要让它重新加载（`dotfiles apply` 会处理 fcitx5）；列表型的值写回时顺序可能变化，尽量只保留需要的项。
+- `apply` 的 diff 会把明文目标的内容打印到终端：不要把 token 写进明文目标（`.zshrc` 的 token 在加密的 `secrets.zsh` 中）。
+- `.chezmoiignore` 优先于 `.chezmoiremove`：在某台机器上被忽略的目标（另一平台的，或缺少标签的）不会在那里被删除，要手动移走。
 
 ---
 

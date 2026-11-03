@@ -45,7 +45,7 @@ uv run dotfiles restore                    # 只看计划
 chezmoi --source . --override-data '{"chezmoi":{"os":"windows"}}' managed
 ```
 
-PR 用 **merge commit** 方式合并。squash 和 rebase 合并会生成新的提交哈希，之后长期存在的 `dev` 就无法快进，会一直和 `main` 分叉。
+用 **merge commit** 方式合并：PR 选择这种方式，或者在 `main` 上本地运行 `git merge --no-ff dev`（[3](#3-在主检出中切换到-dev-开发)）。squash 和 rebase 合并会生成新的提交哈希，之后长期存在的 `dev` 就无法快进，会一直和 `main` 分叉。
 
 ### 2.3 恢复过程中发现问题：修在 `main` 上
 
@@ -53,24 +53,17 @@ PR 用 **merge commit** 方式合并。squash 和 rebase 合并会生成新的�
 
 ---
 
-## 3. 开发时不切换生效中的检出
+## 3. 在主检出中切换到 `dev` 开发
 
-`~/.local/share/chezmoi` 是生效中的源目录。把它切到 `dev` 后，`chezmoi apply` 部署的就是尚未合并的状态。开发时改用 git worktree：
+开发就在 `~/.local/share/chezmoi` 中进行：先提交或暂存 `main` 上的改动，再 `git switch dev`（先让它跟上 `main`，见 [4](#4-让-dev-跟上-main)）。这个检出就是 chezmoi 生效中的源目录，所以停在 `dev` 上时：
 
-```bash
-git worktree add ~/dev/dotfiles-dev dev    # chezmoi 源目录之外的任意路径均可
-```
-
-`dotfiles` 调用 chezmoi 时传的是 `--source <工具自身所在的仓库>`，所以在 worktree 里运行的命令作用于 worktree：
-
-| 在 worktree 中运行 | 效果 |
+| 命令 | 停在 `dev` 上时 |
 |---|---|
-| `pytest`、`check`、`restore`（只看计划）、`backup -n` | 可放心用于测试 |
-| `doctor` | 把"源目录"一项报告为 fail，因为 chezmoi 配置里的是主检出——这是预期的 |
-| `backup`（不带 `-n`） | 写进 worktree 的 `home/` |
-| `restore --apply` | 把 `dev` 的状态部署到 `~`——只在明确需要时运行 |
+| `pytest`、`check`、`restore`（只看计划）、`apply`（预览）、`backup -n` | 可以放心运行：它们只读取 |
+| `apply --apply`、`restore --apply` | 会把尚未合并的状态部署到 `~`：只在 `dev` 没有改动 `home/` 下的文件时（`git diff --stat main dev -- home` 为空），或者明确需要时运行 |
+| `backup`（不带 `-n`） | 写进 `dev` 的 `home/`：日常备份在 `main` 上做 |
 
-用完后用 `git worktree remove ~/dev/dotfiles-dev` 删除。
+完成后 `git switch main`，用 merge commit 合并：通过 PR，或者在本地 `git merge --no-ff dev`（没有登录 `gh` 的机器用后者），然后推送。离开这台机器前切回 `main`。
 
 ---
 
@@ -106,3 +99,15 @@ git push origin --delete archlinux windows
 git branch -d archlinux windows
 git remote set-head origin -a      # origin/HEAD 仍指向旧分支时刷新它
 ```
+
+---
+
+## 6. 同一系统的两台机器（Arch + Kali）
+
+两台 Linux 共用所有没有被标签区分的 `linux` 目标（reference [3.3](reference_zh-CN.md#33-平台归属)），以及 `dotfiles.toml` 中的清单。各自的情况见 [arch.md](arch.md) 和 [kali.md](kali.md)。
+
+- **apply 前先预览**：`git pull`，`uv run dotfiles apply` 预览，再 `uv run dotfiles apply --apply` 部署。被覆盖或删除的文件会先备份到 `~/.local/state/dotfiles/pre-apply-*`。
+- **备份前先预览**：`uv run dotfiles backup -n`。`backup.linux` 两台机器共用，一台上新出现的候选也会部署到另一台。不想要的条目用 `dotfiles config add backup.linux.ignore <路径>` 排除，或者给它加上标签。
+- **两台机器共用同一个源文件**：一台上 re-add 的改动，会在另一台 apply 时覆盖。内容需要不同的文件，要么改成模板（按 `.chezmoi.osRelease.id` 或 `.tags` 区分），要么用标签分开。
+- **`/etc`**：backup 只写入本机发行版的 `system/<ID>/etc`，但 `etc.extra` / `etc.secret` / `etc.exclude` 两边共用，排除一条路径之前，先确认另一台机器上没有同名文件。读取 `/etc` 需要 sudo，不备份时加 `--no-system`。
+- **提交工具改动前跑测试**：`uv run pytest`，并检查它自己的退出码。`uv run pytest | tail -1 && git commit` 判断的是 `tail` 的退出码，失败会被吞掉。

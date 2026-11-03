@@ -198,7 +198,7 @@ Collected targets (lists in `dotfiles.toml` `[etc]`):
 
 - paths in `extra` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
 
-- paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too. A file that already matches its backup (content, mode and encryption, compared after decrypting) is left as it is: age output differs on every encryption, so re-adding it would show every encrypted file as modified after each backup;
+- paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too. A file that already matches its backup (the decrypted content, plus the attributes `chezmoi add` would record: encryption, `private_`, `readonly_`, `executable_`) is left as it is. Exact modes are not compared: attributes cannot express 0440 or 0640, and chezmoi derives the rest from the umask (0664 under umask 002). Otherwise age output differs on every encryption, so re-adding it would show every encrypted file as modified after each backup;
 
 - everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.dpkg-dist` and the other dpkg / ucf leftovers, `*.bak`, etc. Entries that do not exist on a distro (sddm, mkinitcpio, pacman hooks on Kali; `/etc/apt` on Arch) contribute nothing, so one list serves every distro.
 
@@ -561,9 +561,28 @@ dotfiles apply --apply [TARGET...]    deploy
   like the real apply it passes `--force`, so locally edited files do not stop it),
   copies the files about to be overwritten or removed to `~/.local/state/dotfiles/pre-apply-*`, then runs
   `chezmoi apply`. It is the same code as restore's `dotfiles` step (`src/dotfiles/utils/common/deploy.py`).
+- After deploying files under `~/.config/fcitx5`, a running fcitx5 is told to reload them over D-Bus
+  (`ReloadConfig` for `config` / `profile`, `ReloadAddonConfig <addon>` for each `conf/<addon>.conf`; the
+  global reload does not reach addon configs). fcitx5 keeps its config in memory and writes it back on
+  exit, so without this the next logout would undo the deploy.
 - `TARGET` limits it to some paths under `~` (files or directories chezmoi manages).
 - Externals and `/etc` are not included: use `dotfiles restore --only externals` and
   `dotfiles system-restore`.
+
+### 6.5 Pitfalls
+
+Collected while syncing two Linux machines; machine-specific ones are in [arch.md](arch.md) and [kali.md](kali.md).
+
+- Do not write `$HOME` or `~` in a config file unless that program expands it: zellij's `layout_dir` and aria2 do not; zsh, systemd's `%h` and npm's `${HOME}` do. Otherwise use a template with `{{ .chezmoi.homeDir }}`.
+- Guard every `.` / `source` in shell startup files with an existence check: the machines have different tools installed, and a failing `.` aborts a POSIX login shell.
+- `chezmoi re-add` copies the live mode back into the source: after a program rewrites a file as 644, a plain re-add drops `private_`. Use `dotfiles backup` (it tightens first), or `chmod 600` before re-adding.
+- Quitting chezmoi's pager with q during a long `chezmoi diff` hangs it: use `--no-pager | less -R`, or `dotfiles apply` to preview.
+- `re-add` skips template targets: merge changes into the `.tmpl` by hand ([6.3](#63-cases-that-need-a-manual-merge)).
+- Encrypted files are not checked for home paths: a hard-coded path inside one goes unnoticed (the old `.zshrc` and VS Code's `settings.json` both had some).
+- In zsh, a whole command in a variable (`C="chezmoi --config …"; $C …`) is not split on spaces: use a function, or `${=C}`.
+- Programs that write their config back (fcitx5) need a reload after apply (`dotfiles apply` does it for fcitx5), and list values they write back may change order: keep only the entries you need.
+- `apply`'s diff prints plaintext targets to the terminal: never put a token in a plaintext target (`.zshrc`'s are in the encrypted `secrets.zsh`).
+- `.chezmoiignore` wins over `.chezmoiremove`: a target ignored on a machine (another platform's, or a missing tag) is not removed there; move it away by hand.
 
 ---
 

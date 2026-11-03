@@ -272,15 +272,21 @@ def make_private(path: Path, dry: bool) -> None:
 _FILE_PREFIXES = ("create_", "modify_", "encrypted_", "private_", "readonly_", "empty_", "executable_")
 
 
-def has_private_attr(source_rel: str) -> bool:
-    """Whether a source file name carries chezmoi's private_ attribute (prefixes come in a fixed order)."""
+def source_attrs(source_rel: str) -> set[str]:
+    """chezmoi attributes in a source file name, e.g. {"encrypted", "private"} (prefixes come in a
+    fixed order)."""
     name = source_rel.rsplit("/", 1)[-1]
+    attrs = set()
     for prefix in _FILE_PREFIXES:
         if name.startswith(prefix):
-            if prefix == "private_":
-                return True
+            attrs.add(prefix.rstrip("_"))
             name = name[len(prefix):]
-    return False
+    return attrs
+
+
+def has_private_attr(source_rel: str) -> bool:
+    """Whether a source file name carries chezmoi's private_ attribute."""
+    return "private" in source_attrs(source_rel)
 
 
 def managed_file_info(exclude: str) -> list[dict]:

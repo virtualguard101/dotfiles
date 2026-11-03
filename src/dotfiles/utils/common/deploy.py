@@ -4,6 +4,7 @@ overwritten or removed (.chezmoiremove), and the apply itself. Externals are nev
 """
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from dotfiles.utils import platforms, ui
 from dotfiles.utils.common import chez
-from dotfiles.utils.platforms import home
+from dotfiles.utils.platforms import IS_LINUX, home
 
 
 class DeployError(ui.Abort):
@@ -118,4 +119,40 @@ def deploy(targets: list[Path] | None = None, changes: list[Change] | None = Non
     args = ["apply", "--exclude", "externals", "--force", "--no-tty"]
     if chez.cz_live(*args, *([] if not targets else ["--", *map(str, targets)])) != 0:
         raise DeployError("chezmoi apply failed")
+    reload_fcitx5(changes)
     return saved
+
+
+FCITX5 = ["busctl", "--user", "call", "org.fcitx.Fcitx5", "/controller", "org.fcitx.Fcitx.Controller1"]
+_FCITX5_ADDON = re.compile(r"\.config/fcitx5/conf/([^/]+)\.conf")
+
+
+def fcitx5_reload_calls(changes: list[Change]) -> list[list[str]]:
+    """D-Bus calls that make a running fcitx5 pick up deployed config files: ReloadConfig for
+    config / profile, ReloadAddonConfig for each conf/<addon>.conf (the global reload does not
+    reach addon configs)."""
+    targets = [c.target for c in changes if c.target.startswith(".config/fcitx5/")]
+    calls = []
+    if any(not _FCITX5_ADDON.fullmatch(t) for t in targets):
+        calls.append([*FCITX5, "ReloadConfig"])
+    for t in targets:
+        m = _FCITX5_ADDON.fullmatch(t)
+        if m:
+            calls.append([*FCITX5, "ReloadAddonConfig", "s", m.group(1)])
+    return calls
+
+
+def reload_fcitx5(changes: list[Change]) -> None:
+    """fcitx5 keeps its config in memory and writes it back on exit (and on Save): without a reload,
+    the next logout would undo what apply just deployed."""
+    calls = fcitx5_reload_calls(changes) if IS_LINUX else []
+    if not calls or not platforms.proc_running(["fcitx5"]):
+        return
+    if not platforms.have("busctl"):
+        ui.warn("fcitx5 is running but busctl is missing: restart fcitx5, or it writes its old config back on exit")
+        return
+    failed = [c[-1] for c in calls if not platforms.run(c).ok]
+    if failed:
+        ui.warn(f"fcitx5 did not reload {', '.join(failed)}: restart it, or it writes its old config back on exit")
+    else:
+        ui.ok("fcitx5 reloaded the deployed config")
