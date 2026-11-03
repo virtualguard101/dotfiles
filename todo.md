@@ -25,6 +25,7 @@
 目前的 `[requires]`:
 - `kde`: KDE 配置和 Konsole 配置.
 - `arch`: `.config/user-dirs.dirs`. Kali 保留自己的版本, 因为 Kali 上 Templates/Public/Music/Videos 指向 `~`.
+- `gnome`: `.config/autostart/org.fcitx.Fcitx5.desktop`. GNOME 靠它启动 fcitx5, `Exec` 带 `LANGUAGE=zh_CN:en_US`, 让 fcitx5 像 Arch (KDE 的 `plasma-localerc`) 一样用中文写配置. 否则 fcitx5 每次退出时重写配置, 两台机器会把注释在中英文之间来回改.
 - `zeroclaw`, `taskdog` (0.5.0 起, 程序标签): 对应的用户单元. 标签在 `~/.cargo/bin/zeroclaw`, `~/.local/bin/taskdog-server` 存在时才有, 所以 Kali 上不再部署这两个单元.
 
 ## 3. Kali 迁移结果 (2026-11-03 完成)
@@ -59,7 +60,8 @@
 - 由模板生成的文件, re-add 不会处理. 需要手动把改动合并进 `.tmpl` (见 reference 第 6.3 节).
 - 加密文件的内容不经过家目录路径检查. 在加密文件里写死路径不会被发现, `.zshrc` 和 VS Code / Cursor 的 `settings.json` 都出现过这种情况.
 - 在 zsh 中, 把整条命令放进一个变量 (`C="chezmoi --config ..."; $C ...`) 不会按空格拆分. 改用函数, 或者 `${=C}`.
-- 程序运行时会写回自己的配置的 (例如 fcitx5), apply 之后要让它重新加载, 或者先退出它再 apply.
+- 程序运行时会写回自己的配置的 (例如 fcitx5), apply 之后要让它重新加载, 或者先退出它再 apply. fcitx5 最稳妥的做法: `fcitx5-remote -e` 退出 → apply → 重新启动; 之后再退出一次, `chezmoi status` 应当没有 fcitx5 的条目. 列表型的值 (例如 `notifications.conf` 的 `HiddenNotifications`) 写回时顺序不固定, 尽量只保留需要的项.
+- **Arch 下次 `git pull` 之后**: `notifications.conf` 删掉了 rime 的 `fcitx-rime-deploy` (只剩一项, 不再对调顺序). 先 `fcitx5-remote -e`, 再 `dotfiles apply --apply`, 再启动 fcitx5, 否则运行中的 fcitx5 退出时会把两项写回去.
 - 依赖 OSC 52 的剪贴板功能 (zellij, tmux, nvim 的远程复制) 在 gnome-terminal 中无效, 要配置 `wl-copy` 之类的外部命令.
 
 ## 6. 待办
