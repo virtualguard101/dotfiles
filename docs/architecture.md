@@ -215,3 +215,6 @@ convert a `create_` file into a regular encrypted one.
 
 0.5.1: `deploy` also backs up targets that apply removes (`home/.chezmoiremove`, status `D`), so
 retiring a target is as recoverable as overwriting one.
+
+0.5.2: `/etc` backup leaves files that already match `system/<distro>` alone instead of re-encrypting
+them, so a backup no longer rewrites every encrypted `/etc` file.

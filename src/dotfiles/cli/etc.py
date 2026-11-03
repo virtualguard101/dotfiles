@@ -233,13 +233,25 @@ class _Stage:
         self.close()
 
 
+def unchanged(stage: _Stage, dst: Path, encrypt: bool) -> bool:
+    """The staged copy already matches system/<distro>: same content and mode (chezmoi status is
+    empty; it decrypts to compare) and the same encryption choice. Re-adding it anyway would only
+    churn the repo: age output differs on every encryption, so every encrypted file would show up
+    as modified after each backup."""
+    src = stage.cz("source-path", "--", str(dst))
+    if not src.ok or Path(src.stdout.strip()).name.startswith("encrypted_") != encrypt:
+        return False
+    r = stage.cz("status", "--", str(dst))
+    return r.ok and not r.stdout.strip()
+
+
 def backup(run) -> None:
     ui.section("/etc -> system/ (separate chezmoi instance)")
     Sudo.prompt = True
     chez.system_source_dir().mkdir(parents=True, exist_ok=True)
     from dotfiles.cli.backup import has_secret
 
-    n = 0
+    n = changed = 0
     with _Stage() as stage:
         for path, kind in collect_targets().items():
             dst = stage.dir / path.lstrip("/")
@@ -264,6 +276,9 @@ def backup(run) -> None:
             os.chmod(dst, mode)
             # /etc files that are not world-readable count as sensitive too
             encrypt = kind == "secret" or not (mode & 0o004) or has_secret(dst)
+            n += 1
+            if unchanged(stage, dst, encrypt):
+                continue
             flags = run.flags
             if encrypt:
                 ui.info(f"  encrypt  {path}")
@@ -275,8 +290,8 @@ def backup(run) -> None:
                 else:
                     ui.warn(f"chezmoi secret scan hit; switching to encrypted: {path}")
                     stage.cz(*flags, "add", "--encrypt", "--", str(dst))
-            n += 1
-    ui.ok(f"processed {n} /etc files (staging area was on tmpfs; now removed)")
+            changed += 1
+    ui.ok(f"processed {n} /etc files, {changed} new or changed (staging area was on tmpfs; now removed)")
 
 
 def available_distros() -> list[str]:

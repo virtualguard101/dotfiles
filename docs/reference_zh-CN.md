@@ -194,7 +194,7 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 
 - `extra` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
 
-- `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密；
+- `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密。与备份一致的文件（解密后比较内容、权限和是否加密）保持不动：age 每次加密的输出都不同，重新加入会让每个加密文件在每次备份后都显示为已修改；
 
 - 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.dpkg-dist` 等 dpkg / ucf 遗留文件、`*.bak` 等。某个发行版上不存在的条目（Kali 上的 sddm、mkinitcpio、pacman hook；Arch 上的 `/etc/apt`）不贡献任何文件，所以一份清单可以给所有发行版共用。
 
