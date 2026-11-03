@@ -45,7 +45,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 |---|---|---|---|
 | `key` | 两端 | 模板将选用的私钥路径上有文件，且推导出的公钥与仓库模板中的 recipient 一致 | 从 `--key-file` 或交互输入（文件路径，或直接粘贴私钥行，输入不回显）读取，写入后再次校验；不匹配则删除写入的文件 |
 | `config` | 两端 | chezmoi 源目录是本仓库；`~/.config/chezmoi/chezmoi.toml` 与模板渲染结果一致 | 备份原配置后运行 `chezmoi init` |
-| `dotfiles` | 两端 | `chezmoi status`（不含 externals）是否还有待部署项 | 完整预演 → 备份将被覆盖的已有文件 → `chezmoi apply --force` |
+| `dotfiles` | 两端 | `chezmoi status`（不含 externals）是否还有待部署项 | 完整预演 → 备份将被覆盖或删除的已有文件 → `chezmoi apply --force` |
 | `system` | Linux | 本发行版（os-release 的 `ID`）是否有 `system/<发行版>/etc` | 见 [3.6](#36-linux-etc) 的恢复规则（需要确认）；没有本发行版的备份时跳过 |
 | `packages` | 两端 | 本机包管理器的清单中缺少的软件包（pacman 对应 `archpkg.txt`，apt 对应 `aptpkg.txt`） | Arch 系：官方/已配置仓库的包用 `sudo pacman -S --needed`，其余交给 paru/yay，没有 AUR 助手时列出；Debian 系：已配置 apt 源中的包用 `sudo apt-get install`，其余列出（尚未恢复的第三方源，或本地 .deb）；Windows：`winget import`、`scoop import`（需要确认） |
 | `externals` | 两端 | externals 的目标目录是否存在 | `chezmoi apply --include externals`；git 代理连不上时临时直连 |
@@ -159,6 +159,16 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 - 预览另一台机器的视角：`chezmoi --override-data '{"chezmoi":{"os":"linux"},"tags":["kali","debian","gnome"]}' managed`。
 
 两端都需要但内容不同的文件：改为模板（例如 `dot_gitconfig.tmpl` 中用 `{{ if eq .chezmoi.os "windows" }}` 区分），登记到 `shared`。
+
+#### 停用一个目标：`.chezmoiremove`
+
+只删除源文件，chezmoi 只是不再管理这个目标，已经部署到各台机器上的副本仍然留着。要在所有机器上停用一个目标：
+
+1. `git rm` 它在 `home/` 中的源文件，并从 `platforms.toml` 中删除它的条目（列在 `[requires]` 中的话也一起删除）。
+2. 把它从 `dotfiles.toml` 的 `backup.<平台>.track` 中删除，否则下次 backup 又会把它加回来；如果文件还在、只是不想再备份，改为加入 `backup.<平台>.ignore`。
+3. 把目标写进 `home/.chezmoiremove`。`dotfiles apply` 会把它显示为 `D`，和其他文件一起备份到 `~/.local/state/dotfiles/pre-apply-*`，然后删除它。
+
+`.chezmoiignore` 的优先级更高：在某台机器上被忽略的目标（另一平台的目标，或缺少 `[requires]` 标签的目标）在那台机器上不会被删除。同一个目标既受管理又列在 `.chezmoiremove` 中，chezmoi 会报错（`inconsistent state`）。
 
 ### 3.4 加密与模板
 
@@ -473,7 +483,7 @@ uv run dotfiles guard prune-stash --max-age-minutes 0
 
 2. `dotfiles backup -n`：检查漂移——上次 apply 之后本地改过的文件（apply 会覆盖它们）。要保留就用 `dotfiles backup --commit` 收回仓库，或直接改源文件。
 
-3. 先 `dotfiles apply` 预览，再 `dotfiles apply --apply`：部署源状态；将被覆盖的文件先备份到 `~/.local/state/dotfiles/pre-apply-*`（[6.4](#64-dotfiles-apply)）。
+3. 先 `dotfiles apply` 预览，再 `dotfiles apply --apply`：部署源状态；将被覆盖或删除的文件先备份到 `~/.local/state/dotfiles/pre-apply-*`（[6.4](#64-dotfiles-apply)）。
 
 4. 需要收紧权限时 `dotfiles audit --apply`，最后用 `dotfiles doctor` 与 `dotfiles check` 确认。
 
@@ -543,7 +553,7 @@ dotfiles apply --apply [目标...]     部署
 - 预览列出每个待部署的变更（`A` 新增、`D` 删除、`M` 修改）。明文目标显示 diff；**加密目标只显示一行，
   从不在屏幕上解密**。`!` 标记的是上次 apply 之后你在本地改过的文件——部署会覆盖它，所以要保留的改动
   先用 `dotfiles backup` 或 `chezmoi merge` 处理（[6.3](#63-需要手动合并的场景)）。
-- `--apply` 先完整预演一遍（解密或模板失败时什么都不写），把将被覆盖的文件复制到
+- `--apply` 先完整预演一遍（解密或模板失败时什么都不写），把将被覆盖或删除的文件复制到
   `~/.local/state/dotfiles/pre-apply-*`，再运行 `chezmoi apply`。它与 restore 的 `dotfiles` 步骤是同一份
   代码（`src/dotfiles/utils/common/deploy.py`）。
 - `目标` 把范围限制在 `~` 下的部分路径（chezmoi 托管的文件或目录）。

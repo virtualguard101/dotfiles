@@ -16,7 +16,6 @@ track = [
   ".zshenv",
   ".bash_profile",
   ".profile",
-  ".tool-versions",
   ".config/user-dirs.dirs",
   ".config/mimeapps.list",
   ".config/kdeglobals",
@@ -25,15 +24,12 @@ track = [
   ".config/kxkbrc",
   ".config/konsolerc",
   ".config/dolphinrc",
-  ".config/spectaclerc",
   ".local/share/konsole",
-  ".config/ghostty",
   ".config/bottom",
   ".config/htop",
   ".config/gh/config.yml",
   ".config/systemd/user",
   ".config/autostart",
-  ".local/share/fcitx5/rime/default.custom.yaml",
   ".aria2/aria2.conf",
 ]
 secret = [

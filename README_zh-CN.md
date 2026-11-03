@@ -11,12 +11,14 @@ Python 工具 `dotfiles`，用来做环境检测、重装后恢复、日常备�
 home/                     两个平台的 dotfiles（chezmoi 源状态）
   .chezmoi.toml.tmpl      chezmoi init 时生成配置（加密方式、私钥路径、公钥）
   .chezmoidata/platforms.toml   每个目标的平台归属；.chezmoiignore 据此生成
+  .chezmoiremove          已停用的目标，apply 时从每台机器上删除
 system/<发行版>/          Linux /etc 的备份，每个发行版一份，例如 system/arch（独立的 chezmoi 实例，
                           不部署到 ~）
 packages/                 软件包清单：archpkg.txt / aptpkg.txt / scoopfile.json / winget.json
 dotfiles.toml             备份与清理的清单和阈值（数据；可用 dotfiles config 编辑）
 src/dotfiles/             Python 工具（只用标准库）
 bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
+scripts/kali.sh           需要在 Kali 上执行的一次性后续步骤
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
 docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
 docs/architecture.md      架构：工具的组织方式、分层规则、如何扩展
@@ -72,7 +74,7 @@ bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Debian / Kali �
 |---|---|
 | `key` | 把私钥写到 `~/.config/chezmoi/key.txt`（仅本人可读），并校验它与仓库公钥匹配 |
 | `config` | 由 `home/.chezmoi.toml.tmpl` 生成 chezmoi 配置 |
-| `dotfiles` | 先完整预演一次解密（失败则一个文件都不写），再备份将被覆盖的已有文件到 `~/.local/state/dotfiles/pre-apply-*`，最后 `chezmoi apply` |
+| `dotfiles` | 先完整预演一次解密（失败则一个文件都不写），再备份将被覆盖或删除的已有文件到 `~/.local/state/dotfiles/pre-apply-*`，最后 `chezmoi apply` |
 | `system` | Linux：从本发行版的备份（`system/<发行版>/`）恢复 `/etc`，没有本发行版的备份时跳过；`fstab`、`crypttab`、`default/grub` 等与硬件绑定的文件只显示差异，`sudoers` 先经 `visudo` 校验 |
 | `packages` | Arch：pacman 安装官方仓库中的包，AUR 包交给 paru/yay；Debian / Kali：apt 安装已配置源中的包（其他发行版跳过）；Windows：`winget import` 与 `scoop import` |
 | `externals` | 拉取 nvim 配置等外部仓库；git 代理连不上时（代理软件还没装）临时改为直连 |
@@ -124,6 +126,6 @@ uv run dotfiles clean run --apply      # 清理 default 层
 
 - **平台隔离**：每个目标在 `platforms.toml` 中声明归属，另一平台的目标（以及只属于它的父目录）会被忽略，一个平台上的备份不会改写另一平台的源文件。
 
-- **恢复不会静默破坏现有文件**：先预演解密，再备份将被覆盖的文件；与硬件绑定的 `/etc` 文件不会自动安装。
+- **恢复不会静默破坏现有文件**：先预演解密，再备份将被覆盖或删除的文件；与硬件绑定的 `/etc` 文件不会自动安装。
 
 - **临时明文只放在 tmpfs**：`/etc` 备份与恢复的暂存区位于 `$XDG_RUNTIME_DIR`，用完即删。

@@ -85,9 +85,11 @@ def test_requires_ignores_targets_whose_tag_is_missing():
     assert UNITS <= kali and UNITS <= render_ignore("linux", ["arch", "kde"])
     assert KDE <= kali and not KDE & arch
     # parents shared with targets this machine keeps stay managed
-    assert {".config", ".local", ".local/share"}.isdisjoint(kali)
-    # ...and a parent left with only ignored targets is ignored with them (Kali has no user units)
-    assert {".config/systemd", ".config/systemd/user"} <= kali and not {".config/systemd"} & arch
+    assert ".config" not in kali
+    # ...and a parent left with only ignored targets is ignored with them: Kali has no user units,
+    # and under .local/share only the KDE-tagged Konsole files
+    assert {".config/systemd", ".config/systemd/user", ".local", ".local/share"} <= kali
+    assert not {".config/systemd", ".local/share"} & arch
     assert ".config/systemd/user/kwallet_auto_unlock.service" in kali
     # [requires] arch: Kali keeps its own XDG user dirs
     assert ".config/user-dirs.dirs" in kali and ".config/user-dirs.dirs" not in arch
@@ -150,3 +152,17 @@ def test_program_tags_follow_the_installed_binaries(tmp_path, installed, tags):
     rendered = set(tomllib.loads(r.stdout)["data"]["tags"])
     assert rendered & {"zeroclaw", "taskdog"} == tags
 
+
+
+@needs_chezmoi
+def test_retired_targets_are_not_owned_or_managed():
+    """Every target in .chezmoiremove is retired: no ownership entry covers it and chezmoi does not
+    manage it (both together would be "inconsistent state" at apply)."""
+    r = platforms.run([*chez.base_args("linux"), "execute-template", "--file", str(chez.source_state_dir() / ".chezmoiremove")])
+    assert r.ok, r.stderr
+    retired = [ln.strip() for ln in r.stdout.splitlines() if ln.strip() and not ln.startswith("#")]
+    assert ".zimrc" in retired
+    owners = chez.load_platforms()
+    assert not [t for t in retired if chez.owner_of(t, owners)]
+    managed = set(chez.managed(include="files,symlinks,externals", exclude="", os_override="linux", tags=ARCH_TAGS))
+    assert not set(retired) & managed

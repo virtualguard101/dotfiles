@@ -194,3 +194,6 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 哪些文件属于软件包、哪些 conffile 被改过，并考虑 diversion。程序标签（`zeroclaw`、`taskdog`）让用户单元只部署到
 装有对应程序的机器上。`hooks` 步骤只把同一 GitHub 账号的仓库的推送地址改为 SSH。修复：guard 曾把
 `encrypted_x.tmpl.age` 映射为 `x.tmpl`；`backup` 曾可能把 `create_` 文件改成普通的加密文件。
+
+0.5.1：`deploy` 也会备份 apply 将要删除的目标（`home/.chezmoiremove`，status 为 `D`），停用一个目标和覆盖一个文件
+一样可以恢复。

@@ -2,7 +2,7 @@
 
 Preview by default: pending changes, plaintext diffs, and which local edits would be overwritten
 (encrypted targets are listed, never decrypted on screen). --apply rehearses the whole apply first,
-copies files about to be overwritten to ~/.local/state/dotfiles/pre-apply-*, then applies.
+copies files about to be overwritten or removed to ~/.local/state/dotfiles/pre-apply-*, then applies.
 Targets may be limited to some paths; externals and /etc are separate (restore / system-restore).
 """
 from __future__ import annotations

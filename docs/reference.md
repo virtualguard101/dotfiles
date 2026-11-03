@@ -45,7 +45,7 @@ dotfiles restore [--apply] [--only steps,…] [--skip steps,…] [--key-file pat
 |---|---|---|---|
 | `key` | both | the template's chosen key path has a file, and its derived public key matches the template's recipient | reads from `--key-file` or interactive input (a file path, or paste the key line, hidden), writes it and validates again; deletes the file on mismatch |
 | `config` | both | the chezmoi source dir is this repo; `~/.config/chezmoi/chezmoi.toml` matches the template render | backs up the old config, then runs `chezmoi init` |
-| `dotfiles` | both | whether `chezmoi status` (excluding externals) has pending items | full rehearsal -> backup of files about to be overwritten -> `chezmoi apply --force` |
+| `dotfiles` | both | whether `chezmoi status` (excluding externals) has pending items | full rehearsal -> backup of files about to be overwritten or removed -> `chezmoi apply --force` |
 | `system` | Linux | whether `system/<distro>/etc` exists for this distro (os-release `ID`) | restore rules from [3.6](#36-linux-etc) (asks for confirmation); skipped on a distro without a backup |
 | `packages` | both | packages missing from this package manager's manifest (`archpkg.txt` for pacman, `aptpkg.txt` for apt) | Arch-like: `sudo pacman -S --needed` for packages in configured repos, the rest via paru/yay, listed when no AUR helper exists; Debian-like: `sudo apt-get install` for packages in the configured apt sources, the rest listed (a third-party source not restored yet, or a local .deb); Windows: `winget import`, `scoop import` (asks for confirmation) |
 | `externals` | both | whether externals' target dirs exist | `chezmoi apply --include externals`; connects directly when the git proxy is unreachable |
@@ -163,6 +163,16 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 - Preview another machine's view: `chezmoi --override-data '{"chezmoi":{"os":"linux"},"tags":["kali","debian","gnome"]}' managed`.
 
 Same-name targets needed on both platforms with different content: make it a template(e.g. distinguish inside `dot_gitconfig.tmpl` with `{{ if eq .chezmoi.os "windows" }}`) and register it in `shared`.
+
+#### Retiring a target: `.chezmoiremove`
+
+Deleting a source file only stops chezmoi from managing the target; the deployed copy stays on every machine. To retire a target everywhere:
+
+1. `git rm` its source file under `home/`, and remove its entry from `platforms.toml` (and from `[requires]`, if listed).
+2. Drop it from `backup.<os>.track` in `dotfiles.toml`, or the next backup adds it back; to stop backing up a file that still exists, add it to `backup.<os>.ignore` instead.
+3. List the target in `home/.chezmoiremove`. `dotfiles apply` shows it as `D`, backs it up to `~/.local/state/dotfiles/pre-apply-*` with the other files, and deletes it.
+
+`.chezmoiignore` takes precedence: a target that is ignored on a machine (another platform's, or one whose `[requires]` tag is missing) is never removed there. A target that is both managed and listed in `.chezmoiremove` is an error (`inconsistent state`).
 
 ### 3.4 Encryption and templates
 
@@ -476,7 +486,7 @@ Pulling (e.g. after `dev` is merged into `main`) needs no re-initialization — 
 
 2. `dotfiles backup -n`: check for drift — live files modified since the last apply (apply would overwrite them). Keep wanted changes with `dotfiles backup --commit`, or edit the source files directly.
 
-3. `dotfiles apply` to preview, then `dotfiles apply --apply`: deploys the source state; files about to be overwritten are backed up to `~/.local/state/dotfiles/pre-apply-*` first ([6.4](#64-dotfiles-apply)).
+3. `dotfiles apply` to preview, then `dotfiles apply --apply`: deploys the source state; files about to be overwritten or removed are backed up to `~/.local/state/dotfiles/pre-apply-*` first ([6.4](#64-dotfiles-apply)).
 
 4. `dotfiles audit --apply` if permissions need tightening, then `dotfiles doctor` and `dotfiles check` to confirm.
 
@@ -548,7 +558,7 @@ dotfiles apply --apply [TARGET...]    deploy
   file you edited locally since the last apply — applying overwrites it, so keep such edits first with
   `dotfiles backup` or `chezmoi merge` ([6.3](#63-cases-that-need-a-manual-merge)).
 - `--apply` rehearses the whole apply first (nothing is written if decryption or a template fails),
-  copies the files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs
+  copies the files about to be overwritten or removed to `~/.local/state/dotfiles/pre-apply-*`, then runs
   `chezmoi apply`. It is the same code as restore's `dotfiles` step (`src/dotfiles/utils/common/deploy.py`).
 - `TARGET` limits it to some paths under `~` (files or directories chezmoi manages).
 - Externals and `/etc` are not included: use `dotfiles restore --only externals` and

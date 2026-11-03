@@ -1,0 +1,26 @@
+{{- /*
+  Targets this repo used to deploy and no longer does: `chezmoi apply` (and `dotfiles apply`, which
+  backs them up first) deletes them where they still exist, so every machine drops them the same way.
+  - Never list a managed target: chezmoi stops with "inconsistent state".
+  - .chezmoiignore wins: an ignored target is never removed (clean those up by hand, e.g.
+    scripts/kali.sh for the user units Kali stopped managing in 0.5.0).
+  - Only files the repo deployed belong here; data the programs wrote next to them (caches,
+    histories) is left alone, and empty parent directories stay.
+  - To manage one of them again, delete its line here first.
+*/ -}}
+{{- if eq .chezmoi.os "linux" }}
+# zim + powerlevel10k: .zshrc uses oh-my-zsh
+.zimrc
+.p10k.zsh
+# never installed on either machine
+.config/ghostty/config
+# VirtualBox guest autostart, on physical machines
+.config/autostart/vboxclient.desktop
+# Cursor (not installed)
+.config/Cursor/User/settings.json
+.config/Cursor/User/keybindings.json
+# rime (not enabled in fcitx5)
+.local/share/fcitx5/rime/default.custom.yaml
+# asdf (no longer used)
+.tool-versions
+{{- end }}
