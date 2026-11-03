@@ -1,6 +1,6 @@
 # Kali 配置说明
 
-本文件是给人和 AI agent 读的上下文，记录 Kali 这台机器在仓库中的位置：哪些配置部署、哪些不部署、哪些只在本机，以及在 Kali 上操作时的注意事项。两台 Linux 共用的同步规则见 [todo.md](../todo.md) 第 4、5 节。工具用法见 [reference_zh-CN.md](reference_zh-CN.md)。Arch 侧的对应文档见 `docs/arch.md`（待写，见 todo）。
+本文件是给人和 AI agent 读的上下文，记录 Kali 这台机器在仓库中的位置：哪些配置部署、哪些不部署、哪些只在本机，以及在 Kali 上操作时的注意事项。两台 Linux 共用的同步规则见 [workflows_zh-CN.md](workflows_zh-CN.md) 第 6 节，常见陷阱见 [reference_zh-CN.md](reference_zh-CN.md) 6.5。Arch 侧的对应文档是 [arch.md](arch.md)。
 
 迁移在 2026-11-03 完成，后续修剪和同步在 2026-11-04 完成。部署前审阅的完整计划和每项决策都在 git 历史里（`git log -- docs/kali.md`，例如 529e54c 版本），本文件不再保留。
 
@@ -46,8 +46,8 @@
 排除和已知问题：
 
 - 4 个 `apt.conf.d` 文件已加入 `etc.exclude`：`00CDMountPoint`、`00trustcdrom`、`00aptitude` 是安装程序生成的，`02autoremove-postgresql` 由 postgresql-common 自动生成。
-- **冗余但不能排除**：`sudoers`、两个 `sudoers.d` 文件、`zsh/zshrc`、`sddm.conf.d/kde_settings.conf` 在 Kali 上和软件包里的版本完全相同。`kde_settings.conf` 是 kali-themes 的 diversion，而 Kali 上没有装 sddm，用的是 gdm3。它们在 `etc.extra` / `etc.secret` 里是为 Arch 列的，而 `etc.exclude` 两个发行版共用，排除会影响 Arch。改进项见 todo。
-- **重复加密**：第二次 backup（ce6efa3）把内容没变的 `crypttab`、`sudoers` 和两个 `sudoers.d` 文件重新加密了一遍。推测是权限位的问题：0440 用 `readonly_` 表示不出来，umask 002 又让 0644 对不上。见 todo。
+- **冗余但不能排除**：`sudoers`、两个 `sudoers.d` 文件、`zsh/zshrc`、`sddm.conf.d/kde_settings.conf` 在 Kali 上和软件包里的版本完全相同。`kde_settings.conf` 是 kali-themes 的 diversion，而 Kali 上没有装 sddm，用的是 gdm3。它们在 `etc.extra` / `etc.secret` 里是为 Arch 列的，而 `etc.exclude` 两个发行版共用，排除会影响 Arch。冗余但无害；改进的办法（跳过和软件包原样一致的文件）记在待办中。
+- **重复加密**（0.5.4 已修复）：第二次 backup（ce6efa3）把内容没变的 `crypttab`、`sudoers` 和两个 `sudoers.d` 文件重新加密了一遍。原因已确认：0.5.2 靠 `chezmoi status` 判断是否变化，而 0440 用属性表示不出来，umask 002 又让 0644 被算成 0664。现在只比较解密后的内容和属性。
 - dpkg 留下的 `.dpkg-new` / `.dpkg-old` 文件有 3 个（plymouth、xfce 菜单等），`dotfiles status` 会列出来。需要的话手动合并，不合并也没有影响。
 
 ## 4. 与 Arch 不同、需要特别处理的地方
@@ -56,7 +56,7 @@
 
 - **启动方式**：GNOME 下 fcitx5 由自启动项 `org.fcitx.Fcitx5.desktop` 启动；KDE Wayland 下由 KWin 启动，不需要这个文件。
 - **语言**：fcitx5 退出时会把内存中的配置重写到文件里，注释使用会话的语言。Arch 的 KDE 会话通过 `plasma-localerc` 设了 `LANGUAGE=zh_CN:en_US`，Kali 是 `en_HK`。所以自启动项的 `Exec` 是 `env LANGUAGE=zh_CN:en_US /usr/bin/fcitx5`。在 `en_HK` 下，gettext 会读 `LANGUAGE`，不需要生成 zh_CN locale。没有这个设置时，两台机器会把注释在中英文之间来回改。
-- **部署 fcitx5 配置的顺序**：先 `fcitx5-remote -e` 退出，再 `dotfiles apply --apply`，然后用 `gio launch ~/.config/autostart/org.fcitx.Fcitx5.desktop` 启动（这样带上 `LANGUAGE`）。直接在终端运行 `fcitx5 -d` 不会带上 `LANGUAGE`。可以再退出一次检查：`chezmoi status` 中应当没有 fcitx5 的条目。
+- **部署 fcitx5 配置**：直接 `dotfiles apply --apply`，它会让正在运行的 fcitx5 重新加载部署的文件（0.5.4 起，reference 6.4）。需要重启 fcitx5 时，用 `gio launch ~/.config/autostart/org.fcitx.Fcitx5.desktop` 启动（这样带上 `LANGUAGE`），直接在终端运行 `fcitx5 -d` 不会带上 `LANGUAGE`。检查写回：`busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 Save` 之后，`chezmoi status` 中应当没有 fcitx5 的条目。
 - 列表型的值写回时顺序不固定，例如 `notifications.conf` 的 `HiddenNotifications`。所以只保留需要的项（现在只有 `wayland-diagnose-kde`）。
 - GNOME 的 `switch-input-source` 两个快捷键已清空，把 `Super+space` 让给 fcitx5。kimpanel 扩展已启用，负责显示候选框。
 
@@ -64,7 +64,7 @@
 
 - 终端是 **gnome-terminal**，默认配置方案 "Arch Konsole"（gsettings 设置，不在仓库中）。它复刻了 Konsole 的字体（JetBrainsMono Nerd Font Mono Medium Italic 10）、Sweet-Ambar-Blue 配色和 150x40 窗口大小，没有透明效果。
 - gnome-terminal（VTE）**不支持 OSC 52**。zellij 默认用 OSC 52 写剪贴板，开启 mouse_mode 后选区又属于 zellij，结果 Ctrl+Shift+C 复制不到内容。现在 zellij 配置里有 `copy_command "wl-copy"`：鼠标拖选、松开即复制；按住 Shift 拖选时用的是 gnome-terminal 自己的选区。其他依赖 OSC 52 的程序（tmux、nvim 远程复制）也要配置 `wl-copy`。
-- 想换回 Konsole 的话：需要一个按 konsole 检测的标签，见 todo。
+- 想换回 Konsole 的话：需要一个按 konsole 检测的标签（记在待办中）。
 
 ### 4.3 shell
 
@@ -92,7 +92,7 @@
 
 ## 6. 在 Kali 上的日常操作
 
-- **以拉取为主**：`git pull`，然后 `uv run dotfiles apply` 预览，再 `uv run dotfiles apply --apply` 部署。如果预览中有 fcitx5 的条目，按 4.1 的顺序处理。
+- **以拉取为主**：`git pull`，然后 `uv run dotfiles apply` 预览，再 `uv run dotfiles apply --apply` 部署（fcitx5 的文件会自动重新加载，见 4.1）。
 - **备份前先预览**：`uv run dotfiles backup -n`。`backup.linux` 的候选清单两台机器共用，Kali 上新出现的候选也会部署到 Arch。不想要的条目用 `dotfiles config add backup.linux.ignore <路径>` 排除，或者给它加上标签。`user-dirs.dirs`、`mimeapps.list` 在 `-n` 中显示为 `plain` 是正常的，它们会被 `[requires]` 排除。
 - **`/etc`**：`dotfiles backup` 会读取 `/etc`，需要 sudo，要在终端里自己运行。不备份 `/etc` 时加 `--no-system`。
 - **分支**：日常备份直接提交到 `main`。工具或规则的改动在主检出中 `git switch dev`，完成后切回 `main`，再 `git merge --no-ff dev`。停在 `dev` 上时，不要 `apply --apply` 或做日常 backup，因为主检出就是 chezmoi 生效中的源目录。

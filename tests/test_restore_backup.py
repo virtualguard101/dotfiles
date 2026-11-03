@@ -278,3 +278,30 @@ def test_rehearse_forces_like_the_real_apply(monkeypatch):
     deploy.rehearse()
     args = calls[0]
     assert args[0] == "apply" and {"--dry-run", "--force", "--no-tty"} <= set(args)
+
+
+def test_fcitx5_reload_calls():
+    from dotfiles.utils.common import deploy
+    C = deploy.Change
+    assert deploy.fcitx5_reload_calls([C(" ", "M", ".zshrc")]) == []
+    calls = deploy.fcitx5_reload_calls([C(" ", "M", ".config/fcitx5/conf/notifications.conf"),
+                                        C(" ", "M", ".config/fcitx5/conf/pinyin.conf")])
+    assert [c[-2:] for c in calls] == [["s", "notifications"], ["s", "pinyin"]]   # addon reloads only
+    calls = deploy.fcitx5_reload_calls([C(" ", "M", ".config/fcitx5/profile")])
+    assert [c[-1] for c in calls] == ["ReloadConfig"]
+
+
+def test_reload_fcitx5_only_when_running(monkeypatch):
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import deploy
+    ran = []
+    monkeypatch.setattr(deploy, "IS_LINUX", True)
+    monkeypatch.setattr(platforms, "have", lambda name: True)
+    monkeypatch.setattr(platforms, "run", lambda cmd, **kw: ran.append(cmd) or platforms.Result(0, "", ""))
+    changes = [deploy.Change(" ", "M", ".config/fcitx5/conf/notifications.conf")]
+    monkeypatch.setattr(platforms, "proc_running", lambda names: False)
+    deploy.reload_fcitx5(changes)
+    assert ran == []
+    monkeypatch.setattr(platforms, "proc_running", lambda names: True)
+    deploy.reload_fcitx5(changes)
+    assert ran == [[*deploy.FCITX5, "ReloadAddonConfig", "s", "notifications"]]

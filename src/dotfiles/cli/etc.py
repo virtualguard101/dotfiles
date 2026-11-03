@@ -233,16 +233,37 @@ class _Stage:
         self.close()
 
 
+def mode_attrs(mode: int) -> set[str]:
+    """The attributes `chezmoi add` records for a file with this mode."""
+    attrs = set()
+    if not mode & 0o077:
+        attrs.add("private")
+    if not mode & 0o222:
+        attrs.add("readonly")
+    if mode & 0o111:
+        attrs.add("executable")
+    return attrs
+
+
 def unchanged(stage: _Stage, dst: Path, encrypt: bool) -> bool:
-    """The staged copy already matches system/<distro>: same content and mode (chezmoi status is
-    empty; it decrypts to compare) and the same encryption choice. Re-adding it anyway would only
-    churn the repo: age output differs on every encryption, so every encrypted file would show up
-    as modified after each backup."""
+    """The staged copy already matches system/<distro>: same content (decrypted) and the same
+    attributes `chezmoi add` would record now (encryption, private, readonly, executable).
+    Re-adding it anyway would only churn the repo: age output differs on every encryption.
+
+    `chezmoi status` is not used for this: it also compares modes the attributes cannot express
+    (0440, 0640), and modes derived from the umask (0644 is 0664 under Kali's umask 002), so it
+    reported such files as changed on every backup."""
+    from dotfiles.cli.backup import source_attrs
+
     src = stage.cz("source-path", "--", str(dst))
-    if not src.ok or Path(src.stdout.strip()).name.startswith("encrypted_") != encrypt:
+    if not src.ok:
         return False
-    r = stage.cz("status", "--", str(dst))
-    return r.ok and not r.stdout.strip()
+    want = mode_attrs(stat.S_IMODE(dst.stat().st_mode)) | ({"encrypted"} if encrypt else set())
+    have = source_attrs(Path(src.stdout.strip()).name) & {"encrypted", "private", "readonly", "executable"}
+    if want != have:
+        return False
+    r = stage.cz("cat", "--", str(dst))
+    return r.ok and r.stdout == platforms._decode(dst.read_bytes())
 
 
 def backup(run) -> None:

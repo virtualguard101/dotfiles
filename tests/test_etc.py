@@ -159,3 +159,48 @@ def test_backup_twice_leaves_encrypted_sources_untouched(system_repo, monkeypatc
     after = snapshot()
     assert after.keys() == first.keys()
     assert [p for p in after if after[p] != first[p]] == [p for p in after if p.name.startswith("encrypted_")]
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o440, 0o640, 0o644, 0o400, 0o755, 0o444])
+def test_mode_attrs_match_what_chezmoi_add_records(system_repo, mode):
+    from dotfiles.cli.backup import source_attrs
+    source, _ = system_repo
+    source.mkdir(parents=True)
+    with etc._Stage() as stage:
+        dst = stage.dir / "etc" / "f.conf"
+        dst.parent.mkdir(parents=True)
+        dst.write_text("x\n", encoding="utf-8")
+        os.chmod(dst, mode)
+        assert stage.cz("add", "--", str(dst)).ok
+        name = Path(stage.cz("source-path", "--", str(dst)).stdout.strip()).name
+    assert source_attrs(name) == etc.mode_attrs(mode)
+
+
+@pytest.mark.parametrize("umask", [0o022, 0o002])
+def test_backup_twice_no_churn_for_modes_chezmoi_cannot_express(system_repo, monkeypatch, umask):
+    """sudoers is 0440 and some files are 0640: chezmoi's attributes cannot express those modes,
+    and under umask 002 even 0644 / 0755 differ from what chezmoi derives. None of that may make
+    an unchanged file count as changed."""
+    source, etc_dir = system_repo
+    files = {"sudoers": (0o440, "secret"), "shadowish": (0o640, "plain"), "crypttab": (0o644, "secret"),
+             "hook.sh": (0o755, "plain"), "hosts": (0o644, "plain")}
+    for name, (mode, _) in files.items():
+        (etc_dir / name).write_text(f"{name} content\n", encoding="utf-8")
+        os.chmod(etc_dir / name, mode)
+    monkeypatch.setattr(etc, "collect_targets", lambda: {str(etc_dir / n): k for n, (_, k) in files.items()})
+
+    def snapshot():
+        return {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+
+    old = os.umask(umask)
+    try:
+        etc.backup(Runner(dry=False))
+        first = snapshot()
+        assert len(first) == len(files)
+        etc.backup(Runner(dry=False))
+        assert snapshot() == first
+        os.chmod(etc_dir / "hosts", 0o600)                 # a real mode change is still picked up:
+        etc.backup(Runner(dry=False))                      # no longer world-readable -> encrypted
+        assert "encrypted_private_hosts.age" in {p.name for p in snapshot()}
+    finally:
+        os.umask(old)

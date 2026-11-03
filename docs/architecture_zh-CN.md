@@ -199,3 +199,7 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 一样可以恢复。
 
 0.5.2：`/etc` 备份不再重新加密已与 `system/<发行版>` 一致的文件，所以每次备份不会再改写所有加密的 `/etc` 文件。
+
+0.5.4：`/etc` 备份比较解密后的内容和 `chezmoi add` 会记录的属性，不再使用 `chezmoi status`（它把属性表示不了的权限
+（0440、0640）和按 umask 推算的权限也算作变化）；`apply` 部署了 fcitx5 的配置文件后，会让正在运行的 fcitx5 重新加载它们
+（D-Bus 的 `ReloadConfig` / `ReloadAddonConfig`），fcitx5 退出时不会再把旧配置写回。

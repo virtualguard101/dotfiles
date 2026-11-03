@@ -45,7 +45,7 @@ uv run dotfiles restore                    # plan only
 chezmoi --source . --override-data '{"chezmoi":{"os":"windows"}}' managed
 ```
 
-Merge PRs with a **merge commit**. Squash and rebase merges rewrite commit hashes, after which the long-lived `dev` can no longer fast-forward and diverges from `main` for good.
+Merge with a **merge commit**: a PR merged that way, or locally `git merge --no-ff dev` on `main` ([3](#3-developing-on-dev-in-the-live-checkout)). Squash and rebase merges rewrite commit hashes, after which the long-lived `dev` can no longer fast-forward and diverges from `main` for good.
 
 ### 2.3 A problem found during recovery: fix it on `main`
 
@@ -53,24 +53,17 @@ A fresh machine runs `main`. Fix the problem there, push, rerun `restore`, then 
 
 ---
 
-## 3. Developing without switching the live checkout
+## 3. Developing on `dev` in the live checkout
 
-`~/.local/share/chezmoi` is the live source directory. Switching it to `dev` means `chezmoi apply` deploys unmerged state. Develop in a git worktree instead:
+Development happens in `~/.local/share/chezmoi` itself: commit or stash what is on `main`, then `git switch dev` (catching up first, [4](#4-keeping-dev-in-step-with-main)). That checkout is chezmoi's live source directory, so while it is on `dev`:
 
-```bash
-git worktree add ~/dev/dotfiles-dev dev    # any path outside the chezmoi source dir works
-```
-
-`dotfiles` calls chezmoi with `--source <the repo the tool itself lives in>`, so commands run in the worktree act on the worktree:
-
-| Command in the worktree | Effect |
+| Command | While on `dev` |
 |---|---|
-| `pytest`, `check`, `restore` (plan), `backup -n` | safe for testing |
-| `doctor` | reports "source dir" as fail, because chezmoi's config names the main checkout — expected |
-| `backup` (without `-n`) | writes into the worktree's `home/` |
-| `restore --apply` | deploys the `dev` state into `~` — run it only on purpose |
+| `pytest`, `check`, `restore` (plan), `apply` (preview), `backup -n` | safe: they only read |
+| `apply --apply`, `restore --apply` | deploy the unmerged state into `~`: only when `dev` changes nothing under `home/` (`git diff --stat main dev -- home` is empty), or on purpose |
+| `backup` (without `-n`) | writes into `dev`'s `home/`: do daily backups on `main` |
 
-Remove the worktree when done with `git worktree remove ~/dev/dotfiles-dev`.
+When done: `git switch main`, then merge with a merge commit, either through a PR or locally with `git merge --no-ff dev` (a machine without `gh` login does the latter), and push. Switch back to `main` before leaving the machine.
 
 ---
 
@@ -106,3 +99,15 @@ git push origin --delete archlinux windows
 git branch -d archlinux windows
 git remote set-head origin -a      # refresh origin/HEAD if it still points at an old branch
 ```
+
+---
+
+## 6. Two machines on the same OS (Arch + Kali)
+
+Both Linux machines share every `linux` target that no tag separates (reference [3.3](reference.md#33-platform-ownership)), and the lists in `dotfiles.toml`. Each machine's specifics are in [arch.md](arch.md) and [kali.md](kali.md).
+
+- **Preview before applying**: `git pull`, `uv run dotfiles apply` to preview, then `uv run dotfiles apply --apply`. Overwritten and removed files are backed up to `~/.local/state/dotfiles/pre-apply-*` first.
+- **Preview before backing up**: `uv run dotfiles backup -n`. `backup.linux` is shared, so a candidate that shows up on one machine deploys on the other too. Exclude it with `dotfiles config add backup.linux.ignore <path>`, or give it a tag.
+- **One source file for both**: a change re-added on one machine overwrites the other's copy at its next apply. A file whose content has to differ becomes a template (on `.chezmoi.osRelease.id` or `.tags`), or the two copies are separated by tags.
+- **`/etc`**: backup writes only this distro's `system/<ID>/etc`, but `etc.extra` / `etc.secret` / `etc.exclude` are shared: before excluding a path, check the other machine has no file of that name. Reading `/etc` needs sudo; `--no-system` skips it.
+- **Before committing tool changes**: `uv run pytest`, and check its own exit status: `uv run pytest | tail -1 && git commit` tests `tail`'s status, so a failure slips through.
