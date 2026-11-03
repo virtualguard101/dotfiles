@@ -29,6 +29,12 @@ def test_repo_file_is_valid_and_covers_the_schema():
 
 
 def test_add_turns_inline_array_into_one_item_per_line(cfg):
+    # start from an inline empty array, whatever the repo's list holds today
+    text = cfg.read_text(encoding="utf-8")
+    i = text.index("\nignore = ", text.index("[backup.linux]")) + 1
+    cfg.write_text(text[:i] + "ignore = []" + text[text.index("]", i) + 1:], encoding="utf-8")
+    config.reload()
+    assert config.get("backup.linux.ignore") == []
     assert config.add("backup.linux.ignore", [".config/spectaclerc"]) == ["+ .config/spectaclerc"]
     text = cfg.read_text(encoding="utf-8")
     assert 'ignore = [\n  ".config/spectaclerc",\n]' in text

@@ -1,6 +1,8 @@
 """Platform ownership: rendering the .chezmoiignore template from both platform views, and
 maintaining platforms.toml."""
 import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -11,8 +13,13 @@ needs_chezmoi = pytest.mark.skipif(not platforms.have("chezmoi"), reason="requir
 
 
 def render_ignore(os_name: str, tags: list[str] | None = None) -> set[str]:
-    r = chez.cz("execute-template", "--file", str(chez.source_state_dir() / ".chezmoiignore"),
-                os_override=os_name, tags=tags)
+    """Render .chezmoiignore against an empty config, so this machine's own .tags never leak in
+    (tags=None then really means a config written before tags existed)."""
+    with tempfile.TemporaryDirectory() as d:
+        empty = Path(d, "chezmoi.toml")
+        empty.write_text("", encoding="utf-8")
+        r = platforms.run([*chez.base_args(os_name, tags), "--config", str(empty), "execute-template",
+                           "--file", str(chez.source_state_dir() / ".chezmoiignore")])
     assert r.ok, r.stderr
     return {line.strip() for line in r.stdout.splitlines() if line.strip()}
 
@@ -76,17 +83,20 @@ def test_requires_ignores_targets_whose_tag_is_missing():
     # parents shared with targets this machine keeps stay managed
     assert {".config", ".local", ".local/share", ".config/systemd", ".config/systemd/user"}.isdisjoint(kali)
     assert ".config/systemd/user/kwallet_auto_unlock.service" in kali
+    # [requires] arch: Kali keeps its own XDG user dirs
+    assert ".config/user-dirs.dirs" in kali and ".config/user-dirs.dirs" not in arch
     assert render_ignore("windows", ["kde"]) == render_ignore("windows")    # requires never re-enables
 
 
 @needs_chezmoi
-def test_kali_view_drops_only_kde_targets():
+def test_kali_view_drops_only_targets_of_missing_tags():
+    kali_tags = ["kali", "debian", "gnome"]
     every = set(chez.managed(include="files", os_override="linux", tags=["arch", "kde"]))
-    kali = set(chez.managed(include="files", os_override="linux", tags=["kali", "debian", "gnome"]))
+    kali = set(chez.managed(include="files", os_override="linux", tags=kali_tags))
     assert kali < every
     dropped = every - kali
-    requires = chez.load_requires()["kde"]
-    assert all(chez.covering(t, requires) for t in dropped)
+    missing = [t for tag, targets in chez.load_requires().items() if tag not in kali_tags for t in targets]
+    assert all(chez.covering(t, missing) for t in dropped)
     assert {".zshrc", ".config/fcitx5/profile"} <= kali
 
 
