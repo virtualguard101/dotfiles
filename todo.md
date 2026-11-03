@@ -34,7 +34,7 @@
 - **oh-my-zsh 改为 chezmoi external** (`.oh-my-zsh`, git-repo). 原来仓库只管理 `.zshrc`, 新机器部署后会因为找不到 `$ZSH/oh-my-zsh.sh` 而报错.
 - **用户目录**: `.config/user-dirs.dirs` 加上了 `[requires] arch`, 见第 2 节. Kali 上 `dotfiles backup` 碰到它时只会警告 "ignoring", 不会改动源文件 (已验证).
 - **Kali 独有的自动启动项**: `fix-old-genmon-config.desktop` (XFCE), `org.fcitx.Fcitx5.desktop` (GNOME 下需要靠它启动 fcitx5; KDE Wayland 下由 KWin 启动, 不需要) 已加入 `backup.linux.ignore`, 避免同步到 Arch.
-- **终端**: 为了兼容性, 用 gnome-terminal. 新建了一个 "Arch Konsole" 配置方案 (gsettings, 不在仓库中), 设为默认. 它复刻了 Konsole 的字体, Sweet-Ambar-Blue 配色和 150x40 窗口大小, 但没有透明效果. zellij 用官方 release 的二进制文件, 配置由仓库同步.
+- **终端**: 为了兼容性, 用 gnome-terminal. 新建了一个 "Arch Konsole" 配置方案 (gsettings, 不在仓库中), 设为默认. 它复刻了 Konsole 的字体, Sweet-Ambar-Blue 配色和 150x40 窗口大小, 但没有透明效果. zellij 用官方 release 的二进制文件, 配置由仓库同步. gnome-terminal (VTE) 不支持 OSC 52, 而 zellij 默认用 OSC 52 写剪贴板, 且开启 mouse_mode 后选区属于 zellij, 导致 Ctrl+Shift+C 复制不到内容; `config.kdl` 已改为模板, 在 `gnome` 标签且有 `wl-copy` 时加上 `copy_command "wl-copy"` (Arch 上渲染结果不变).
 - **gh**: 没有可用的 sudo, 所以没有添加 GitHub 的 apt 源, 改用官方 release 的 tarball 安装到 `~/.local/bin` (已校验 sha256). zellij 也装在这里.
 - **从 Arch 直接复制、不进仓库的内容**: 4 个服务器 SSH 私钥, 合并 known_hosts, `~/.vim` (vim-plug), JetBrainsMono Nerd / Consolas / 微软雅黑字体 (放在 `~/.local/share/fonts/arch`), IDA Pro 9.5 (`~/.local/share/ida-pro-9.5`, `~/.idapro`, 启动链接和 .desktop 文件中的路径已改为 Kali 的家目录; IDAPython 用 `idapyswitch` 指向了 Kali 的 libpython3.14).
 - **fcitx5 退出时会写回内存中的配置**. 在 fcitx5 运行时 apply 了它的配置, 之后要执行 `fcitx5-remote -r` 让它重新加载, 否则下次退出时会覆盖刚部署的文件.
@@ -59,14 +59,15 @@
 - 加密文件的内容不经过家目录路径检查. 在加密文件里写死路径不会被发现, `.zshrc` 和 VS Code / Cursor 的 `settings.json` 都出现过这种情况.
 - 在 zsh 中, 把整条命令放进一个变量 (`C="chezmoi --config ..."; $C ...`) 不会按空格拆分. 改用函数, 或者 `${=C}`.
 - 程序运行时会写回自己的配置的 (例如 fcitx5), apply 之后要让它重新加载, 或者先退出它再 apply.
+- 依赖 OSC 52 的剪贴板功能 (zellij, tmux, nvim 的远程复制) 在 gnome-terminal 中无效, 要配置 `wl-copy` 之类的外部命令.
 
 ## 6. 待办
 
 ### 6.1 合并本次的 PR (在 Arch 或 Kali 上)
 
-- [ ] **Kali: `sudo apt install ncat`**. `.ssh/config` 中 github.com 的 `ProxyCommand` 用的是 `ncat` (经 Clash 的 7897 端口转发). Arch 上 ncat 来自 nmap 包, Kali 上它是单独的包, 还没有安装. 装好之前, 推送要临时加上 `GIT_SSH_COMMAND='ssh -o ProxyCommand=none'` (直连可用).
-- [ ] 审阅并以 merge commit 方式合并 `dev` → `main` 的 PR. PR 内容: oh-my-zsh external, `[requires] arch`, docs/kali.md, 本文件, 以及两处测试修复 (`render_ignore` 改用空配置渲染, 不再读到本机的 `.tags`, 原来在没有 `kde` 标签的机器上会失败; `test_add_turns_inline_array…` 不再依赖仓库中 `backup.linux.ignore` 的当前内容).
-- [ ] 合并后在 Kali 上: 主检出中还保留着这些文件未提交的相同改动, 所以要先 `git checkout -- home/.chezmoidata/platforms.toml home/.chezmoiexternal.toml.tmpl docs/kali.md todo.md`, 再 `git pull`.
+- [x] **Kali: `sudo apt install ncat`** (已安装, `/usr/bin/ncat`). `.ssh/config` 中 github.com 的 `ProxyCommand` 用的是 `ncat` (经 Clash 的 7897 端口转发). Arch 上 ncat 来自 nmap 包, Kali 上它是单独的包, 还没有安装. 装好之前, 推送要临时加上 `GIT_SSH_COMMAND='ssh -o ProxyCommand=none'` (直连可用).
+- [x] 审阅并以 merge commit 方式合并 `dev` → `main` 的 PR. PR 内容: oh-my-zsh external, `[requires] arch`, docs/kali.md, 本文件, 以及两处测试修复 (`render_ignore` 改用空配置渲染, 不再读到本机的 `.tags`, 原来在没有 `kde` 标签的机器上会失败; `test_add_turns_inline_array…` 不再依赖仓库中 `backup.linux.ignore` 的当前内容).
+- [x] 合并后在 Kali 上 (已完成, 4 个文件与 origin/main 逐字节一致后丢弃并 pull): 主检出中还保留着这些文件未提交的相同改动, 所以要先 `git checkout -- home/.chezmoidata/platforms.toml home/.chezmoiexternal.toml.tmpl docs/kali.md todo.md`, 再 `git pull`.
 - [ ] 合并后在 Arch 上:
   - `git pull`;
   - `uv run dotfiles doctor`, 确认 tags 中有 `arch`. 0.4.0 之后重新 init 过就会有; 没有的话 `chezmoi init`;

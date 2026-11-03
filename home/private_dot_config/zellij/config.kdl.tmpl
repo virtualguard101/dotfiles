@@ -416,6 +416,10 @@ default_layout "work"
 // copy_command "pbcopy"                     // osx
 // 
 // copy_command "pbcopy"
+{{- /* gnome-terminal (VTE) ignores OSC 52, so zellij selections never reach the clipboard there. Konsole supports OSC 52, so KDE keeps the default. */}}
+{{- if and (has "gnome" .tags) (lookPath "wl-copy") }}
+copy_command "wl-copy"
+{{- end }}
  
 // Choose the destination for copied text
 // Allows using the primary selection buffer (on x11/wayland) instead of the system clipboard.
