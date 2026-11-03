@@ -50,7 +50,10 @@ exclude = [
   "*~",
   "*_history",
 ]
-ignore = []
+ignore = [
+  ".config/autostart/fix-old-genmon-config.desktop",
+  ".config/autostart/org.fcitx.Fcitx5.desktop",
+]
 
 [backup.windows]
 track = [
