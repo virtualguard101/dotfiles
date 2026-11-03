@@ -83,14 +83,14 @@
     sudo pacman -Rns virtualbox-guest-utils open-vm-tools fcitx5-rime rime-ice-git rime-pinyin-moegirl
     uv run dotfiles backup          # 在 main 上: archpkg.txt 随之更新, 再提交
     ```
-- [ ] **Kali**: `git pull` 之后运行 `bash scripts/kali.sh` 预览, 再 `bash scripts/kali.sh --apply`. 脚本做的事:
+- [x] **Kali** (2026-11-04 完成): 第 1-4 步由脚本完成 (单元移到 `~/.local/state/dotfiles/kali-20261104-011810`); 第 5 步因 apply 演练缺少 `--force` 而失败 (本地改过的目标会让 chezmoi 询问, `--no-tty` 下读到 EOF), 什么都没写入. 修复在 dev 的 0.5.3 (620e604, 待开 PR); 部署改在 worktree 中用 0.5.3 完成 (dev 与 main 的 `home/` 无差异), 20 项全部部署, 备份在 `pre-apply-20261104-012025`, 之后 `fcitx5-remote -r`, 删除 4 个空目录. 被覆盖的 6 个 `MM` 项: 5 个 fcitx5 文件是 fcitx5 写回的默认值 (丢了 keyboard-jp 和云拼音), VS Code 只是删掉 Arch 路径. 第 2 步的 "already done" 不是问题: 渲染结果与现有配置相同, 只是模板哈希变了, 手动 `chezmoi init` 后警告消失. 原计划:
   - 重新生成配置;
   - 恢复 oh-my-zsh 的推送地址;
   - 把两个不再管理的用户单元移到 `~/.local/state/dotfiles/kali-*` (`.chezmoiignore` 优先于 `.chezmoiremove`, 被忽略的目标不会被删除, 所以不能靠 `.chezmoiremove`);
   - `dotfiles apply`: 部署新的 `.zshrc` 和 `secrets.zsh`, aria2 模板, 并删除 `.chezmoiremove` 中的 8 个目标 (先备份到 `pre-apply-*`);
   - 删除因此变空的目录;
   - 运行 `dotfiles doctor`: "pacman is required" 应当消失, `aptpkg.txt` 显示缺少的包数.
-- [ ] **Kali 的 `/etc` 备份** (需要 sudo, 脚本最后会提示): 先 `uv run dotfiles status` 看 "/etc backup targets", 再 `uv run dotfiles backup -n` 预览, 确认后 `uv run dotfiles backup` 写入 `system/kali/etc`. 从 Arch 只读预览的结果: `etc.extra` 中 Arch 专用的条目 (sddm.conf, mkinitcpio, pacman hooks, timeshift, docker, mihomo) 在 Kali 上不存在, 自动跳过; 会收入 `/etc/apt/sources.list.d` (kali.sources, vscode.sources), `/etc/apt/apt.conf.d` 中 4 个非软件包文件, `/etc/profile.d` 中 2 个 (nmap.sh, dotnet-cli-tools-bin-path.sh), `sddm.conf.d/kde_settings.conf`, 以及 hostname, locale.conf, vconsole.conf, environment, zsh/zshrc. 可读的 conffile 中没有被用户改过的 (14 个看似改过的都是 kali-defaults / kali-themes 的 dpkg-divert); 13 个只有 root 可读的 conffile 要到 Kali 上用 sudo 才能检查. 不需要的条目用 `dotfiles config add etc.exclude <路径>` 排除.
+- [ ] **Kali 的 `/etc` 备份** (需要交互式 sudo, 要在终端里自己运行): 已审阅 `dotfiles status` 的清单, 并把 4 个安装程序 / postgresql 生成的 `apt.conf.d` 文件 (00CDMountPoint, 00trustcdrom, 00aptitude, 02autoremove-postgresql) 加入 `etc.exclude`. 剩下要做的: `uv run dotfiles backup -n` (sudo 会检查 11 个只有 root 可读的 conffile), 确认后 `uv run dotfiles backup`, 再提交 `system/kali` 并推送. 已知的冗余: `sudoers`, `sudoers.d/{kali-grant-root,ospd-openvas}`, `zsh/zshrc`, `sddm.conf.d/kde_settings.conf` (kali-themes 的 diversion, Kali 没装 sddm) 在 Kali 上都是软件包原样, 但它们在 `extra` / `secret` 中是为 Arch 列的, `etc.exclude` 两边共用, 不能排除, 见 6.4. 原记录: 先 `uv run dotfiles status` 看 "/etc backup targets", 再 `uv run dotfiles backup -n` 预览, 确认后 `uv run dotfiles backup` 写入 `system/kali/etc`. 从 Arch 只读预览的结果: `etc.extra` 中 Arch 专用的条目 (sddm.conf, mkinitcpio, pacman hooks, timeshift, docker, mihomo) 在 Kali 上不存在, 自动跳过; 会收入 `/etc/apt/sources.list.d` (kali.sources, vscode.sources), `/etc/apt/apt.conf.d` 中 4 个非软件包文件, `/etc/profile.d` 中 2 个 (nmap.sh, dotnet-cli-tools-bin-path.sh), `sddm.conf.d/kde_settings.conf`, 以及 hostname, locale.conf, vconsole.conf, environment, zsh/zshrc. 可读的 conffile 中没有被用户改过的 (14 个看似改过的都是 kali-defaults / kali-themes 的 dpkg-divert); 13 个只有 root 可读的 conffile 要到 Kali 上用 sudo 才能检查. 不需要的条目用 `dotfiles config add etc.exclude <路径>` 排除.
 
 ### 6.3 修剪冗余配置 (2026-11-04 完成)
 
@@ -124,5 +124,6 @@ Arch 上被 `.chezmoiremove` 删除的 8 个文件备份在 `~/.local/state/dotf
 - [x] 没有 sudo 时的建议 (0.5.0): bootstrap 失败时给出 release 二进制文件装到 `~/.local/bin` 的做法, 并预先把它加进 `PATH`; doctor 对 gh, just 给出同样的提示.
 - [ ] 想在 Kali 上换回 Konsole 时 (docs/kali.md C1 的选项 (a)): 新增 `konsole` 标签 (按能否找到 konsole 检测), 把 `.config/konsolerc` 和 `.local/share/konsole` 从 `kde` 移到这个标签下.
 - [ ] Windows 系统配置备份: 用 `system/windows/` 保存导出的注册表等系统设置 (目录已预留, 功能尚未实现).
+- [ ] `/etc` 备份: `extra` / `secret` 中直接列出的**文件**, 如果是软件包原样 (pacman / dpkg 的 md5 一致), 应当跳过; 或者支持按发行版的 `exclude`. 现在 Kali 会收入 sudoers 等 5 个软件包原样的文件. 注意这会改变 Arch 现有 `system/arch` 的内容, 走 PR 并先在 Arch 上 `backup -n` 核对.
 - [ ] 检测更多标签的需求 (例如 `xfce`, 手动设置的本机标签), 有实际用途时再加.
 - [ ] 全部完成后删除本文件.

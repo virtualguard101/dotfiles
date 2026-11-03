@@ -148,6 +148,10 @@ exclude = [
   "*.ucf-dist",
   "*.ucf-new",
   "*.ucf-old",
+  "/etc/apt/apt.conf.d/00CDMountPoint",
+  "/etc/apt/apt.conf.d/00trustcdrom",
+  "/etc/apt/apt.conf.d/00aptitude",
+  "/etc/apt/apt.conf.d/02autoremove-postgresql",
 ]
 # restore shows a diff only and installs these only when named on the command line
 hardware_bound = [
