@@ -18,7 +18,6 @@ packages/                 软件包清单：archpkg.txt / aptpkg.txt / scoopfile
 dotfiles.toml             备份与清理的清单和阈值（数据；可用 dotfiles config 编辑）
 src/dotfiles/             Python 工具（只用标准库）
 bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
-scripts/kali.sh           需要在 Kali 上执行的一次性后续步骤
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
 docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
 docs/architecture.md      架构：工具的组织方式、分层规则、如何扩展

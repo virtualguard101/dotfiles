@@ -70,7 +70,7 @@
 
 - **apply 和 backup**：按 workflows 第 6 节，先预览再执行。`dotfiles backup` 会读取 `/etc`，需要 sudo，要在终端里自己运行；不备份 `/etc` 时加 `--no-system`。
 - **分支**：日常备份直接提交到 `main`。工具或规则的改动在主检出中 `git switch dev`，完成后切回 `main` 合并（workflows 第 3 节）。
-- `scripts/arch.sh` 是 2026-11-04 那次的一次性收尾脚本。它的第 3 步用 `fcitx5-remote -r` 让 fcitx5 重新加载，后来证明这样不够（见 3.1），现在由 `dotfiles apply` 处理。
+- 2026-11-04 那次的一次性收尾脚本 `scripts/arch.sh` 已经从仓库删除（`git log -- scripts/arch.sh` 可以找到它的各个版本）。它的第 3 步用 `fcitx5-remote -r` 让 fcitx5 重新加载，后来证明这样不够（见 3.1），现在由 `dotfiles apply` 处理。
 
 ## 6. 备份和回滚的位置
 
@@ -80,6 +80,3 @@
 | 2026-11-03 的 `/etc` 复核 | `~/.local/state/dotfiles/etc-review` |
 | 新建的文件 | `chezmoi managed` 会列出全部目标，删除对应文件即可 |
 
-## 7. 未决定的事项
-
-- `~/.local/share/mamba`：mamba 的根目录（4K，只有空的环境结构），`.zshrc` 中加载 mamba 的代码已经删掉，没有程序再使用它。

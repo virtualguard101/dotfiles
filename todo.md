@@ -18,7 +18,6 @@ Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](do
 ## 3. 可选
 
 - [ ] Kali：合并或删除 3 个 `.dpkg-new` / `.dpkg-old` 文件（`dotfiles status` 会列出来）。
-- [ ] Arch：`~/.local/share/mamba`（4K，已经没有程序使用它），可以删除。
 
 ## 4. 已完成（摘要，细节见 git 历史）
 
@@ -28,4 +27,4 @@ Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](do
 - 0.5.2（#13）、0.5.4：`/etc` 备份不再重新加密没有变化的文件（0.5.4 修复了 0440 / 0640 和 umask 002 的情况）。
 - 0.5.3：apply 的演练带上 `--force`。
 - 0.5.4：apply 部署 fcitx5 的配置后让 fcitx5 重新加载（在 Arch 上用 D-Bus `Save` 验证过：只用 `fcitx5-remote -r` 不够）。workflows 第 3 节改为在主检出中切换到 dev；同步规则和常见陷阱移进 workflows 第 6 节和 reference 6.5；新增 docs/arch.md。
-- Kali 收尾（2026-11-04）：`scripts/kali.sh`，zellij 在 GNOME 上用 `wl-copy`，fcitx5 用中文写配置，`/etc` 首次备份。Arch 收尾：拉取并部署，fcitx5 的 `notifications.conf` 已部署并验证写回。
+- Kali 收尾（2026-11-04）：`scripts/kali.sh`，zellij 在 GNOME 上用 `wl-copy`，fcitx5 用中文写配置，`/etc` 首次备份。Arch 收尾：拉取并部署，fcitx5 的 `notifications.conf` 已部署并验证写回，删除了 `~/.local/share/mamba`。一次性脚本 `scripts/kali.sh`、`scripts/arch.sh` 执行完后已删除。

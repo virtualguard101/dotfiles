@@ -97,7 +97,7 @@
 - **`/etc`**：`dotfiles backup` 会读取 `/etc`，需要 sudo，要在终端里自己运行。不备份 `/etc` 时加 `--no-system`。
 - **分支**：日常备份直接提交到 `main`。工具或规则的改动在主检出中 `git switch dev`，完成后切回 `main`，再 `git merge --no-ff dev`。停在 `dev` 上时，不要 `apply --apply` 或做日常 backup，因为主检出就是 chezmoi 生效中的源目录。
 - **推送**：`.ssh/config` 让 GitHub 的连接走 `ncat` 代理，需要 Clash 在运行。Clash 没开时，用 `GIT_SSH_COMMAND='ssh -o ProxyCommand=none' git push` 直连。
-- `scripts/kali.sh` 是 2026-11-04 那次的一次性收尾脚本，已经执行过。脚本每一步都会先检查，重新运行也是安全的。
+- 2026-11-04 那次的一次性收尾脚本 `scripts/kali.sh` 已经执行过，之后从仓库删除（`git log -- scripts/kali.sh` 可以找到它的各个版本）。
 
 ## 7. 备份和回滚的位置
 

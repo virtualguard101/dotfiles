@@ -17,7 +17,6 @@ dotfiles.toml             backup and cleanup lists and tunables (data; `dotfiles
 src/dotfiles/             the Python tool (standard library only)
 bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and clones the repo,
                           then hands over to dotfiles restore
-scripts/kali.sh           one-off follow-up steps to run on the Kali machine
 docs/reference.md         detailed reference: command behavior, encryption and platform rules,
                           cleanup targets, commit checks
 docs/workflows.md         branch roles and which path each kind of change takes
