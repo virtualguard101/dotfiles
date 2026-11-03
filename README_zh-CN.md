@@ -13,7 +13,7 @@ home/                     两个平台的 dotfiles（chezmoi 源状态）
   .chezmoidata/platforms.toml   每个目标的平台归属；.chezmoiignore 据此生成
 system/<发行版>/          Linux /etc 的备份，每个发行版一份，例如 system/arch（独立的 chezmoi 实例，
                           不部署到 ~）
-packages/                 软件包清单：archpkg.txt / scoopfile.json / winget.json
+packages/                 软件包清单：archpkg.txt / aptpkg.txt / scoopfile.json / winget.json
 dotfiles.toml             备份与清理的清单和阈值（数据；可用 dotfiles config 编辑）
 src/dotfiles/             Python 工具（只用标准库）
 bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆仓库，然后交给 dotfiles restore
@@ -74,7 +74,7 @@ bootstrap 只负责安装 git、chezmoi、uv（Arch 用 pacman，Debian / Kali �
 | `config` | 由 `home/.chezmoi.toml.tmpl` 生成 chezmoi 配置 |
 | `dotfiles` | 先完整预演一次解密（失败则一个文件都不写），再备份将被覆盖的已有文件到 `~/.local/state/dotfiles/pre-apply-*`，最后 `chezmoi apply` |
 | `system` | Linux：从本发行版的备份（`system/<发行版>/`）恢复 `/etc`，没有本发行版的备份时跳过；`fstab`、`crypttab`、`default/grub` 等与硬件绑定的文件只显示差异，`sudoers` 先经 `visudo` 校验 |
-| `packages` | Arch：pacman 安装官方仓库中的包，AUR 包交给 paru/yay（其他发行版跳过）；Windows：`winget import` 与 `scoop import` |
+| `packages` | Arch：pacman 安装官方仓库中的包，AUR 包交给 paru/yay；Debian / Kali：apt 安装已配置源中的包（其他发行版跳过）；Windows：`winget import` 与 `scoop import` |
 | `externals` | 拉取 nvim 配置等外部仓库；git 代理连不上时（代理软件还没装）临时改为直连 |
 | `ssh` | 为 `~/.ssh/config` 引用的每把缺失的私钥生成新密钥（私钥不备份），并可用 gh 把 GitHub 用的公钥登记上去 |
 | `shell` | Linux：把登录 shell 改为 zsh |

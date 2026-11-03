@@ -17,6 +17,7 @@ shared = [
 linux = [
   ".agents/ccs_config.sql",
   ".aria2/aria2.conf",
+  ".aria2/aria2.session",
   ".bash_profile",
   ".bashrc",
   ".config/Code",
@@ -90,4 +91,11 @@ kde = [
   ".config/mimeapps.list",
   ".config/systemd/user/kwallet_auto_unlock.service",
   ".local/share/konsole",
+]
+# programs: user units whose ExecStart binary is installed per machine (see .chezmoi.toml.tmpl)
+taskdog = [
+  ".config/systemd/user/taskdog-server.service",
+]
+zeroclaw = [
+  ".config/systemd/user/zeroclaw.service",
 ]

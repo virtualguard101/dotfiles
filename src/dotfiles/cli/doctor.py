@@ -63,9 +63,10 @@ def check_system(rep: Report) -> None:
     s = "system"
     if IS_LINUX:
         rel = linplat.os_release()
-        rep.add(s, "distribution", "ok" if linplat.is_arch_like() else "warn",
+        supported = linplat.package_manager() is not None
+        rep.add(s, "distribution", "ok" if supported else "warn",
                 f"{rel.get('PRETTY_NAME', 'unknown')}, kernel {pyplatform.release()}",
-                "" if linplat.is_arch_like() else "package restore supports Arch-like distros only (pacman)")
+                "" if supported else "package restore supports Arch-like (pacman) and Debian-like (apt) distros")
         session = os.environ.get("XDG_SESSION_TYPE", "unknown")
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
         rep.add(s, "desktop session", "info", f"{session} {desktop}".strip())
@@ -85,10 +86,10 @@ def check_system(rep: Report) -> None:
 
 def check_tools(rep: Report) -> None:
     s = "tools"
-    managers = ("winget", "scoop", "choco") if IS_WINDOWS else ("pacman", "yay", "paru", "nix", "flatpak")
+    managers = ("winget", "scoop", "choco") if IS_WINDOWS else ("pacman", "apt", "yay", "paru", "nix", "flatpak")
     found = [m for m in managers if have(m)]
     rep.add("package managers", "available", "ok" if found else "fail", ", ".join(found) or "none",
-            "" if found else ("install App Installer (winget)" if IS_WINDOWS else "pacman is required"))
+            "" if found else ("install App Installer (winget)" if IS_WINDOWS else "pacman or apt is required"))
     if IS_WINDOWS and not have("scoop"):
         rep.add("package managers", "scoop", "warn", "not installed",
                 "see https://scoop.sh; the restore packages step needs it")
@@ -97,10 +98,33 @@ def check_tools(rep: Report) -> None:
         rep.add(s, t, "ok" if v else "fail", v or "not installed", "" if v else "run bootstrap to install")
     for t in RECOMMENDED_TOOLS:
         path = platforms.which(t)
-        rep.add(s, t, "ok" if path else "warn", path or "not installed",
-                "" if path else {"pre-commit": "uv tool install pre-commit"}.get(t, ""))
+        rep.add(s, t, "ok" if path else "warn", path or "not installed", "" if path else install_hint(t))
     if not have("age"):
         rep.add(s, "age", "info", "not installed (chezmoi bundles age, so encryption still works)")
+
+
+# Linux install hints for recommended tools: the package, plus, for tools that some distros do not
+# package or that need sudo, the user-level fallback of a release binary in ~/.local/bin (which
+# ~/.profile puts on PATH).
+_LINUX_HINTS = {
+    "gh": ({"pacman": "sudo pacman -S github-cli", "apt": "GitHub's apt repo (cli.github.com/packages)"},
+           "https://github.com/cli/cli/releases"),
+    "just": ({"pacman": "sudo pacman -S just", "apt": "sudo apt install just"}, "https://github.com/casey/just/releases"),
+    "zsh": ({"pacman": "sudo pacman -S zsh", "apt": "sudo apt install zsh"}, ""),
+}
+
+
+def install_hint(tool: str) -> str:
+    """How to install a missing recommended tool on this machine."""
+    if tool == "pre-commit":
+        return "uv tool install pre-commit"
+    if not IS_LINUX or tool not in _LINUX_HINTS:
+        return ""
+    by_manager, url = _LINUX_HINTS[tool]
+    parts = [by_manager.get(linplat.package_manager() or "", "")]
+    if url:
+        parts.append(f"without sudo: the release binary from {url} in ~/.local/bin (verify its checksum)")
+    return "; ".join(p for p in parts if p)
 
 
 # ---------------------------------------------------------------- network
@@ -239,19 +263,44 @@ def check_repo(rep: Report) -> None:
 
 # ---------------------------------------------------------------- packages
 
-def missing_arch_packages() -> list[str]:
-    path = chez.packages_dir() / "archpkg.txt"
-    if not path.is_file() or not have("pacman"):
+def installed_packages(manager: str) -> set[str]:
+    if manager == "pacman":
+        return set(platforms.run(["pacman", "-Qq"]).stdout.split())
+    # apt: the names apt-mark prints (foreign-architecture packages carry :arch) and the bare names
+    out = platforms.run(["dpkg-query", "-W", "-f", "${db:Status-Abbrev}\t${binary:Package}\t${Package}\n"]).stdout
+    names: set[str] = set()
+    for line in out.splitlines():
+        status, _, rest = line.partition("\t")
+        if status[1:2] == "i":          # second letter of the abbreviation: installed
+            names.update(rest.split("\t"))
+    return names
+
+
+def manifest_path(manager: str) -> Path:
+    return chez.packages_dir() / linplat.PACKAGE_MANIFESTS[manager]
+
+
+def missing_packages(manager: str | None = None) -> list[str]:
+    """Packages in this package manager's manifest that are not installed."""
+    manager = manager or linplat.package_manager()
+    if manager is None or not manifest_path(manager).is_file():
         return []
-    installed = set(platforms.run(["pacman", "-Qq"]).stdout.split())
-    return [p for p in path.read_text(encoding="utf-8").split() if p not in installed]
+    installed = installed_packages(manager)
+    return [p for p in manifest_path(manager).read_text(encoding="utf-8").split() if p not in installed]
 
 
 def check_packages(rep: Report) -> None:
     s = "packages"
     if IS_LINUX:
-        missing = missing_arch_packages()
-        rep.add(s, "archpkg.txt", "ok" if not missing else "warn", f"{len(missing)} missing",
+        manager = linplat.package_manager()
+        if manager is None:
+            return
+        name = linplat.PACKAGE_MANIFESTS[manager]
+        if not manifest_path(manager).is_file():
+            rep.add(s, name, "info", "not generated yet (dotfiles backup exports it)")
+            return
+        missing = missing_packages(manager)
+        rep.add(s, name, "ok" if not missing else "warn", f"{len(missing)} missing",
                 "" if not missing else "dotfiles restore --apply --only packages")
     elif IS_WINDOWS:
         f = chez.packages_dir() / "scoopfile.json"

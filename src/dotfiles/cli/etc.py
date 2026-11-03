@@ -3,6 +3,7 @@ dir is system/ at the repo top and whose destination is a staging area on tmpfs 
 removed afterwards)."""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -21,7 +22,6 @@ SUDOERS = ["/etc/sudoers", "/etc/sudoers.d/*"]   # validated with visudo before 
 
 def _list(name: str) -> list[str]:
     return list(dotconf.get(f"etc.{name}"))
-
 
 
 def _match(path: str, patterns: list[str]) -> bool:
@@ -43,18 +43,113 @@ class Sudo:
         return cls.ready
 
 
+DPKG_ADMIN = Path("/var/lib/dpkg")
+
+
 def _owned_by_packages() -> set[str]:
-    if not platforms.have("pacman"):
-        return set()
-    return {line for line in platforms.run(["pacman", "-Qlq"]).stdout.splitlines() if line.startswith("/etc/")}
+    if platforms.have("pacman"):
+        return {line for line in platforms.run(["pacman", "-Qlq"]).stdout.splitlines() if line.startswith("/etc/")}
+    if platforms.have("dpkg-query"):
+        return dpkg_owned(DPKG_ADMIN)
+    return set()
 
 
 def _modified_package_files() -> list[str]:
-    """Package config files modified by the user (pacman's [modified] mark)."""
-    if not platforms.have("pacman"):
+    """Package config files modified by the user (pacman's [modified] mark; on dpkg systems, a
+    conffile whose checksum differs from the one dpkg recorded)."""
+    if platforms.have("pacman"):
+        r = platforms.run(["pacman", "-Qii"], env={"LC_ALL": "C"})
+        return sorted(set(re.findall(r"(/etc/\S+) \[modified\]", r.stdout)))
+    if platforms.have("dpkg-query"):
+        return dpkg_modified(DPKG_ADMIN)
+    return []
+
+
+# ---------------------------------------------------------------- dpkg (Debian, Kali, ...)
+
+def dpkg_owned(admin: Path) -> set[str]:
+    """/etc paths listed by installed packages (<admin>/info/*.list, what dpkg -L prints), plus
+    the diverted-to copies of stock files (e.g. /etc/zsh/zprofile.original), which no list names."""
+    out: set[str] = set()
+    for lst in (admin / "info").glob("*.list"):
+        try:
+            text = lst.read_text(encoding="utf-8", errors="surrogateescape")
+        except OSError:
+            continue
+        out.update(line for line in text.splitlines() if line.startswith("/etc/"))
+    try:
+        div = dpkg_diversions((admin / "diversions").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        div = {}
+    out.update(to for to, _ in div.values() if to.startswith("/etc/"))
+    return out
+
+
+def dpkg_diversions(text: str) -> dict[str, tuple[str, str]]:
+    """<admin>/diversions (records of three lines: path, diverted-to path, diverting package)
+    -> {path: (diverted-to path, diverting package)}."""
+    lines = text.splitlines()
+    return {lines[i]: (lines[i + 1], lines[i + 2]) for i in range(0, len(lines) - 2, 3)}
+
+
+def dpkg_conffiles(status_text: str, diversions: dict[str, tuple[str, str]] | None = None) -> dict[str, str]:
+    """Where each conffile of an installed package lives -> the md5 dpkg recorded for it. Skips
+    obsolete and remove-on-upgrade entries, and packages removed but not purged (leftovers, not
+    live configuration). A conffile another package diverted (Kali's kali-defaults and kali-themes
+    replace stock files this way) lives at the diverted-to path; the file at the original path
+    belongs to the diverting package and is not this conffile."""
+    diversions = diversions or {}
+    out: dict[str, str] = {}
+    for stanza in re.split(r"\n\s*\n", status_text):
+        status = re.search(r"^Status: (.*)$", stanza, re.M)
+        if not status or not status.group(1).endswith(" installed"):
+            continue
+        package = re.search(r"^Package: (\S+)", stanza, re.M)
+        m = re.search(r"^Conffiles:\n((?: .*\n?)*)", stanza, re.M)
+        for line in (m.group(1).splitlines() if m else []):
+            fields = line.split()
+            if len(fields) != 2 or not fields[0].startswith("/etc/") or not re.fullmatch(r"[0-9a-f]{32}", fields[1]):
+                continue
+            path = fields[0]
+            to, by = diversions.get(path, (path, ""))
+            out[to if package and by != package.group(1) else path] = fields[1]
+    return out
+
+
+def _md5(path: Path) -> str | None:
+    """md5 of a file; None when missing; "" when unreadable without sudo."""
+    try:
+        return hashlib.md5(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return ""
+
+
+def dpkg_modified(admin: Path, root: Path = Path("/")) -> list[str]:
+    """Conffiles that exist and differ from the packaged version (what debsums -ce reports).
+    Root-only files are hashed with sudo when available, otherwise skipped with a warning."""
+    try:
+        div = (admin / "diversions").read_text(encoding="utf-8", errors="replace") if (admin / "diversions").is_file() else ""
+        recorded = dpkg_conffiles((admin / "status").read_text(encoding="utf-8", errors="replace"), dpkg_diversions(div))
+    except OSError:
         return []
-    r = platforms.run(["pacman", "-Qii"], env={"LC_ALL": "C"})
-    return sorted(set(re.findall(r"(/etc/\S+) \[modified\]", r.stdout)))
+    modified, unreadable = [], []
+    for path, md5 in recorded.items():
+        actual = _md5(root / path.lstrip("/"))
+        if actual == "":
+            unreadable.append(path)
+        elif actual is not None and actual != md5:
+            modified.append(path)
+    if unreadable and root == Path("/") and Sudo.ensure():
+        r = platforms.run(["sudo", "md5sum", "--", *unreadable])
+        for line in r.stdout.splitlines():
+            digest, _, path = line.partition("  ")
+            if path in recorded and digest != recorded[path]:
+                modified.append(path)
+    elif unreadable:
+        ui.warn(f"{len(unreadable)} root-only conffiles were not checked (needs sudo)")
+    return sorted(modified)
 
 
 def _files_under(path: str) -> list[str]:
@@ -99,10 +194,15 @@ def status() -> None:
     for path, kind in collect_targets().items():
         ui.info(f"  {ui.pad(path, 56)}{kind}")
     ui.section("/etc pending items")
-    ui.info("pacnew / pacsave (merge with pacdiff):")
+    if platforms.have("pacman"):
+        ui.info("pacnew / pacsave (merge with pacdiff):")
+        suffixes: tuple[str, ...] = (".pacnew", ".pacsave")
+    else:
+        ui.info("dpkg / ucf leftovers (new or old package versions of a conffile you changed; merge by hand):")
+        suffixes = (".dpkg-dist", ".dpkg-new", ".dpkg-old", ".ucf-dist", ".ucf-new", ".ucf-old")
     for dirpath, _, files in sorted(os.walk("/etc", onerror=lambda e: None)):
         for name in sorted(files):
-            if name.endswith((".pacnew", ".pacsave")):
+            if name.endswith(suffixes):
                 ui.info(f"  {os.path.join(dirpath, name)}")
     if platforms.have("etckeeper") and not Path("/etc/.git").exists():
         ui.info("etckeeper is installed but not initialized: /etc is backed up in system/; consider removing etckeeper to avoid duplication")
@@ -233,7 +333,8 @@ def cmd_restore(apply: bool, filters: list[str], distro: str | None = None) -> i
     if not changed:
         ui.ok("/etc matches the backup")
     elif not apply:
-        ui.info("this was a preview; add --apply to install. After changing boot/initramfs files, run grub-mkconfig / mkinitcpio -P")
+        regen = "grub-mkconfig / mkinitcpio -P" if platforms.have("pacman") else "update-grub / update-initramfs -u"
+        ui.info(f"this was a preview; add --apply to install. After changing boot/initramfs files, run {regen}")
     if held:
         ui.note(f"{held} hardware-bound files were not installed")
     return 0

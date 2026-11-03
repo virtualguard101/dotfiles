@@ -11,7 +11,7 @@ home/                     dotfiles for both platforms (chezmoi source state)
   .chezmoidata/platforms.toml   platform ownership per target; .chezmoiignore derives from it
 system/<distro>/          Linux /etc backup per distro, e.g. system/arch (separate chezmoi instance,
                           never deployed to ~)
-packages/                 package manifests: archpkg.txt / scoopfile.json / winget.json
+packages/                 package manifests: archpkg.txt / aptpkg.txt / scoopfile.json / winget.json
 dotfiles.toml             backup and cleanup lists and tunables (data; `dotfiles config` edits it)
 src/dotfiles/             the Python tool (standard library only)
 bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and clones the repo,
@@ -76,7 +76,7 @@ bootstrap only installs git, chezmoi and uv (pacman on Arch, apt + pipx on Debia
 | `config` | generates the chezmoi config from `home/.chezmoi.toml.tmpl` |
 | `dotfiles` | rehearses decryption once (nothing is written on failure), backs up files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs `chezmoi apply` |
 | `system` | Linux: restores `/etc` from this distro's backup (`system/<distro>/`; skipped on a distro without one); hardware-bound files (`fstab`, `crypttab`, `default/grub`, ...) show diffs only; `sudoers` is validated with `visudo` first |
-| `packages` | Arch: pacman installs packages from configured repos, AUR packages go to paru/yay (skipped on other distros); Windows: `winget import` and `scoop import` |
+| `packages` | Arch: pacman installs packages from configured repos, AUR packages go to paru/yay; Debian / Kali: apt installs packages from the configured sources (skipped on other distros); Windows: `winget import` and `scoop import` |
 | `externals` | fetches external repos such as the nvim config; temporarily connects directly when the git proxy is unreachable |
 | `ssh` | generates any private key referenced by `~/.ssh/config` that is missing (keys are never backed up), and can register the GitHub public key via `gh` |
 | `shell` | Linux: sets the login shell to zsh |

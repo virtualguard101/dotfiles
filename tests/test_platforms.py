@@ -71,17 +71,23 @@ def test_register_platform_keeps_header(tmp_path, monkeypatch):
 
 
 KDE = {".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"}
+UNITS = {".config/systemd/user/zeroclaw.service", ".config/systemd/user/taskdog-server.service"}
+ARCH_TAGS = ["arch", "kde", "taskdog", "zeroclaw"]     # this Arch machine, with both programs installed
 
 
 @needs_chezmoi
 def test_requires_ignores_targets_whose_tag_is_missing():
     no_tags = render_ignore("linux")                         # config written before tags: no filtering
-    arch = render_ignore("linux", ["arch", "kde"])
+    arch = render_ignore("linux", ARCH_TAGS)
     kali = render_ignore("linux", ["kali", "debian", "gnome"])
     assert arch == no_tags
+    # program tags: a user unit deploys only where the binary its ExecStart runs is installed
+    assert UNITS <= kali and UNITS <= render_ignore("linux", ["arch", "kde"])
     assert KDE <= kali and not KDE & arch
     # parents shared with targets this machine keeps stay managed
-    assert {".config", ".local", ".local/share", ".config/systemd", ".config/systemd/user"}.isdisjoint(kali)
+    assert {".config", ".local", ".local/share"}.isdisjoint(kali)
+    # ...and a parent left with only ignored targets is ignored with them (Kali has no user units)
+    assert {".config/systemd", ".config/systemd/user"} <= kali and not {".config/systemd"} & arch
     assert ".config/systemd/user/kwallet_auto_unlock.service" in kali
     # [requires] arch: Kali keeps its own XDG user dirs
     assert ".config/user-dirs.dirs" in kali and ".config/user-dirs.dirs" not in arch
@@ -91,7 +97,7 @@ def test_requires_ignores_targets_whose_tag_is_missing():
 @needs_chezmoi
 def test_kali_view_drops_only_targets_of_missing_tags():
     kali_tags = ["kali", "debian", "gnome"]
-    every = set(chez.managed(include="files", os_override="linux", tags=["arch", "kde"]))
+    every = set(chez.managed(include="files", os_override="linux", tags=ARCH_TAGS))
     kali = set(chez.managed(include="files", os_override="linux", tags=kali_tags))
     assert kali < every
     dropped = every - kali
@@ -122,3 +128,25 @@ def test_check_platforms_validates_requires(tmp_path, monkeypatch):
     problems = chez.check_platforms()
     assert any("Bad_Tag" in p for p in problems)
     assert any(".config/not-managed-anywhere matches no entry" in p for p in problems)
+
+
+@needs_chezmoi
+@pytest.mark.parametrize("installed, tags", [
+    ([], set()),
+    ([".cargo/bin/zeroclaw"], {"zeroclaw"}),
+    ([".cargo/bin/zeroclaw", ".local/bin/taskdog-server"], {"zeroclaw", "taskdog"}),
+])
+def test_program_tags_follow_the_installed_binaries(tmp_path, installed, tags):
+    """.chezmoi.toml.tmpl adds a program tag when the binary exists under ~ (rendered against a
+    fake home, so this machine's own programs do not matter)."""
+    import json
+    import tomllib
+    for rel in installed:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).touch()
+    r = platforms.run([*chez.base_args(), "--override-data", json.dumps({"chezmoi": {"homeDir": str(tmp_path)}}),
+                       "execute-template", "--init", "--file", str(chez.source_state_dir() / ".chezmoi.toml.tmpl")])
+    assert r.ok, r.stderr
+    rendered = set(tomllib.loads(r.stdout)["data"]["tags"])
+    assert rendered & {"zeroclaw", "taskdog"} == tags
+

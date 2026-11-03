@@ -11,6 +11,10 @@ FAKE_GH = "ghp_" + "a1B2" * 9   # built at runtime: the full token never appears
     ("home/private_dot_ssh/encrypted_config.age", ".ssh/config"),
     ("home/encrypted_dot_wakatime.cfg.age", ".wakatime.cfg"),
     ("home/dot_gitconfig.tmpl", ".gitconfig"),
+    # encrypted template: chezmoi puts .age outermost (encrypted_x.tmpl.age)
+    ("home/private_dot_config/Code/User/encrypted_settings.json.tmpl.age", ".config/Code/User/settings.json"),
+    ("home/dot_x.tmpl.literal", ".x.tmpl"),
+    ("home/dot_aria2/create_empty_aria2.session", ".aria2/aria2.session"),
     ("home/readonly_Documents/PowerToys/Backup/x.ptb", "Documents/PowerToys/Backup/x.ptb"),
     ("home/AppData/Roaming/Code/User/keybindings.json", "AppData/Roaming/Code/User/keybindings.json"),
     ("home/literal_dot_npmrc", "dot_npmrc"),

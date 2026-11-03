@@ -1,10 +1,11 @@
-"""Linux-only helpers: /etc/os-release, Arch detection and the /proc process listing."""
+"""Linux-only helpers: /etc/os-release, distro and package-manager detection, and the /proc
+process listing."""
 from __future__ import annotations
 
 import os
 from functools import cache
 
-from dotfiles.utils.platforms import Proc, _decode
+from dotfiles.utils.platforms import Proc, _decode, have
 
 
 def list_processes() -> list[Proc]:
@@ -50,6 +51,26 @@ def os_release() -> dict[str, str]:
 def is_arch_like() -> bool:
     rel = os_release()
     return rel.get("ID") == "arch" or "arch" in rel.get("ID_LIKE", "").split()
+
+
+def is_debian_like() -> bool:
+    """Debian and its derivatives (Kali, Ubuntu, ...): ID_LIKE names debian."""
+    rel = os_release()
+    return rel.get("ID") == "debian" or "debian" in rel.get("ID_LIKE", "").split()
+
+
+# package manager -> its manifest in packages/ (one per manager, shared by the distros that use it)
+PACKAGE_MANIFESTS = {"pacman": "archpkg.txt", "apt": "aptpkg.txt"}
+
+
+def package_manager() -> str | None:
+    """The system package manager the manifests support: pacman on Arch-like distros, apt on
+    Debian-like ones; None elsewhere."""
+    if is_arch_like() and have("pacman"):
+        return "pacman"
+    if is_debian_like() and have("apt-get") and have("dpkg-query"):
+        return "apt"
+    return None
 
 
 def distro() -> str:

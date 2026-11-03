@@ -193,6 +193,13 @@ def _arch_split(missing: list[str]) -> tuple[list[str], list[str]]:
     return [p for p in missing if p in sync], [p for p in missing if p not in sync]
 
 
+def _apt_split(missing: list[str]) -> tuple[list[str], list[str]]:
+    """(in the configured apt sources, not in any: a third-party repo not added yet, or a local .deb)."""
+    known = set(platforms.run(["apt-cache", "pkgnames"]).stdout.split())
+    avail = [p for p in missing if p.split(":", 1)[0] in known]
+    return avail, [p for p in missing if p not in avail]
+
+
 def _winget_missing() -> list[str] | None:
     f = chez.packages_dir() / "winget.json"
     if not f.is_file() or not have("winget"):
@@ -221,12 +228,19 @@ def _scoop_missing() -> list[str]:
 
 def check_packages(o: Options) -> tuple[str, str]:
     if IS_LINUX:
-        if not linplat.is_arch_like() or not have("pacman"):
-            return SKIP, "not an Arch-like distribution"
-        from dotfiles.cli.doctor import missing_arch_packages
-        missing = missing_arch_packages()
+        from dotfiles.cli.doctor import manifest_path, missing_packages
+        manager = linplat.package_manager()
+        if manager is None:
+            return SKIP, "no supported package manager (pacman on Arch-like, apt on Debian-like distros)"
+        name = manifest_path(manager).name
+        if not manifest_path(manager).is_file():
+            return SKIP, f"no packages/{name} yet (dotfiles backup on this distro exports it)"
+        missing = missing_packages(manager)
         if not missing:
-            return DONE, "all packages in archpkg.txt are installed"
+            return DONE, f"all packages in {name} are installed"
+        if manager == "apt":
+            avail, unknown = _apt_split(missing)
+            return TODO, f"{len(missing)} missing: {len(avail)} from configured apt sources, {len(unknown)} not in any source"
         repo, foreign = _arch_split(missing)
         return TODO, f"{len(missing)} missing: {len(repo)} from configured repos, {len(foreign)} from AUR or unknown"
     winget = _winget_missing()
@@ -247,8 +261,19 @@ def check_packages(o: Options) -> tuple[str, str]:
 
 def run_packages(o: Options) -> None:
     if IS_LINUX:
-        from dotfiles.cli.doctor import missing_arch_packages
-        repo, foreign = _arch_split(missing_arch_packages())
+        from dotfiles.cli.doctor import missing_packages
+        if linplat.package_manager() == "apt":
+            avail, unknown = _apt_split(missing_packages("apt"))
+            if avail:
+                cmd = ["sudo", "apt-get", "install", *(["-y"] if o.assume_yes else []), *avail]
+                if platforms.run_live(cmd) != 0:
+                    raise StepFailed("apt-get install failed (rerun this step to continue)")
+            if unknown:
+                ui.warn(f"{len(unknown)} packages are in no configured apt source (third-party repo or local .deb); "
+                        "install them manually:")
+                ui.info("  " + " ".join(unknown))
+            return
+        repo, foreign = _arch_split(missing_packages("pacman"))
         if repo:
             cmd = ["sudo", "pacman", "-S", "--needed", *(["--noconfirm"] if o.assume_yes else []), *repo]
             if platforms.run_live(cmd) != 0:
@@ -405,12 +430,22 @@ def run_shell(o: Options) -> None:
 # ---------------------------------------------------------------- commit checks and push URL
 
 _GITHUB_HTTPS = re.compile(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$")
+_GITHUB_ANY = re.compile(r"^(?:https://|ssh://git@|git@)github\.com[:/]([^/]+)/")
+
+
+def _origin(repo_dir: Path) -> str:
+    return platforms.run(["git", "-C", str(repo_dir), "remote", "get-url", "origin"]).stdout.strip()
+
+
+def github_owner(url: str) -> str | None:
+    """Owner of a GitHub remote URL (HTTPS or SSH form), lowercased; None for other hosts."""
+    m = _GITHUB_ANY.match(url)
+    return m.group(1).lower() if m else None
 
 
 def _ssh_pushurl(repo_dir: Path) -> tuple[str, str] | None:
     """When origin is a GitHub HTTPS URL: (current push URL, expected SSH push URL)."""
-    r = platforms.run(["git", "-C", str(repo_dir), "remote", "get-url", "origin"])
-    m = _GITHUB_HTTPS.match(r.stdout.strip())
+    m = _GITHUB_HTTPS.match(_origin(repo_dir))
     if not m:
         return None
     push = platforms.run(["git", "-C", str(repo_dir), "remote", "get-url", "--push", "origin"]).stdout.strip()
@@ -418,10 +453,14 @@ def _ssh_pushurl(repo_dir: Path) -> tuple[str, str] | None:
 
 
 def _hook_dirs() -> list[Path]:
+    """This repo, plus the git externals owned by the same GitHub account: pushing over SSH only
+    matters for repos you push to, so third-party externals (e.g. oh-my-zsh) keep their URLs."""
     dirs = [chez.repo()]
+    own = github_owner(_origin(chez.repo()))
     for e in chez.managed(include="externals", exclude=""):
-        if (home() / e / ".git").exists():
-            dirs.append(home() / e)
+        d = home() / e
+        if (d / ".git").exists() and own and github_owner(_origin(d)) == own:
+            dirs.append(d)
     return dirs
 
 
