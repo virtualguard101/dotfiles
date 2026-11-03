@@ -80,7 +80,10 @@ def test_requires_ignores_targets_whose_tag_is_missing():
     no_tags = render_ignore("linux")                         # config written before tags: no filtering
     arch = render_ignore("linux", ARCH_TAGS)
     kali = render_ignore("linux", ["kali", "debian", "gnome"])
-    assert arch == no_tags
+    # Arch drops only what needs a tag it lacks (gnome: the fcitx5 autostart entry GNOME needs)
+    gnome_only = {".config/autostart/org.fcitx.Fcitx5.desktop"}
+    assert arch == no_tags | gnome_only
+    assert not gnome_only & kali
     # program tags: a user unit deploys only where the binary its ExecStart runs is installed
     assert UNITS <= kali and UNITS <= render_ignore("linux", ["arch", "kde"])
     assert KDE <= kali and not KDE & arch
@@ -99,7 +102,8 @@ def test_requires_ignores_targets_whose_tag_is_missing():
 @needs_chezmoi
 def test_kali_view_drops_only_targets_of_missing_tags():
     kali_tags = ["kali", "debian", "gnome"]
-    every = set(chez.managed(include="files", os_override="linux", tags=ARCH_TAGS))
+    all_tags = sorted(set(chez.load_requires()) | set(kali_tags))      # every tagged target deploys
+    every = set(chez.managed(include="files", os_override="linux", tags=all_tags))
     kali = set(chez.managed(include="files", os_override="linux", tags=kali_tags))
     assert kali < every
     dropped = every - kali
