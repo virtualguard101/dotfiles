@@ -7,7 +7,7 @@
 {{- /*
   Environment tags of this machine, available to templates as .tags. Targets listed under a tag in
   .chezmoidata/platforms.toml [requires] deploy only where the tag is present. Detected here, at
-  `chezmoi init`: rerun it after installing or removing a desktop environment.
+  `chezmoi init`: rerun it after installing or removing a desktop environment, or a program below.
 */ -}}
 {{- $tags := list -}}
 {{- if hasKey .chezmoi "osRelease" -}}
@@ -16,6 +16,10 @@
 {{- end -}}
 {{- if lookPath "plasmashell" }}{{ $tags = append $tags "kde" }}{{ end -}}
 {{- if lookPath "gnome-shell" }}{{ $tags = append $tags "gnome" }}{{ end -}}
+{{- /* program tags: the binary a target runs (a user unit's ExecStart, relative to ~) exists */ -}}
+{{- range $tag, $bin := dict "zeroclaw" ".cargo/bin/zeroclaw" "taskdog" ".local/bin/taskdog-server" -}}
+{{-   if stat (joinPath $.chezmoi.homeDir $bin) }}{{ $tags = append $tags $tag }}{{ end -}}
+{{- end -}}
 {{- $identity := joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt" -}}
 {{- range list (joinPath .chezmoi.homeDir "secret" "chezmoi_age_key.txt") (joinPath .chezmoi.homeDir "vg101" "secret" "chezmoi_age_key.txt") -}}
 {{-   if stat . }}{{ $identity = . }}{{ end -}}

@@ -45,7 +45,7 @@ src/dotfiles/
     ├── fsutil.py            不跟随链接的体积统计、带范围断言的 Deleter │ 无关
     ├── platforms/           平台检测与平台专属的辅助函数          ┘
     │   ├── __init__.py      IS_WINDOWS/IS_LINUX、XDG/AppData 路径、run()、进程、文件锁
-    │   ├── linux.py         /etc/os-release、Arch 检测、/proc 进程列表
+    │   ├── linux.py         /etc/os-release、发行版与包管理器检测、/proc 进程列表
     │   └── windows.py       PowerShell、tasklist、ACL、scoop 位置
     └── common/              本项目的共享服务，被两个及以上命令使用
         ├── chez.py          chezmoi 封装：仓库路径、配置、age 密钥、platforms.toml
@@ -125,7 +125,7 @@ commit-msg）是第二个扩展维度：在 `git.py` 中加一个来源、在 `c
 | 本机的环境标签 | chezmoi 配置中的 `[data] tags` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 检测 |
 | dotfiles（源状态） | `home/`（`.chezmoiroot`） | chezmoi（`add`、`re-add`、`edit`），经由 `backup` |
 | /etc 备份 | `system/<发行版>/`（os-release 的 `ID`；`system/windows/` 预留） | `backup`，通过第二个 chezmoi 实例 |
-| 软件包清单 | `packages/` | `backup` |
+| 软件包清单 | `packages/`（每个包管理器一份：`archpkg.txt`、`aptpkg.txt`；Windows：scoop、winget） | `backup` |
 | 提交检查规则（必须加密的类别、密钥特征） | `utils/common/guard/checks.py` | 代码，有意为之（第 4 节） |
 | chezmoi 配置 | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 生成 |
 | age 私钥 | 仓库之外（离线备份） | `restore`（key 步骤） |
@@ -188,3 +188,9 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 `[requires]` 配合每台机器的标签，让依赖特定环境的目标（例如 KDE 配置）不会部署到没有该环境的机器上；`/etc`
 从 `system/etc` 移到 `system/<发行版>/etc`，每个发行版只备份和恢复自己的目录；`bootstrap.sh` 在 Debian / Kali
 上用 apt + pipx 安装前置工具，`bootstrap.ps1` 可以安装 scoop。
+
+0.5.0 让 Debian 系机器得到完整支持：`backup` 导出 `packages/aptpkg.txt`，`restore` 用 apt 安装其中缺少的包，`doctor`
+也会检查它们（由 `linux.package_manager()` 选择 pacman 或 apt）；dpkg 系统上的 `/etc` 备份从 `/var/lib/dpkg` 判断
+哪些文件属于软件包、哪些 conffile 被改过，并考虑 diversion。程序标签（`zeroclaw`、`taskdog`）让用户单元只部署到
+装有对应程序的机器上。`hooks` 步骤只把同一 GitHub 账号的仓库的推送地址改为 SSH。修复：guard 曾把
+`encrypted_x.tmpl.age` 映射为 `x.tmpl`；`backup` 曾可能把 `create_` 文件改成普通的加密文件。

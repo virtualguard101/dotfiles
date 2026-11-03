@@ -31,6 +31,13 @@ die() { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 (( EUID != 0 )) || die "run as a regular user (sudo is called when needed)"
 
 # ---------------------------------------------------------------- 1. prerequisites
+# user-level installs (pipx, release binaries) live in ~/.local/bin, which a fresh shell may lack
+if [[ -d $HOME/.local/bin && :$PATH: != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+# without sudo (or for tools a distro does not package): official release binaries in ~/.local/bin
+nosudo="without sudo, put the release binaries of chezmoi (github.com/twpayne/chezmoi/releases) and
+  uv (github.com/astral-sh/uv/releases) in ~/.local/bin, verify their checksums, and rerun"
 need=()
 for tool in git chezmoi uv; do
   command -v "$tool" >/dev/null 2>&1 || need+=("$tool")
@@ -38,7 +45,7 @@ done
 if (( ${#need[@]} )); then
   if command -v pacman >/dev/null 2>&1; then
     log "installing ${need[*]} (pacman, official repos)"
-    sudo pacman -S --needed "${need[@]}"
+    sudo pacman -S --needed "${need[@]}" || die "pacman install failed; $nosudo"
   elif command -v apt-get >/dev/null 2>&1; then
     # Debian / Kali: git and chezmoi are packaged; uv is not, so it comes from PyPI through pipx
     apt=()
@@ -50,7 +57,7 @@ if (( ${#need[@]} )); then
     done
     if (( ${#apt[@]} )); then
       log "installing ${apt[*]} (apt)"
-      sudo apt-get install -y "${apt[@]}"
+      sudo apt-get install -y "${apt[@]}" || die "apt-get install failed; $nosudo"
     fi
     if ! command -v uv >/dev/null 2>&1; then
       log "installing uv (pipx)"
@@ -58,7 +65,7 @@ if (( ${#need[@]} )); then
       export PATH="$HOME/.local/bin:$PATH"
     fi
   else
-    die "missing ${need[*]}; install them with your package manager and retry"
+    die "missing ${need[*]}; install them with your package manager and retry ($nosudo)"
   fi
   for tool in git chezmoi uv; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is still missing after the install; open a new shell and retry"

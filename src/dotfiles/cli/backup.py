@@ -21,6 +21,7 @@ from dotfiles.utils import platforms, ui
 from dotfiles.utils.common import chez, guard
 from dotfiles.utils.common import config as dotconf
 from dotfiles.utils.platforms import IS_WINDOWS, home
+from dotfiles.utils.platforms import linux as linplat
 from dotfiles.utils.platforms import windows as winplat
 
 
@@ -282,16 +283,27 @@ def has_private_attr(source_rel: str) -> bool:
     return False
 
 
+def managed_file_info(exclude: str) -> list[dict]:
+    """Managed regular files with chezmoi's metadata for each (absolute, sourceRelative, ...)."""
+    r = chez.cz("managed", "-i", "files", "-x", exclude, "-p", "all")
+    if not r.ok:
+        raise ui.Abort(f"chezmoi managed failed: {r.stderr.strip()[:300]}")
+    return list(json.loads(r.stdout or "{}").values())
+
+
+def tracks_content(source_rel: str) -> bool:
+    """False for create_ sources (they only create a missing file) and modify_ scripts: chezmoi
+    does not track their live content and re-add leaves them alone, so backup must too."""
+    return not source_rel.rsplit("/", 1)[-1].startswith(("create_", "modify_"))
+
+
 def private_drift() -> list[Path]:
     """Managed private_ files whose live mode is looser than 600. re-add copies the live mode back
     into the source, which would drop private_ and make new machines deploy the file as 644."""
     if IS_WINDOWS:
         return []
-    r = chez.cz("managed", "-i", "files", "-x", "externals,templates", "-p", "all")
-    if not r.ok:
-        raise ui.Abort(f"chezmoi managed failed: {r.stderr.strip()[:300]}")
     out = []
-    for info in json.loads(r.stdout or "{}").values():
+    for info in managed_file_info("externals,templates"):
         if not has_private_attr(info["sourceRelative"]):
             continue
         p = Path(info["absolute"])
@@ -306,9 +318,9 @@ def private_drift() -> list[Path]:
 
 def backup_managed(run: Runner) -> None:
     ui.section("re-add managed files")
-    for f in chez.managed(include="files", exclude="externals,encrypted,templates", absolute=True):
-        p = Path(f)
-        if p.is_file() and has_secret(p):
+    for info in managed_file_info("externals,encrypted,templates"):
+        p = Path(info["absolute"])
+        if tracks_content(info["sourceRelative"]) and p.is_file() and has_secret(p):
             ui.warn(f"plaintext managed file now matches a secret pattern; switching to encrypted: {rel_home(p)}")
             make_private(p, run.dry)
             run.cz("add", "--encrypt", "--", str(p))
@@ -396,7 +408,10 @@ def backup_candidates(run: Runner) -> None:
 # ---------------------------------------------------------------- package manifests
 
 def package_files() -> list[str]:
-    return ["scoopfile.json", "winget.json", "winget-unavailable.txt"] if IS_WINDOWS else ["archpkg.txt"]
+    if IS_WINDOWS:
+        return ["scoopfile.json", "winget.json", "winget-unavailable.txt"]
+    manager = linplat.package_manager()
+    return [linplat.PACKAGE_MANIFESTS[manager]] if manager else []
 
 
 def normalize_export(kind: str, data: dict) -> str:
@@ -424,7 +439,7 @@ def normalize_export(kind: str, data: dict) -> str:
 def _names(text: str, kind: str) -> list[str]:
     if not text.strip():
         return []
-    if kind == "arch":
+    if kind in ("arch", "apt"):
         return text.split()
     o = json.loads(text)
     if kind == "scoop":
@@ -453,8 +468,15 @@ def update_pkg_file(name: str, kind: str, new: str, dry: bool) -> None:
 def backup_packages(dry: bool) -> None:
     ui.section("Package manifests")
     if not IS_WINDOWS:
-        if platforms.have("pacman"):
+        manager = linplat.package_manager()
+        if manager == "pacman":
             update_pkg_file("archpkg.txt", "arch", platforms.run(["pacman", "-Qqe"]).stdout, dry)
+        elif manager == "apt":
+            # packages installed on request (not pulled in as dependencies); apt-mark marks apt install as manual
+            names = sorted(set(platforms.run(["apt-mark", "showmanual"]).stdout.split()))
+            update_pkg_file("aptpkg.txt", "apt", "".join(f"{n}\n" for n in names), dry)
+        else:
+            ui.info("no supported package manager (pacman / apt); no manifest exported")
         return
     if platforms.have("scoop"):
         r = platforms.run(["scoop", "export"], timeout=300)

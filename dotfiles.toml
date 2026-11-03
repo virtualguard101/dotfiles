@@ -116,6 +116,10 @@ extra = [
   "/etc/environment.d",
   "/etc/profile.d",
   "/etc/ssh/sshd_config.d",
+  "/etc/apt/sources.list",
+  "/etc/apt/sources.list.d",
+  "/etc/apt/apt.conf.d",
+  "/etc/apt/preferences.d",
 ]
 # always encrypted (usually root-readable, read with sudo)
 secret = [
@@ -142,6 +146,12 @@ exclude = [
   "*.bak",
   "*.bak.*",
   "*~",
+  "*.dpkg-dist",
+  "*.dpkg-new",
+  "*.dpkg-old",
+  "*.ucf-dist",
+  "*.ucf-new",
+  "*.ucf-old",
 ]
 # restore shows a diff only and installs these only when named on the command line
 hardware_bound = [

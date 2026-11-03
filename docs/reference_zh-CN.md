@@ -22,7 +22,7 @@
 | 分组 | 内容 |
 |---|---|
 | 系统 | 发行版与内核 / Windows 版本，桌面会话（Wayland/X11），架构，GPU 与驱动，Python |
-| 包管理器 | Linux：pacman、yay、paru、nix、flatpak；Windows：winget、scoop、choco |
+| 包管理器 | Linux：pacman、apt、yay、paru、nix、flatpak；Windows：winget、scoop、choco |
 | 工具 | 必需：git、chezmoi、uv；推荐：gh、pre-commit、ssh-keygen、just，以及 sudo、zsh（Linux）或 pwsh（Windows）。age 可选（chezmoi 内置 age） |
 | 网络 | git 的 `http.proxy` 是否可连接，代理环境变量 |
 | chezmoi | 源目录是否就是本仓库，配置文件是否与模板生成的结果一致，加密方式，私钥是否存在、是否与仓库公钥匹配、权限，待部署的变更 |
@@ -47,11 +47,11 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 | `config` | 两端 | chezmoi 源目录是本仓库；`~/.config/chezmoi/chezmoi.toml` 与模板渲染结果一致 | 备份原配置后运行 `chezmoi init` |
 | `dotfiles` | 两端 | `chezmoi status`（不含 externals）是否还有待部署项 | 完整预演 → 备份将被覆盖的已有文件 → `chezmoi apply --force` |
 | `system` | Linux | 本发行版（os-release 的 `ID`）是否有 `system/<发行版>/etc` | 见 [3.6](#36-linux-etc) 的恢复规则（需要确认）；没有本发行版的备份时跳过 |
-| `packages` | 两端 | 清单中缺少的软件包 | Linux：官方/已配置仓库的包用 `sudo pacman -S --needed`，其余交给 paru/yay，没有 AUR 助手时列出；Windows：`winget import`、`scoop import`（需要确认） |
+| `packages` | 两端 | 本机包管理器的清单中缺少的软件包（pacman 对应 `archpkg.txt`，apt 对应 `aptpkg.txt`） | Arch 系：官方/已配置仓库的包用 `sudo pacman -S --needed`，其余交给 paru/yay，没有 AUR 助手时列出；Debian 系：已配置 apt 源中的包用 `sudo apt-get install`，其余列出（尚未恢复的第三方源，或本地 .deb）；Windows：`winget import`、`scoop import`（需要确认） |
 | `externals` | 两端 | externals 的目标目录是否存在 | `chezmoi apply --include externals`；git 代理连不上时临时直连 |
 | `ssh` | 两端 | `~/.ssh/id_ed25519` 与 `~/.ssh/config` 中 `IdentityFile` 引用的私钥是否存在 | `ssh-keygen` 生成缺失的密钥（交互设置口令）；`gh` 已登录时可把 GitHub 用的公钥登记上去 |
 | `shell` | Linux | 登录 shell 是否为 zsh | `chsh -s`（需要确认） |
-| `hooks` | 两端 | pre-commit / pre-push hook 是否安装；GitHub HTTPS 远程的推送地址是否为 SSH | 必要时 `uv tool install pre-commit`，`pre-commit install`，`git remote set-url --push origin git@github.com:…` |
+| `hooks` | 两端 | pre-commit / pre-push hook 是否安装；本仓库以及同一 GitHub 账号的 git externals，推送地址是否为 SSH（oh-my-zsh 这类第三方 external 保持原样） | 必要时 `uv tool install pre-commit`，`pre-commit install`，`git remote set-url --push origin git@github.com:…` |
 | `verify` | 两端 | 总是执行 | `chezmoi verify`、权限审计、`check` |
 
 ### 执行语义
@@ -78,7 +78,9 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 ### 网络与代理
 
-- bootstrap 通过 HTTPS 克隆公开仓库，此时不需要 SSH 密钥；externals 也使用 HTTPS。推送地址在 `hooks` 步骤改为 SSH。
+- bootstrap 通过 HTTPS 克隆公开仓库，此时不需要 SSH 密钥；externals 也使用 HTTPS。`hooks` 步骤把本仓库和同一 GitHub 账号的 externals 的推送地址改为 SSH；不会推送的仓库保持原样。
+
+- 没有 sudo 时，`bootstrap.sh` 会停下并给出用户级的做法：把 chezmoi 和 uv 的 release 二进制文件放进 `~/.local/bin`（它在查找工具之前就会把这个目录加进 `PATH`）。对于 gh、just 等推荐工具，`doctor` 也会提示同样的做法。
 
 - 部署后的 `~/.gitconfig` 设置了 `http.proxy = 127.0.0.1:7897`。新机器上代理软件尚未安装时，`externals` 步骤检测到代理不可连接会临时用 `GIT_CONFIG_*` 环境变量把它覆盖为空（直连），不修改任何文件。
 
@@ -92,7 +94,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 1. **预检**：已启用 age 加密、配置了 recipient、私钥存在且不在仓库内；Windows 上检查"文档"文件夹是否被重定向（例如到 OneDrive）。
 
-2. **re-add 已托管文件**：明文托管的文件如果出现了密钥特征，先收紧为 600 并改为加密托管，再对全部托管文件执行 `chezmoi re-add`。源文件带 `private_`、但本地权限比 600 宽松的文件（例如被某个工具重写成了 644）会先收紧为 600——`re-add` 会把本地权限写回源状态，否则会去掉 `private_`。使用 `-n` 时，chezmoi 的输出会被捕获（不会打开 pager），`.age` 文件的 diff 每个只显示一行，因为密文本身不可读。
+2. **re-add 已托管文件**：明文托管的文件如果出现了密钥特征，先收紧为 600 并改为加密托管（`create_` / `modify_` 源文件除外：chezmoi 有意不跟踪它们的本地内容），再对全部托管文件执行 `chezmoi re-add`。源文件带 `private_`、但本地权限比 600 宽松的文件（例如被某个工具重写成了 644）会先收紧为 600——`re-add` 会把本地权限写回源状态，否则会去掉 `private_`。使用 `-n` 时，chezmoi 的输出会被捕获（不会打开 pager），`.age` 文件的 diff 每个只显示一行，因为密文本身不可读。
 
 3. **模板目标的漂移**：`re-add` 不处理模板（如 `.gitconfig.tmpl`）。有本地修改的模板目标会被列出，需要手动合并回 `.tmpl`（[6.3](#63-需要手动合并的场景)）。
 
@@ -100,7 +102,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 5. **/etc**（Linux，`--no-system` 时跳过）：见 [3.6](#36-linux-etc)。
 
-6. **软件包清单**：Linux 写入 `packages/archpkg.txt`（`pacman -Qqe`）；Windows 写入 `scoopfile.json`、`winget.json`（归一化后只在软件包增减时变化）与 `winget-unavailable.txt`。
+6. **软件包清单**：Arch 系 Linux 写入 `packages/archpkg.txt`（`pacman -Qqe`），Debian 系写入 `packages/aptpkg.txt`（`apt-mark showmanual`，排序后）；Windows 写入 `scoopfile.json`、`winget.json`（归一化后只在软件包增减时变化）与 `winget-unavailable.txt`。
 
 7. **安全检查**：同 `check`；不通过则返回 1，不提交。
 
@@ -150,7 +152,7 @@ uv run dotfiles backup --commit                    # 登记到 linux 并提交
 kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 ```
 
-- **机器的标签**由 `home/.chezmoi.toml.tmpl` 在 `chezmoi init` 时检测，写入配置的 `[data] tags`：os-release 的 `ID` 与 `ID_LIKE` 中的各项（例如 `arch`；`kali`、`debian`），`PATH` 中有 `plasmashell` 时加 `kde`，有 `gnome-shell` 时加 `gnome`。`dotfiles doctor` 会显示它们。安装或移除桌面环境后，重新运行 `chezmoi init`（或 `dotfiles restore --apply --only config`）。
+- **机器的标签**由 `home/.chezmoi.toml.tmpl` 在 `chezmoi init` 时检测，写入配置的 `[data] tags`：os-release 的 `ID` 与 `ID_LIKE` 中的各项（例如 `arch`；`kali`、`debian`），`PATH` 中有 `plasmashell` 时加 `kde`，有 `gnome-shell` 时加 `gnome`；目标所运行的程序存在时，加上对应的**程序标签**（`zeroclaw`：`~/.cargo/bin/zeroclaw`，`taskdog`：`~/.local/bin/taskdog-server`，即这两个用户单元的 `ExecStart`）。`dotfiles doctor` 会显示它们。安装或移除桌面环境，或者上述程序之后，重新运行 `chezmoi init`（或 `dotfiles restore --apply --only config`）。
 - 没有列在 `[requires]` 中的目标会部署到同一系统的所有机器上，所以大多数目标不需要标签。本机缺少所需标签的目标，会像另一平台的目标一样被忽略（包括只被这类目标使用的父目录）。
 - 在标签功能出现之前生成的配置不做 `[requires]` 过滤；在重新生成配置之前，`doctor` 会一直提示。
 - `check` 会校验标签名（`[a-z0-9-]`），以及每个条目都与 `[platforms]` 中的某个条目有重叠。
@@ -160,7 +162,7 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 
 ### 3.4 加密与模板
 
-- 加密文件的源文件名形如 `encrypted_private_dot_zshrc.age`。`private_` 使部署后的权限为 600；备份时会自动处理。
+- 加密文件的源文件名形如 `encrypted_private_dot_npmrc.age`。`private_` 使部署后的权限为 600；备份时会自动处理。加密的模板文件名为 `encrypted_….tmpl.age`（`.age` 在最外层）。
 
 - 加密文件也可以是模板，但 `re-add` 不处理模板；需要两端共享的密文，可以在模板中用 `{{ include "…" | decrypt }}` 引用（目前未使用）。
 
@@ -178,13 +180,13 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 
 收集的目标（清单在 `dotfiles.toml` 的 `[etc]` 中）：
 
-- pacman 标记为 `[modified]` 的软件包配置文件；
+- 用户改过的软件包配置文件：pacman 标记为 `[modified]` 的；dpkg 系统上，校验和与 `/var/lib/dpkg/status` 中记录不一致的 conffile（即 `debsums -ce` 报告的那些；被其他软件包 divert 的 conffile，例如 Kali 的 `kali-defaults` / `kali-themes` 替换的文件，按 divert 后的路径检查）；
 
 - `extra` 中的路径（目录中只取不属于任何软件包的文件，例如自建的 systemd 单元、pacman hook，以及 `/etc/profile.d`、`/etc/ssh/sshd_config.d` 这类 drop-in 目录中你自己的文件）。本地设置尽量写成 drop-in 文件，而不是直接改软件包的配置文件：软件包文件保持原样，升级时就不会产生需要合并的 `.pacnew`；
 
 - `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密；
 
-- 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.bak` 等。
+- 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.dpkg-dist` 等 dpkg / ucf 遗留文件、`*.bak` 等。某个发行版上不存在的条目（Kali 上的 sddm、mkinitcpio、pacman hook；Arch 上的 `/etc/apt`）不贡献任何文件，所以一份清单可以给所有发行版共用。
 
 恢复（`system-restore` 与 restore 的 `system` 步骤）：
 
@@ -572,6 +574,8 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 - **每个发行版只有一份 `/etc` 备份**：同一发行版的两台机器共用 `system/<发行版>/`。只在其中一台上备份 `/etc`（另一台用 `backup --no-system`）。
 
-- **archlinuxcn 等第三方仓库**：新系统在恢复 `/etc/pacman.conf` 并安装对应 keyring 之前，这些仓库中的包会被列为"AUR 或未知"。按 restore 的提示处理后重跑 `--only packages` 即可。
+- **archlinuxcn 等第三方仓库**：新系统在恢复 `/etc/pacman.conf` 并安装对应 keyring 之前，这些仓库中的包会被列为"AUR 或未知"。按 restore 的提示处理后重跑 `--only packages` 即可。Debian 系上的第三方 apt 源（例如 VS Code 的）及其 keyring 也是如此。
+
+- **所有 Debian 系机器共用一份 apt 清单**：和 `archpkg.txt` 一样，`aptpkg.txt` 按包管理器划分；两个不同的 Debian 衍生发行版会共用它。
 
 - **两端内容不同的同名目标**（如 `.wakatime.cfg`、`.docker/config.json`）目前只由 Windows 托管；Linux 侧需要时，改为按平台区分的模板后登记到 `shared`。

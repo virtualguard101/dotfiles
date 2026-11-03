@@ -139,3 +139,105 @@ def test_restore_skips_etc_from_another_distro(tmp_path, monkeypatch):
     assert state == restore.SKIP and "kali" in detail and "arch" in detail
     monkeypatch.setattr(linplat, "distro", lambda: "arch")
     assert restore.check_system(None)[0] == restore.TODO
+
+
+@pytest.mark.parametrize("source, tracked", [
+    ("dot_aria2/aria2.conf.tmpl", True),
+    ("dot_aria2/create_empty_aria2.session", False),
+    ("private_dot_config/modify_private_app.conf", False),
+    ("private_dot_config/created_by_hand.conf", True),       # only the prefix counts
+])
+def test_tracks_content(source, tracked):
+    assert backup.tracks_content(source) is tracked
+
+
+@pytest.mark.parametrize("url, owner", [
+    ("https://github.com/virtualguard101/nvim.git", "virtualguard101"),
+    ("git@github.com:VirtualGuard101/dotfiles.git", "virtualguard101"),
+    ("ssh://git@github.com/ohmyzsh/ohmyzsh", "ohmyzsh"),
+    ("https://gitlab.com/a/b.git", None),
+])
+def test_github_owner(url, owner):
+    assert restore.github_owner(url) == owner
+
+
+def test_hooks_touch_only_own_externals(tmp_path, monkeypatch):
+    """The push URL switch to SSH covers this repo and externals of the same GitHub owner only."""
+    from dotfiles.utils.common import chez
+    origins = {tmp_path / "repo": "git@github.com:me/dotfiles.git",
+               tmp_path / "home/.config/nvim": "https://github.com/me/nvim.git",
+               tmp_path / "home/.oh-my-zsh": "https://github.com/ohmyzsh/ohmyzsh.git"}
+    for d in origins:
+        (d / ".git").mkdir(parents=True)
+    monkeypatch.setattr(chez, "repo", lambda: tmp_path / "repo")
+    monkeypatch.setattr(chez, "managed", lambda **kw: [".config/nvim", ".oh-my-zsh"])
+    monkeypatch.setattr(restore, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr(restore, "_origin", lambda d: origins[d])
+    assert restore._hook_dirs() == [tmp_path / "repo", tmp_path / "home/.config/nvim"]
+
+
+@pytest.mark.parametrize("release, debian", [
+    ({"ID": "kali", "ID_LIKE": "debian"}, True),
+    ({"ID": "debian"}, True),
+    ({"ID": "ubuntu", "ID_LIKE": "debian"}, True),
+    ({"ID": "arch"}, False),
+    ({"ID": "endeavouros", "ID_LIKE": "arch"}, False),
+])
+def test_debian_like(monkeypatch, release, debian):
+    from dotfiles.utils.platforms import linux as linplat
+    monkeypatch.setattr(linplat, "os_release", lambda: release)
+    assert linplat.is_debian_like() is debian
+    monkeypatch.setattr(linplat, "have", lambda name: True)
+    assert linplat.package_manager() == ("apt" if debian else "pacman")
+
+
+def _fake_run(outputs):
+    from dotfiles.utils import platforms
+    def run(cmd, **kw):
+        return platforms.Result(0, outputs[cmd[0]], "")
+    return run
+
+
+def test_apt_installed_and_missing(tmp_path, monkeypatch):
+    from dotfiles.cli import doctor
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import chez
+    dpkg = ("ii \tgit\tgit\n"
+            "hi \tlibfoo:i386\tlibfoo\n"            # held, installed
+            "rc \tremoved-pkg\tremoved-pkg\n"      # removed, config files left: not installed
+            "ii \tage\tage\n")
+    monkeypatch.setattr(platforms, "run", _fake_run({"dpkg-query": dpkg}))
+    assert doctor.installed_packages("apt") == {"git", "libfoo:i386", "libfoo", "age"}
+    (tmp_path / "aptpkg.txt").write_text("age\ngit\nlibfoo:i386\nremoved-pkg\nzellij\n", encoding="utf-8")
+    monkeypatch.setattr(chez, "packages_dir", lambda: tmp_path)
+    assert doctor.missing_packages("apt") == ["removed-pkg", "zellij"]
+
+
+def test_apt_split_by_configured_sources(monkeypatch):
+    from dotfiles.utils import platforms
+    monkeypatch.setattr(platforms, "run", _fake_run({"apt-cache": "git\nlibfoo\nneovim\n"}))
+    assert restore._apt_split(["neovim", "libfoo:i386", "code"]) == (["neovim", "libfoo:i386"], ["code"])
+
+
+def test_backup_exports_apt_manifest_sorted(tmp_path, monkeypatch):
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import chez
+    from dotfiles.utils.platforms import linux as linplat
+    monkeypatch.setattr(backup, "IS_WINDOWS", False)
+    monkeypatch.setattr(linplat, "package_manager", lambda: "apt")
+    monkeypatch.setattr(chez, "packages_dir", lambda: tmp_path)
+    monkeypatch.setattr(platforms, "run", _fake_run({"apt-mark": "zsh\nage\ngit\nage\n"}))
+    assert backup.package_files() == ["aptpkg.txt"]
+    backup.backup_packages(dry=False)
+    assert (tmp_path / "aptpkg.txt").read_text(encoding="utf-8") == "age\ngit\nzsh\n"
+
+
+def test_install_hint_offers_release_binary(monkeypatch):
+    from dotfiles.cli import doctor
+    from dotfiles.utils.platforms import linux as linplat
+    monkeypatch.setattr(doctor, "IS_LINUX", True)
+    monkeypatch.setattr(linplat, "package_manager", lambda: "apt")
+    hint = doctor.install_hint("gh")
+    assert "apt repo" in hint and "~/.local/bin" in hint and "github.com/cli/cli/releases" in hint
+    assert doctor.install_hint("zsh") == "sudo apt install zsh"
+    assert doctor.install_hint("pre-commit") == "uv tool install pre-commit"

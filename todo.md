@@ -25,6 +25,7 @@
 目前的 `[requires]`:
 - `kde`: KDE 配置和 Konsole 配置.
 - `arch`: `.config/user-dirs.dirs`. Kali 保留自己的版本, 因为 Kali 上 Templates/Public/Music/Videos 指向 `~`.
+- `zeroclaw`, `taskdog` (0.5.0 起, 程序标签): 对应的用户单元. 标签在 `~/.cargo/bin/zeroclaw`, `~/.local/bin/taskdog-server` 存在时才有, 所以 Kali 上不再部署这两个单元.
 
 ## 3. Kali 迁移结果 (2026-11-03 完成)
 
@@ -68,14 +69,20 @@
 - [x] **Kali: `sudo apt install ncat`** (已安装, `/usr/bin/ncat`). `.ssh/config` 中 github.com 的 `ProxyCommand` 用的是 `ncat` (经 Clash 的 7897 端口转发). Arch 上 ncat 来自 nmap 包, Kali 上它是单独的包, 还没有安装. 装好之前, 推送要临时加上 `GIT_SSH_COMMAND='ssh -o ProxyCommand=none'` (直连可用).
 - [x] 审阅并以 merge commit 方式合并 `dev` → `main` 的 PR. PR 内容: oh-my-zsh external, `[requires] arch`, docs/kali.md, 本文件, 以及两处测试修复 (`render_ignore` 改用空配置渲染, 不再读到本机的 `.tags`, 原来在没有 `kde` 标签的机器上会失败; `test_add_turns_inline_array…` 不再依赖仓库中 `backup.linux.ignore` 的当前内容).
 - [x] 合并后在 Kali 上 (已完成, 4 个文件与 origin/main 逐字节一致后丢弃并 pull): 主检出中还保留着这些文件未提交的相同改动, 所以要先 `git checkout -- home/.chezmoidata/platforms.toml home/.chezmoiexternal.toml.tmpl docs/kali.md todo.md`, 再 `git pull`.
-- [ ] 合并后在 Arch 上:
-  - `git pull`;
-  - `uv run dotfiles doctor`, 确认 tags 中有 `arch`. 0.4.0 之后重新 init 过就会有; 没有的话 `chezmoi init`;
-  - `uv run dotfiles apply` 预览: 应当只有 shell 文件的检查改动和 `.zshrc`. `.oh-my-zsh` 已核实是官方仓库的干净 clone, external 只会对它执行 pull.
+- [x] 合并后在 Arch 上 (2026-11-03): tags 为 `arch, kde`; `apply` 只有 4 个 shell 文件和 `.zshrc` (只有 `go` 那一行), 已部署, 新开的 zsh / bash 登录 shell / `.profile` 均无报错.
 
-### 6.2 在 Arch 上修剪冗余配置
+### 6.2 0.5.0 合并后 (dev → PR → main)
 
-依据: 2026-11-03 从 Kali 只读检查 Arch 根分区和家目录的结果. 修剪时以 Arch 的实际情况为准.
+- [ ] **Arch**: `git pull`, 然后 `uv run dotfiles restore --apply --only config` 重新生成配置 (doctor 会提示配置与模板不一致), tags 应为 `arch, kde, taskdog, zeroclaw`. 在那之前两个用户单元被视为缺少标签而忽略 (文件不会被删除, backup 遇到它们只会警告). 然后 `uv run dotfiles apply` 预览: 应当只有 `.aria2/aria2.conf` (路径改为家目录下) 和新建的空文件 `.aria2/aria2.session`.
+- [ ] **Kali**:
+  - `git pull`, `uv run dotfiles restore --apply --only config` (tags 不变, 仍是 `kali, debian, gnome`), `uv run dotfiles apply --apply`. 两个用户单元从此不受管理, 之前部署的两个文件可以手动删除 (`~/.config/systemd/user/{zeroclaw,taskdog-server}.service`, 从未 enable);
+  - 把 oh-my-zsh 的推送地址恢复原样 (0.4.0 的 hooks 步骤改过): `git -C ~/.oh-my-zsh config --unset remote.origin.pushurl`;
+  - `uv run dotfiles doctor`: "pacman is required" 应当消失, `aptpkg.txt` 显示缺少的包数;
+  - `/etc` 备份 (需要 sudo): 先 `uv run dotfiles status` 看 "/etc backup targets", 再 `uv run dotfiles backup -n` 预览, 确认后 `uv run dotfiles backup` 写入 `system/kali/etc`. 从 Arch 只读预览的结果: `etc.extra` 中 Arch 专用的条目 (sddm.conf, mkinitcpio, pacman hooks, timeshift, docker, mihomo) 在 Kali 上不存在, 自动跳过; 会收入 `/etc/apt/sources.list.d` (kali.sources, vscode.sources), `/etc/apt/apt.conf.d` 中 4 个非软件包文件, `/etc/profile.d` 中 2 个 (nmap.sh, dotnet-cli-tools-bin-path.sh), `sddm.conf.d/kde_settings.conf`, 以及 hostname, locale.conf, vconsole.conf, environment, zsh/zshrc. 可读的 conffile 中没有被用户改过的 (14 个看似改过的都是 kali-defaults / kali-themes 的 dpkg-divert); 13 个只有 root 可读的 conffile 要到 Kali 上用 sudo 才能检查. 不需要的条目用 `dotfiles config add etc.exclude <路径>` 排除.
+
+### 6.3 在 Arch 上修剪冗余配置
+
+依据: 2026-11-03 从 Kali 只读检查 Arch 根分区和家目录的结果; 2026-11-03 在 Arch 上逐项复核 (标注 "复核"). 修剪时以 Arch 的实际情况为准. **删除类操作等待审阅**, 汇总在 6.4.
 
 每删除一个目标, 需要同步修改:
 - `home/` 中的源文件;
@@ -90,25 +97,29 @@
 | `.config/ghostty/config` | Arch 和 Kali 都没装 ghostty, 文件只是自动生成的模板 | 删除 (以后真的用 ghostty 时再加) |
 | `.config/autostart/vboxclient.desktop` | 两个系统都是实体机; `VBoxClient-all` 来自 virtualbox-guest-utils | 删除; 同时考虑卸载 Arch 的 `virtualbox-guest-utils` 和 `open-vm-tools` (虚拟机客户端工具, 在实体机上没有作用; `vmtoolsd` 也装着) |
 | `.config/Cursor/User/*` | Arch 上没有 cursor 程序 (`~/.local/bin` 中只有 cursor-agent), 只剩配置目录 | 不再使用 Cursor 的话就删除, `dotfiles clean` 的 leftovers 规则也会把它列出来 |
-| `.zshrc` 中的 conda/mamba 初始化块 | Arch 上没有 `~/miniforge3`, 这段代码不起作用 | 删除. 另外 `UV_PUBLISH_TOKEN` 有一行被注释掉的旧值, 一并删除 (改完重新加密, 见 6.3 的拆分) |
+| `.zshrc` 中的 conda/mamba 初始化块 | Arch 上没有 `~/miniforge3`, 这段代码不起作用 | 待审阅 (见 6.4). `.zshrc` 已是明文 (6.5), 改完直接 re-add. 被注释掉的旧 `UV_PUBLISH_TOKEN` 已随拆分移到 `~/.config/zsh/secrets.zsh`, 是否删除也在 6.4 |
 | `.local/share/fcitx5/rime/default.custom.yaml` | fcitx5 的 profile 中只有 pinyin, keyboard-us, keyboard-jp, 没有启用 rime | 不用 rime 的话就删除, 以及 Arch 的 fcitx5-rime, rime-ice-git, rime-pinyin-moegirl; 想用的话把 rime 加进 profile |
-| `.aria2/aria2.conf` | `input-file`/`save-session` 指向不存在的 `/etc/aria2/aria2.session`; `dir=~/downloads` 也不存在 (实际是 `~/Downloads`) | 改成存在的路径 (例如 `~/.aria2/aria2.session`, 并创建这个文件), 或者删除 |
-| `.gitconfig` 的 `[lfs "customtransfer.xet"]` | Arch 上没有 `git-xet` | 不用 Hugging Face xet 的话就删掉这一段 (共享模板, 走 PR) |
+| `.aria2/aria2.conf` | `input-file`/`save-session` 指向不存在的 `/etc/aria2/aria2.session`; `dir=~/downloads` 也不存在 (实际是 `~/Downloads`). 复核: aria2 **不展开** `~` 和 `$HOME` | **已修复 (0.5.0)**: 改为模板, 路径用 `{{ .chezmoi.homeDir }}`; 会话文件由 `create_empty_aria2.session` 在缺失时创建, 内容不进仓库. 另: shell 中的 `all_proxy=socks://...` 会让 aria2 报一条 "unrecognized proxy format", 不影响下载 (走 `http(s)_proxy`) |
+| `.gitconfig` 的 `[lfs "customtransfer.xet"]` | ~~Arch 上没有 `git-xet`~~ 复核: `/usr/local/bin/git-xet` 存在 (手动安装, 不在 pacman 中), `git lfs env` 已列出 xet 传输 | **保留** |
 | `.tool-versions` 和 `.bashrc` 中的 asdf | asdf (旧的 bash 版) 只在 `.bashrc` 中加载, 而登录 shell 是 zsh, 所以 erlang/elixir 平时不在 PATH 中 | 不再使用的话, 删除 `.tool-versions`, `.bashrc` 中的 asdf 部分和 `~/.asdf`; 还要用的话, 在 `.zshrc` 中也加载 asdf |
-| VS Code / Cursor `settings.json` (加密) | 写死了 Arch 的家目录 (kubectl/helm 路径, leetcode / lcpr 的 workspaceFolder), 在 Kali 上无效; 还混有 Windows 专用的设置 | 改成加密模板 `encrypted_settings.json.tmpl.age`, 路径用 `{{ .chezmoi.homeDir }}` 表示; 或者删除这些路径项 |
-| `dotfiles.toml` 中 `backup.linux.track` 的 `.config/spectaclerc` | Arch 上有这个文件, 也装了 spectacle, 但仓库里没有对应的源文件 | 确认它为什么没有被备份 (可能是含有家目录路径而被跳过); 不需要的话从 track 中删除 |
+| VS Code / Cursor `settings.json` (加密) | 写死了 Arch 的家目录 (kubectl/helm 路径, leetcode / lcpr 的 workspaceFolder), 在 Kali 上无效; 还混有 Windows 专用的设置. 复核: 加密的原因是第 28 / 38 行有 API key. kubectl / helm 两项: vscode-kubernetes 扩展已不在 `~/.vscode/extensions` 中, 只剩它在 2025 年下载的工具 (`~/.local/state/vs-kubernetes/tools`), 属于残留; leetcode / lcpr 两项: 扩展默认值为空 (未设置), 两个目录在 Arch 上都存在 | 待审阅 (见 6.4). 不建议改成模板: `re-add` 不处理模板, VS Code 设置经常变化, 之后每次都要手动合并 |
+| `dotfiles.toml` 中 `backup.linux.track` 的 `.config/spectaclerc` | 复核: 被跳过是因为含有家目录路径 (`lastImageSaveLocation` 等上次保存的位置). 其余是少量偏好: 标注工具的颜色, OCR 语言, 查看器窗口尺寸 | 待审阅 (见 6.4) |
 | `archpkg.txt` | 由 backup 导出. 修剪 Arch 上的软件包之后, 再运行一次 backup 就会更新 | — |
 
-保留: `zeroclaw.service`, `taskdog-server.service`. 它们在 Arch 上已 enable, 对应的程序也在, 只是还需要加上标签 (见 6.3).
+保留: `zeroclaw.service`, `taskdog-server.service`. 它们在 Arch 上已 enable, 对应的程序也在; 0.5.0 起挂在程序标签下 (第 2 节).
 
-### 6.3 后续版本
+### 6.4 待审阅的删除项
 
-- [ ] apt 软件包清单: `packages/aptpkg.txt` 已经从 Kali 导出 (`apt-mark showmanual`, 229 个包). 但 backup / restore 还不会读写它, 目前只支持 pacman; 也要让 `doctor` 的 "package managers" 检查支持 apt.
-- [ ] Kali 的 `/etc` 备份: 还没有做 (需要 sudo). 先检查 `etc.extra` 中哪些是 Arch 专用的条目 (sddm, mkinitcpio, pacman hooks 等), 再在 Kali 上运行 `dotfiles backup` 生成 `system/kali/etc`.
-- [ ] 为依赖特定程序的目标增加标签, 例如 `zeroclaw.service`, `taskdog-server.service`.
-- [ ] 把 `.zshrc` 中的密钥拆到单独的加密文件, 让 `.zshrc` 本身变成明文, 以便审查和检查.
-- [ ] restore 的 `hooks` 步骤会把所有 GitHub external 的 push 地址改成 SSH, 包括第三方仓库 (ohmyzsh). 应该只改自己的仓库.
-- [ ] Debian 上没有 sudo 时, bootstrap / doctor 对 gh, zellij 等工具的建议, 可以加上 "release 二进制文件装到 `~/.local/bin`" 这条路径.
+审阅结论记录在这里, 然后按 6.3 开头的规则执行. 这些都还没有执行.
+
+### 6.5 后续版本
+
+- [x] apt 软件包清单 (0.5.0): backup 导出 `aptpkg.txt`, restore 用 apt 安装缺少的包, doctor 检查 apt.
+- [ ] Kali 的 `/etc` 备份: 工具部分已完成 (0.5.0: dpkg 的软件包文件归属, 改过的 conffile, diversion); 实际备份在 Kali 上执行, 见 6.2.
+- [x] 为依赖特定程序的目标增加标签 (0.5.0): `zeroclaw`, `taskdog`.
+- [x] 把 `.zshrc` 中的密钥拆到单独的加密文件 (main, 2daf2e0): `UV_PUBLISH_TOKEN` 移到 `~/.config/zsh/secrets.zsh` (加密), `.zshrc` 改为明文 `private_dot_zshrc`.
+- [x] restore 的 `hooks` 步骤只改同一 GitHub 账号的仓库 (0.5.0). Kali 上 ohmyzsh 的推送地址要手动恢复, 见 6.2.
+- [x] 没有 sudo 时的建议 (0.5.0): bootstrap 失败时给出 release 二进制文件装到 `~/.local/bin` 的做法, 并预先把它加进 `PATH`; doctor 对 gh, just 给出同样的提示.
 - [ ] 想在 Kali 上换回 Konsole 时 (docs/kali.md C1 的选项 (a)): 新增 `konsole` 标签 (按能否找到 konsole 检测), 把 `.config/konsolerc` 和 `.local/share/konsole` 从 `kde` 移到这个标签下.
 - [ ] Windows 系统配置备份: 用 `system/windows/` 保存导出的注册表等系统设置 (目录已预留, 功能尚未实现).
 - [ ] 检测更多标签的需求 (例如 `xfce`, 手动设置的本机标签), 有实际用途时再加.

@@ -22,7 +22,7 @@ Read-only. Checks, in order:
 | Section | Contents |
 |---|---|
 | System | distribution and kernel / Windows version, desktop session (Wayland/X11), architecture, GPU and driver, Python |
-| Package managers | Linux: pacman, yay, paru, nix, flatpak; Windows: winget, scoop, choco |
+| Package managers | Linux: pacman, apt, yay, paru, nix, flatpak; Windows: winget, scoop, choco |
 | Tools | required: git, chezmoi, uv; recommended: gh, pre-commit, ssh-keygen, just, plus sudo and zsh (Linux) or pwsh (Windows). age is optional (chezmoi bundles age) |
 | Network | whether git's `http.proxy` is reachable, proxy environment variables |
 | chezmoi | whether the source dir is this repo, whether the config file matches the template output, encryption mode, whether the private key exists, matches the repo's public key, its permissions, pending deployments |
@@ -47,11 +47,11 @@ dotfiles restore [--apply] [--only steps,…] [--skip steps,…] [--key-file pat
 | `config` | both | the chezmoi source dir is this repo; `~/.config/chezmoi/chezmoi.toml` matches the template render | backs up the old config, then runs `chezmoi init` |
 | `dotfiles` | both | whether `chezmoi status` (excluding externals) has pending items | full rehearsal -> backup of files about to be overwritten -> `chezmoi apply --force` |
 | `system` | Linux | whether `system/<distro>/etc` exists for this distro (os-release `ID`) | restore rules from [3.6](#36-linux-etc) (asks for confirmation); skipped on a distro without a backup |
-| `packages` | both | manifest packages that are missing | Linux: `sudo pacman -S --needed` for packages in configured repos, the rest via paru/yay, listed when no AUR helper exists; Windows: `winget import`, `scoop import` (asks for confirmation) |
+| `packages` | both | packages missing from this package manager's manifest (`archpkg.txt` for pacman, `aptpkg.txt` for apt) | Arch-like: `sudo pacman -S --needed` for packages in configured repos, the rest via paru/yay, listed when no AUR helper exists; Debian-like: `sudo apt-get install` for packages in the configured apt sources, the rest listed (a third-party source not restored yet, or a local .deb); Windows: `winget import`, `scoop import` (asks for confirmation) |
 | `externals` | both | whether externals' target dirs exist | `chezmoi apply --include externals`; connects directly when the git proxy is unreachable |
 | `ssh` | both | whether `~/.ssh/id_ed25519` and the private keys referenced by `~/.ssh/config` exist | generates missing keys with `ssh-keygen` (passphrase set interactively); can register the GitHub public key via `gh` when logged in |
 | `shell` | Linux | whether the login shell is zsh | `chsh -s` (asks for confirmation) |
-| `hooks` | both | whether the pre-commit / pre-push hooks are installed; whether the GitHub HTTPS remote's push URL is SSH | `uv tool install pre-commit` when needed, `pre-commit install`, `git remote set-url --push origin git@github.com:…` |
+| `hooks` | both | whether the pre-commit / pre-push hooks are installed; whether the push URL of this repo, and of git externals owned by the same GitHub account, is SSH (third-party externals such as oh-my-zsh keep theirs) | `uv tool install pre-commit` when needed, `pre-commit install`, `git remote set-url --push origin git@github.com:…` |
 | `verify` | both | always | `chezmoi verify`, the permission audit, `check` |
 
 ### Execution semantics
@@ -78,7 +78,9 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 ### Network and proxy
 
-- bootstrap clones the public repo over HTTPS, so no SSH key is needed yet; externals also use HTTPS. The push URL is switched to SSH in the `hooks` step.
+- bootstrap clones the public repo over HTTPS, so no SSH key is needed yet; externals also use HTTPS. The `hooks` step switches the push URL to SSH for this repo and for externals of the same GitHub owner; repos you never push to are left alone.
+
+- Without sudo, `bootstrap.sh` stops with the user-level route: the release binaries of chezmoi and uv in `~/.local/bin` (it puts that directory on `PATH` before looking for tools). `doctor` suggests the same route for recommended tools such as gh and just.
 
 - The deployed `~/.gitconfig` sets `http.proxy = 127.0.0.1:7897`. On a new machine where the proxy app is not installed yet, the `externals` step detects the unreachable proxy and temporarily overrides it to empty (direct connection) via `GIT_CONFIG_*` env vars, without touching any file.
 
@@ -92,7 +94,7 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 1. **Preflight**: age encryption enabled, recipient configured, private key present and not inside the repo; on Windows, checks whether the Documents folder is redirected (e.g. to OneDrive).
 
-2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted, then `chezmoi re-add` runs for all managed files. Managed files whose source carries `private_` but whose live mode is looser (e.g. a tool rewrote them as 644) are tightened to 600 first — `re-add` copies the live mode back into the source and would otherwise drop `private_`. With `-n`, chezmoi's output is captured (it never opens a pager) and `.age` diffs are shown as one line each, since ciphertext is unreadable.
+2. **re-add managed files**: plaintext managed files that grew secret patterns are tightened to 600 and switched to encrypted (except `create_` / `modify_` sources, whose live content chezmoi deliberately does not track), then `chezmoi re-add` runs for all managed files. Managed files whose source carries `private_` but whose live mode is looser (e.g. a tool rewrote them as 644) are tightened to 600 first — `re-add` copies the live mode back into the source and would otherwise drop `private_`. With `-n`, chezmoi's output is captured (it never opens a pager) and `.age` diffs are shown as one line each, since ciphertext is unreadable.
 
 3. **Drift of template targets**: `re-add` does not handle templates (e.g. `.gitconfig.tmpl`). Template targets with local changes are listed and must be merged back into the `.tmpl` by hand ([6.3](#63-cases-that-need-a-manual-merge)).
 
@@ -100,7 +102,7 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 5. **/etc** (Linux, skipped with `--no-system`): see [3.6](#36-linux-etc).
 
-6. **Package manifests**: Linux writes `packages/archpkg.txt` (`pacman -Qqe`); Windows writes `scoopfile.json`, `winget.json` (normalized so they only change when the package set changes) and `winget-unavailable.txt`.
+6. **Package manifests**: Arch-like Linux writes `packages/archpkg.txt` (`pacman -Qqe`), Debian-like Linux `packages/aptpkg.txt` (`apt-mark showmanual`, sorted); Windows writes `scoopfile.json`, `winget.json` (normalized so they only change when the package set changes) and `winget-unavailable.txt`.
 
 7. **Security check**: same as `check`; returns 1 and does not commit on failure.
 
@@ -154,7 +156,7 @@ Within one OS, machines still differ: a KDE config has no business on a GNOME ma
 kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 ```
 
-- **A machine's tags** are detected at `chezmoi init` by `home/.chezmoi.toml.tmpl` and written to the config as `[data] tags`: the os-release `ID` and `ID_LIKE` words (e.g. `arch`; `kali`, `debian`), `kde` when `plasmashell` is on `PATH`, `gnome` when `gnome-shell` is. `dotfiles doctor` shows them. Rerun `chezmoi init` (or `dotfiles restore --apply --only config`) after installing or removing a desktop environment.
+- **A machine's tags** are detected at `chezmoi init` by `home/.chezmoi.toml.tmpl` and written to the config as `[data] tags`: the os-release `ID` and `ID_LIKE` words (e.g. `arch`; `kali`, `debian`), `kde` when `plasmashell` is on `PATH`, `gnome` when `gnome-shell` is, and a **program tag** when the binary a target runs exists (`zeroclaw`: `~/.cargo/bin/zeroclaw`, `taskdog`: `~/.local/bin/taskdog-server`, the `ExecStart` of their user units). `dotfiles doctor` shows them. Rerun `chezmoi init` (or `dotfiles restore --apply --only config`) after installing or removing a desktop environment or one of those programs.
 - Targets not listed in `[requires]` deploy on every machine of their OS, so most targets need no tag. A target with a tag the machine lacks is ignored like another platform's target (including parent directories used only by such targets).
 - A config written before tags existed applies no `[requires]` filtering; `doctor` reports it until the config is regenerated.
 - `check` validates tag names (`[a-z0-9-]`) and that each entry overlaps an entry in `[platforms]`.
@@ -164,7 +166,7 @@ Same-name targets needed on both platforms with different content: make it a tem
 
 ### 3.4 Encryption and templates
 
-- Encrypted source file names look like `encrypted_private_dot_zshrc.age`. `private_` makes the deployed permissions 600; backup handles this automatically.
+- Encrypted source file names look like `encrypted_private_dot_npmrc.age`. `private_` makes the deployed permissions 600; backup handles this automatically. An encrypted template is `encrypted_….tmpl.age` (`.age` outermost).
 
 - Encrypted files can be templates, but `re-add` does not handle templates. To share one ciphertext across platforms, reference it from a template with `{{ include "…" | decrypt }}` (currently unused).
 
@@ -182,13 +184,13 @@ Same-name targets needed on both platforms with different content: make it a tem
 
 Collected targets (lists in `dotfiles.toml` `[etc]`):
 
-- package config files marked `[modified]` by pacman;
+- package config files the user changed: marked `[modified]` by pacman; on dpkg systems, conffiles whose checksum differs from the one in `/var/lib/dpkg/status` (what `debsums -ce` reports; a conffile another package diverted, as Kali's `kali-defaults` / `kali-themes` do, is checked at its diverted-to path);
 
 - paths in `extra` (directories contribute only files not owned by any package, e.g. custom systemd units, pacman hooks, or your own files in drop-in dirs such as `/etc/profile.d` and `/etc/ssh/sshd_config.d`). Put local settings in a drop-in file rather than editing a package's config: the package file stays pristine, and upgrades then produce no `.pacnew` to merge;
 
 - paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too;
 
-- everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.bak`, etc.
+- everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.dpkg-dist` and the other dpkg / ucf leftovers, `*.bak`, etc. Entries that do not exist on a distro (sddm, mkinitcpio, pacman hooks on Kali; `/etc/apt` on Arch) contribute nothing, so one list serves every distro.
 
 Restore (`system-restore`, and restore's `system` step):
 
@@ -577,6 +579,8 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 - **One `/etc` backup per distro**: two machines with the same distro share `system/<distro>/`. Back up `/etc` on one of them only (use `backup --no-system` on the other).
 
-- **Third-party repos like archlinuxcn**: on a new system, before `/etc/pacman.conf` is restored and the matching keyring installed, their packages are listed as "AUR or unknown". Handle those as restore instructs, then rerun `--only packages`.
+- **Third-party repos like archlinuxcn**: on a new system, before `/etc/pacman.conf` is restored and the matching keyring installed, their packages are listed as "AUR or unknown". Handle those as restore instructs, then rerun `--only packages`. The same goes for third-party apt sources (e.g. VS Code's) and their keyrings on Debian-like systems.
+
+- **One apt manifest for all Debian-like machines**: `aptpkg.txt` is per package manager, like `archpkg.txt`; two different Debian derivatives would share it.
 
 - **Same-name targets with different content on the two platforms** (e.g. `.wakatime.cfg`, `.docker/config.json`) are currently managed by Windows only; when Linux needs one, turn it into a per-platform template and register it in `shared`.

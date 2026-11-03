@@ -48,7 +48,7 @@ src/dotfiles/
     ├── fsutil.py            link-safe sizes, scope-asserted Deleter   │ specific to this
     ├── platforms/           OS detection and OS-specific helpers      ┘ project
     │   ├── __init__.py      IS_WINDOWS/IS_LINUX, XDG/AppData paths, run(), processes, file locks
-    │   ├── linux.py         /etc/os-release, Arch detection, /proc processes
+    │   ├── linux.py         /etc/os-release, distro and package-manager detection, /proc processes
     │   └── windows.py       PowerShell, tasklist, ACLs, scoop location
     └── common/              services of this project shared by two or more commands
         ├── chez.py          chezmoi wrapper: repo paths, config, age keys, platforms.toml
@@ -136,7 +136,7 @@ The interface is constrained on purpose:
 | This machine's environment tags | `[data] tags` in the chezmoi config | `chezmoi init`, detected by `home/.chezmoi.toml.tmpl` |
 | Dotfiles (source state) | `home/` (`.chezmoiroot`) | chezmoi (`add`, `re-add`, `edit`), via `backup` |
 | /etc backup | `system/<distro>/` (os-release `ID`; `system/windows/` reserved) | `backup` through a second chezmoi instance |
-| Package manifests | `packages/` | `backup` |
+| Package manifests | `packages/` (one per package manager: `archpkg.txt`, `aptpkg.txt`; Windows: scoop, winget) | `backup` |
 | Commit-check rules (must-encrypt, secret patterns) | `utils/common/guard/checks.py` | code, on purpose (section 4) |
 | chezmoi config | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init` from `home/.chezmoi.toml.tmpl` |
 | age private key | outside the repo (offline backup) | `restore` (key step) |
@@ -204,3 +204,11 @@ environment-specific targets (e.g. KDE configs) off machines without that enviro
 moved from `system/etc` to `system/<distro>/etc`, so each distro only backs up and restores its
 own; `bootstrap.sh` installs prerequisites with apt + pipx on Debian / Kali, and `bootstrap.ps1`
 can install scoop.
+
+0.5.0 makes Debian-like machines first-class: `backup` exports `packages/aptpkg.txt`, `restore`
+installs its missing packages with apt and `doctor` checks them (`linux.package_manager()` picks
+pacman or apt); `/etc` backup on dpkg systems finds package-owned files and edited conffiles from
+`/var/lib/dpkg`, diversions included. Program tags (`zeroclaw`, `taskdog`) keep user units off
+machines without their binary. The `hooks` step switches push URLs to SSH only for repos of the
+same GitHub owner. Fixes: guard mapped `encrypted_x.tmpl.age` to `x.tmpl`, and `backup` could
+convert a `create_` file into a regular encrypted one.

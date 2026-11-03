@@ -73,9 +73,13 @@ def target_of(source: str, root: Optional[str] = None) -> Optional[str]:
         if not literal and comp.startswith("dot_"):
             comp = "." + comp[4:]
         if last:
-            for suffix in (".tmpl", ".literal", ".age"):
-                if comp.endswith(suffix):
-                    comp = comp[: -len(suffix)]
+            # the encryption suffix is outermost (chezmoi writes encrypted_x.tmpl.age); .literal
+            # ends suffix parsing, so x.tmpl.literal keeps its .tmpl
+            comp = comp.removesuffix(".age")
+            if comp.endswith(".literal"):
+                comp = comp.removesuffix(".literal")
+            else:
+                comp = comp.removesuffix(".tmpl")
         out.append(comp)
     target = "/".join(out)
     return "/" + target if system else target

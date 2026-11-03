@@ -4,7 +4,8 @@
 ## 文件保存相关 ##
 
 # 文件的保存路径(可使用绝对路径或相对路径), 默认: 当前启动位置
-dir=~/downloads
+# aria2 不展开 ~ 和 $HOME, 所以由 chezmoi 模板写入本机的家目录
+dir={{ .chezmoi.homeDir }}/Downloads
 # 启用磁盘缓存, 0为禁用缓存, 需1.16以上版本, 默认:16M
 #disk-cache=32M
 # 文件预分配方式, 能有效降低磁盘碎片, 默认:prealloc
@@ -46,9 +47,10 @@ min-split-size=10M
 ## 进度保存相关 ##
 
 # 从会话文件中读取下载任务
-input-file=/etc/aria2/aria2.session
+# 会话文件必须已存在, 否则 aria2 启动即报错; 由 chezmoi 的 create_empty_aria2.session 在缺失时创建 (空文件, 内容不进仓库)
+input-file={{ .chezmoi.homeDir }}/.aria2/aria2.session
 # 在Aria2退出时保存`错误/未完成`的下载任务到会话文件
-save-session=/etc/aria2/aria2.session
+save-session={{ .chezmoi.homeDir }}/.aria2/aria2.session
 # 定时保存会话, 0为退出时才保存, 需1.16.1以上版本, 默认:0
 #save-session-interval=60
 
