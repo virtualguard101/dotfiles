@@ -78,8 +78,12 @@ def preview(changes: list[Change]) -> None:
 
 
 def rehearse(targets: list[Path] | None = None) -> None:
-    """A full dry run first: if decryption or a template fails, nothing has been written yet."""
-    r = chez.cz("apply", "--dry-run", "--exclude", "externals", "--no-tty", *([] if not targets else ["--", *map(str, targets)]))
+    """A full dry run first: if decryption or a template fails, nothing has been written yet.
+
+    --force matches the real apply below. Without it, chezmoi asks before overwriting a file edited
+    since the last apply, and under --no-tty that prompt reads EOF and fails the rehearsal, so any
+    locally edited target would block the apply (and its pre-apply backup)."""
+    r = chez.cz("apply", "--dry-run", "--force", "--exclude", "externals", "--no-tty", *([] if not targets else ["--", *map(str, targets)]))
     if not r.ok:
         raise DeployError(f"rehearsal failed, nothing was written: {r.stderr.strip()[:300]}")
 

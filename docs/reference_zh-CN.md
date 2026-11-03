@@ -553,7 +553,7 @@ dotfiles apply --apply [目标...]     部署
 - 预览列出每个待部署的变更（`A` 新增、`D` 删除、`M` 修改）。明文目标显示 diff；**加密目标只显示一行，
   从不在屏幕上解密**。`!` 标记的是上次 apply 之后你在本地改过的文件——部署会覆盖它，所以要保留的改动
   先用 `dotfiles backup` 或 `chezmoi merge` 处理（[6.3](#63-需要手动合并的场景)）。
-- `--apply` 先完整预演一遍（解密或模板失败时什么都不写），把将被覆盖或删除的文件复制到
+- `--apply` 先完整预演一遍（解密或模板失败时什么都不写；预演与正式部署一样带 `--force`，本地改过的文件不会让它中断），把将被覆盖或删除的文件复制到
   `~/.local/state/dotfiles/pre-apply-*`，再运行 `chezmoi apply`。它与 restore 的 `dotfiles` 步骤是同一份
   代码（`src/dotfiles/utils/common/deploy.py`）。
 - `目标` 把范围限制在 `~` 下的部分路径（chezmoi 托管的文件或目录）。
