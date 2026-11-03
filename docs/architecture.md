@@ -212,3 +212,6 @@ pacman or apt); `/etc` backup on dpkg systems finds package-owned files and edit
 machines without their binary. The `hooks` step switches push URLs to SSH only for repos of the
 same GitHub owner. Fixes: guard mapped `encrypted_x.tmpl.age` to `x.tmpl`, and `backup` could
 convert a `create_` file into a regular encrypted one.
+
+0.5.1: `deploy` also backs up targets that apply removes (`home/.chezmoiremove`, status `D`), so
+retiring a target is as recoverable as overwriting one.

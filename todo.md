@@ -71,48 +71,50 @@
 - [x] 合并后在 Kali 上 (已完成, 4 个文件与 origin/main 逐字节一致后丢弃并 pull): 主检出中还保留着这些文件未提交的相同改动, 所以要先 `git checkout -- home/.chezmoidata/platforms.toml home/.chezmoiexternal.toml.tmpl docs/kali.md todo.md`, 再 `git pull`.
 - [x] 合并后在 Arch 上 (2026-11-03): tags 为 `arch, kde`; `apply` 只有 4 个 shell 文件和 `.zshrc` (只有 `go` 那一行), 已部署, 新开的 zsh / bash 登录 shell / `.profile` 均无报错.
 
-### 6.2 0.5.0 合并后 (dev → PR → main)
+### 6.2 0.5.0 (已合并, #11) 与修剪 (0.5.1) 合并后
 
-- [ ] **Arch**: `git pull`, 然后 `uv run dotfiles restore --apply --only config` 重新生成配置 (doctor 会提示配置与模板不一致), tags 应为 `arch, kde, taskdog, zeroclaw`. 在那之前两个用户单元被视为缺少标签而忽略 (文件不会被删除, backup 遇到它们只会警告). 然后 `uv run dotfiles apply` 预览: 应当只有 `.aria2/aria2.conf` (路径改为家目录下) 和新建的空文件 `.aria2/aria2.session`.
-- [ ] **Kali**:
-  - `git pull`, `uv run dotfiles restore --apply --only config` (tags 不变, 仍是 `kali, debian, gnome`), `uv run dotfiles apply --apply`. 两个用户单元从此不受管理, 之前部署的两个文件可以手动删除 (`~/.config/systemd/user/{zeroclaw,taskdog-server}.service`, 从未 enable);
-  - 把 oh-my-zsh 的推送地址恢复原样 (0.4.0 的 hooks 步骤改过): `git -C ~/.oh-my-zsh config --unset remote.origin.pushurl`;
-  - `uv run dotfiles doctor`: "pacman is required" 应当消失, `aptpkg.txt` 显示缺少的包数;
-  - `/etc` 备份 (需要 sudo): 先 `uv run dotfiles status` 看 "/etc backup targets", 再 `uv run dotfiles backup -n` 预览, 确认后 `uv run dotfiles backup` 写入 `system/kali/etc`. 从 Arch 只读预览的结果: `etc.extra` 中 Arch 专用的条目 (sddm.conf, mkinitcpio, pacman hooks, timeshift, docker, mihomo) 在 Kali 上不存在, 自动跳过; 会收入 `/etc/apt/sources.list.d` (kali.sources, vscode.sources), `/etc/apt/apt.conf.d` 中 4 个非软件包文件, `/etc/profile.d` 中 2 个 (nmap.sh, dotnet-cli-tools-bin-path.sh), `sddm.conf.d/kde_settings.conf`, 以及 hostname, locale.conf, vconsole.conf, environment, zsh/zshrc. 可读的 conffile 中没有被用户改过的 (14 个看似改过的都是 kali-defaults / kali-themes 的 dpkg-divert); 13 个只有 root 可读的 conffile 要到 Kali 上用 sudo 才能检查. 不需要的条目用 `dotfiles config add etc.exclude <路径>` 排除.
+- [ ] **Arch** (修剪已在本机执行, 见 6.3):
+  - 合并 0.5.1 的 PR 后 `git switch main && git pull`. 合并之前不要在 `main` 上 `dotfiles apply --apply`: `main` 上还没有 `.chezmoiremove`, 会把已删除的 8 个文件重新部署回来;
+  - `uv run dotfiles restore --apply --only config` 重新生成配置, tags 应为 `arch, kde, taskdog, zeroclaw`. 在那之前两个用户单元被视为缺少标签而忽略 (文件不会被删除, backup 遇到它们只会警告);
+  - `uv run dotfiles apply` 预览: 应当只有 `.aria2/aria2.conf` (路径改为家目录下), 新建的空文件 `.aria2/aria2.session`, 以及 fcitx5 自己改写的 `notifications.conf` (想保留本机版本就先 `dotfiles backup`);
+  - 卸载虚拟机客户端工具和 rime (需要 sudo, 共 21 个包, 其中 16 个是不再需要的依赖):
+    ```bash
+    sudo systemctl disable vboxservice.service
+    sudo pacman -Rns virtualbox-guest-utils open-vm-tools fcitx5-rime rime-ice-git rime-pinyin-moegirl
+    uv run dotfiles backup          # 在 main 上: archpkg.txt 随之更新, 再提交
+    ```
+- [ ] **Kali**: `git pull` 之后运行 `bash scripts/kali.sh` 预览, 再 `bash scripts/kali.sh --apply`. 脚本做的事:
+  - 重新生成配置;
+  - 恢复 oh-my-zsh 的推送地址;
+  - 把两个不再管理的用户单元移到 `~/.local/state/dotfiles/kali-*` (`.chezmoiignore` 优先于 `.chezmoiremove`, 被忽略的目标不会被删除, 所以不能靠 `.chezmoiremove`);
+  - `dotfiles apply`: 部署新的 `.zshrc` 和 `secrets.zsh`, aria2 模板, 并删除 `.chezmoiremove` 中的 8 个目标 (先备份到 `pre-apply-*`);
+  - 删除因此变空的目录;
+  - 运行 `dotfiles doctor`: "pacman is required" 应当消失, `aptpkg.txt` 显示缺少的包数.
+- [ ] **Kali 的 `/etc` 备份** (需要 sudo, 脚本最后会提示): 先 `uv run dotfiles status` 看 "/etc backup targets", 再 `uv run dotfiles backup -n` 预览, 确认后 `uv run dotfiles backup` 写入 `system/kali/etc`. 从 Arch 只读预览的结果: `etc.extra` 中 Arch 专用的条目 (sddm.conf, mkinitcpio, pacman hooks, timeshift, docker, mihomo) 在 Kali 上不存在, 自动跳过; 会收入 `/etc/apt/sources.list.d` (kali.sources, vscode.sources), `/etc/apt/apt.conf.d` 中 4 个非软件包文件, `/etc/profile.d` 中 2 个 (nmap.sh, dotnet-cli-tools-bin-path.sh), `sddm.conf.d/kde_settings.conf`, 以及 hostname, locale.conf, vconsole.conf, environment, zsh/zshrc. 可读的 conffile 中没有被用户改过的 (14 个看似改过的都是 kali-defaults / kali-themes 的 dpkg-divert); 13 个只有 root 可读的 conffile 要到 Kali 上用 sudo 才能检查. 不需要的条目用 `dotfiles config add etc.exclude <路径>` 排除.
 
-### 6.3 在 Arch 上修剪冗余配置
+### 6.3 修剪冗余配置 (2026-11-04 完成)
 
-依据: 2026-11-03 从 Kali 只读检查 Arch 根分区和家目录的结果; 2026-11-03 在 Arch 上逐项复核 (标注 "复核"). 修剪时以 Arch 的实际情况为准. **删除类操作等待审阅**, 汇总在 6.4.
+依据: 2026-11-03 从 Kali 只读检查 Arch 的结果, 并在 Arch 上逐项复核. 停用一个目标的步骤见 reference 3.3 "停用一个目标": 删除源文件和归属, 从 `backup.linux.track` 中删除, 列进 `home/.chezmoiremove`.
 
-每删除一个目标, 需要同步修改:
-- `home/` 中的源文件;
-- `platforms.toml` 中的条目 (提交检查和 `dotfiles check` 要求两边一致);
-- 如果它在 `dotfiles.toml` 的 `backup.linux.track` 中, 也要删掉, 否则下次 backup 又会加回来. 只想停止备份的话, 改为加入 `ignore`.
-
-删除归属, `requires` 之类属于规则改动, 走 dev → PR. 只改 dotfile 内容的话, 可以直接提交到 main.
-
-| 目标 | 检查结果 | 建议 |
+| 目标 | 处理 | 提交 |
 |---|---|---|
-| `.zimrc`, `.p10k.zsh` (以及 Arch 的 `~/.zim`) | `.zshrc` 用的是 oh-my-zsh + robbyrussell, 不加载 zim 和 p10k | 从仓库删除; 本地文件可以一起删掉 |
-| `.config/ghostty/config` | Arch 和 Kali 都没装 ghostty, 文件只是自动生成的模板 | 删除 (以后真的用 ghostty 时再加) |
-| `.config/autostart/vboxclient.desktop` | 两个系统都是实体机; `VBoxClient-all` 来自 virtualbox-guest-utils | 删除; 同时考虑卸载 Arch 的 `virtualbox-guest-utils` 和 `open-vm-tools` (虚拟机客户端工具, 在实体机上没有作用; `vmtoolsd` 也装着) |
-| `.config/Cursor/User/*` | Arch 上没有 cursor 程序 (`~/.local/bin` 中只有 cursor-agent), 只剩配置目录 | 不再使用 Cursor 的话就删除, `dotfiles clean` 的 leftovers 规则也会把它列出来 |
-| `.zshrc` 中的 conda/mamba 初始化块 | Arch 上没有 `~/miniforge3`, 这段代码不起作用 | 待审阅 (见 6.4). `.zshrc` 已是明文 (6.5), 改完直接 re-add. 被注释掉的旧 `UV_PUBLISH_TOKEN` 已随拆分移到 `~/.config/zsh/secrets.zsh`, 是否删除也在 6.4 |
-| `.local/share/fcitx5/rime/default.custom.yaml` | fcitx5 的 profile 中只有 pinyin, keyboard-us, keyboard-jp, 没有启用 rime | 不用 rime 的话就删除, 以及 Arch 的 fcitx5-rime, rime-ice-git, rime-pinyin-moegirl; 想用的话把 rime 加进 profile |
-| `.aria2/aria2.conf` | `input-file`/`save-session` 指向不存在的 `/etc/aria2/aria2.session`; `dir=~/downloads` 也不存在 (实际是 `~/Downloads`). 复核: aria2 **不展开** `~` 和 `$HOME` | **已修复 (0.5.0)**: 改为模板, 路径用 `{{ .chezmoi.homeDir }}`; 会话文件由 `create_empty_aria2.session` 在缺失时创建, 内容不进仓库. 另: shell 中的 `all_proxy=socks://...` 会让 aria2 报一条 "unrecognized proxy format", 不影响下载 (走 `http(s)_proxy`) |
-| `.gitconfig` 的 `[lfs "customtransfer.xet"]` | ~~Arch 上没有 `git-xet`~~ 复核: `/usr/local/bin/git-xet` 存在 (手动安装, 不在 pacman 中), `git lfs env` 已列出 xet 传输 | **保留** |
-| `.tool-versions` 和 `.bashrc` 中的 asdf | asdf (旧的 bash 版) 只在 `.bashrc` 中加载, 而登录 shell 是 zsh, 所以 erlang/elixir 平时不在 PATH 中 | 不再使用的话, 删除 `.tool-versions`, `.bashrc` 中的 asdf 部分和 `~/.asdf`; 还要用的话, 在 `.zshrc` 中也加载 asdf |
-| VS Code / Cursor `settings.json` (加密) | 写死了 Arch 的家目录 (kubectl/helm 路径, leetcode / lcpr 的 workspaceFolder), 在 Kali 上无效; 还混有 Windows 专用的设置. 复核: 加密的原因是第 28 / 38 行有 API key. kubectl / helm 两项: vscode-kubernetes 扩展已不在 `~/.vscode/extensions` 中, 只剩它在 2025 年下载的工具 (`~/.local/state/vs-kubernetes/tools`), 属于残留; leetcode / lcpr 两项: 扩展默认值为空 (未设置), 两个目录在 Arch 上都存在 | 待审阅 (见 6.4). 不建议改成模板: `re-add` 不处理模板, VS Code 设置经常变化, 之后每次都要手动合并 |
-| `dotfiles.toml` 中 `backup.linux.track` 的 `.config/spectaclerc` | 复核: 被跳过是因为含有家目录路径 (`lastImageSaveLocation` 等上次保存的位置). 其余是少量偏好: 标注工具的颜色, OCR 语言, 查看器窗口尺寸 | 待审阅 (见 6.4) |
-| `archpkg.txt` | 由 backup 导出. 修剪 Arch 上的软件包之后, 再运行一次 backup 就会更新 | — |
+| `.zimrc`, `.p10k.zsh` | 停用 (`.zshrc` 用 oh-my-zsh); Arch 的 `~/.zim` (86M) 已删除 | dev |
+| `.config/ghostty/config` | 停用 (两边都没装 ghostty) | dev |
+| `.config/autostart/vboxclient.desktop` | 停用 (实体机); 卸载 virtualbox-guest-utils, open-vm-tools 见 6.2 | dev |
+| `.config/Cursor/User/*` | 停用 (没装 Cursor); Arch 的 `~/.config/Cursor` (7.1G) 已删除. `cursor-agent` 不受影响 | dev |
+| `.local/share/fcitx5/rime/default.custom.yaml` | 停用 (rime 未启用); Arch 的 rime 数据 (40M) 已删除; 卸载 rime 的包见 6.2 | dev |
+| `.tool-versions`, `.bashrc` 中的 asdf | 停用 / 删除; Arch 的 `~/.asdf` (192M) 已删除 | dev / main |
+| `.zshrc` 中的 conda/mamba 初始化块 (95 行) | 删除; Jupyter 和 `~/.local/bin` 两行保留 | main (5d37765) |
+| `secrets.zsh` 中注释掉的旧 `UV_PUBLISH_TOKEN` | 删除. **如果它在 PyPI 上还没有作废, 去 PyPI 作废它**: 它曾以加密形式存在于仓库历史中 | main (5d37765) |
+| VS Code `settings.json` 的 kubectl / helm 路径, leetcode / lcpr 的 workspaceFolder | 删除, 文件中不再有家目录路径; Arch 的 `~/.local/state/vs-kubernetes` (111M) 已删除 | main (5d37765) |
+| `backup.linux.track` 的 `.config/spectaclerc` | 移出 track (含家目录路径, 从未被备份) | dev |
+| `.aria2/aria2.conf` | 0.5.0 已修复: 改为模板, 会话文件由 `create_empty_aria2.session` 创建 | — |
+| `.gitconfig` 的 `[lfs "customtransfer.xet"]` | 保留: `/usr/local/bin/git-xet` 存在 | — |
+| `zeroclaw.service`, `taskdog-server.service` | Arch 保留 (程序标签); Kali 上由 `scripts/kali.sh` 移走 | — |
 
-保留: `zeroclaw.service`, `taskdog-server.service`. 它们在 Arch 上已 enable, 对应的程序也在; 0.5.0 起挂在程序标签下 (第 2 节).
+Arch 上被 `.chezmoiremove` 删除的 8 个文件备份在 `~/.local/state/dotfiles/pre-apply-20261104-002449`. 修剪中发现但未处理: `~/.local/share/mamba` (mamba 的根目录, 不在本次清单中, 需要的话另行决定).
 
-### 6.4 待审阅的删除项
-
-审阅结论记录在这里, 然后按 6.3 开头的规则执行. 这些都还没有执行.
-
-### 6.5 后续版本
+### 6.4 后续版本
 
 - [x] apt 软件包清单 (0.5.0): backup 导出 `aptpkg.txt`, restore 用 apt 安装缺少的包, doctor 检查 apt.
 - [ ] Kali 的 `/etc` 备份: 工具部分已完成 (0.5.0: dpkg 的软件包文件归属, 改过的 conffile, diversion); 实际备份在 Kali 上执行, 见 6.2.

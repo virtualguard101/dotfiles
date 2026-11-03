@@ -9,6 +9,7 @@ An Arch Linux and Windows config repository built on [chezmoi](https://www.chezm
 home/                     dotfiles for both platforms (chezmoi source state)
   .chezmoi.toml.tmpl      generates the chezmoi config at init (encryption, key path, recipient)
   .chezmoidata/platforms.toml   platform ownership per target; .chezmoiignore derives from it
+  .chezmoiremove          retired targets, deleted from every machine at apply
 system/<distro>/          Linux /etc backup per distro, e.g. system/arch (separate chezmoi instance,
                           never deployed to ~)
 packages/                 package manifests: archpkg.txt / aptpkg.txt / scoopfile.json / winget.json
@@ -16,6 +17,7 @@ dotfiles.toml             backup and cleanup lists and tunables (data; `dotfiles
 src/dotfiles/             the Python tool (standard library only)
 bootstrap.sh / .ps1       fresh-machine bootstrap: installs git, chezmoi, uv and clones the repo,
                           then hands over to dotfiles restore
+scripts/kali.sh           one-off follow-up steps to run on the Kali machine
 docs/reference.md         detailed reference: command behavior, encryption and platform rules,
                           cleanup targets, commit checks
 docs/workflows.md         branch roles and which path each kind of change takes
@@ -74,7 +76,7 @@ bootstrap only installs git, chezmoi and uv (pacman on Arch, apt + pipx on Debia
 |---|---|
 | `key` | writes the key to `~/.config/chezmoi/key.txt` (owner-only permissions) and validates it against the repo's public key |
 | `config` | generates the chezmoi config from `home/.chezmoi.toml.tmpl` |
-| `dotfiles` | rehearses decryption once (nothing is written on failure), backs up files about to be overwritten to `~/.local/state/dotfiles/pre-apply-*`, then runs `chezmoi apply` |
+| `dotfiles` | rehearses decryption once (nothing is written on failure), backs up files about to be overwritten or removed to `~/.local/state/dotfiles/pre-apply-*`, then runs `chezmoi apply` |
 | `system` | Linux: restores `/etc` from this distro's backup (`system/<distro>/`; skipped on a distro without one); hardware-bound files (`fstab`, `crypttab`, `default/grub`, ...) show diffs only; `sudoers` is validated with `visudo` first |
 | `packages` | Arch: pacman installs packages from configured repos, AUR packages go to paru/yay; Debian / Kali: apt installs packages from the configured sources (skipped on other distros); Windows: `winget import` and `scoop import` |
 | `externals` | fetches external repos such as the nvim config; temporarily connects directly when the git proxy is unreachable |
@@ -132,6 +134,6 @@ Every modifying command previews by default. Full details in [docs/reference.md]
 
 - **Platform isolation**: every target declares its owner in `platforms.toml`; the other platform's targets (and their exclusive parent directories) are ignored, so a backup on one platform never overwrites the other platform's source files.
 
-- **Recovery never silently destroys existing files**: decryption is rehearsed first, then files about to be overwritten are backed up; hardware-bound `/etc` files are never installed automatically.
+- **Recovery never silently destroys existing files**: decryption is rehearsed first, then files about to be overwritten or removed are backed up; hardware-bound `/etc` files are never installed automatically.
 
 - **Transient plaintext only on tmpfs**: staging for the `/etc` backup and restore lives in `$XDG_RUNTIME_DIR` and is deleted afterwards.

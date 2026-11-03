@@ -1,6 +1,6 @@
 """Deployment primitives (repo -> ~) shared by `dotfiles apply` and the dotfiles step of `dotfiles
 restore`: pending changes, a safe preview, a full rehearsal, a backup of files about to be
-overwritten, and the apply itself. Externals are never part of it (restore has a step for them).
+overwritten or removed (.chezmoiremove), and the apply itself. Externals are never part of it (restore has a step for them).
 """
 from __future__ import annotations
 
@@ -85,27 +85,32 @@ def rehearse(targets: list[Path] | None = None) -> None:
 
 
 def save_overwritten(changes: list[Change]) -> Path | None:
-    """Copy live files that apply will modify to ~/.local/state/dotfiles/pre-apply-<time>/."""
-    files = [home() / c.target for c in changes if c.action == "M"]
-    files = [f for f in files if f.is_file() and not f.is_symlink()]
-    if not files:
+    """Copy live files that apply will modify or remove (M / D) to
+    ~/.local/state/dotfiles/pre-apply-<time>/. A removed directory is copied whole (symlinks kept)."""
+    paths = [home() / c.target for c in changes if c.action in ("M", "D")]
+    paths = [p for p in paths if not p.is_symlink() and (p.is_file() or p.is_dir())]
+    if not paths:
         return None
     dest = platforms.xdg_state() / "dotfiles" / f"pre-apply-{datetime.now():%Y%m%d-%H%M%S}"
     dest.mkdir(parents=True, mode=0o700)
-    for f in files:
-        rel = f.relative_to(home())
+    for p in paths:
+        rel = p.relative_to(home())
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(f, dest / rel)
+        if p.is_dir():
+            shutil.copytree(p, dest / rel, symlinks=True)
+        else:
+            shutil.copy2(p, dest / rel)
     return dest
 
 
 def deploy(targets: list[Path] | None = None, changes: list[Change] | None = None) -> Path | None:
-    """rehearse -> save files about to be overwritten -> apply. Returns the backup dir, if any."""
+    """rehearse -> save files about to be overwritten or removed -> apply. Returns the backup dir, if any."""
     changes = pending(targets) if changes is None else changes
     rehearse(targets)
     saved = save_overwritten(changes)
     if saved:
-        ui.info(f"  {sum(1 for c in changes if c.action == 'M')} files about to be overwritten were backed up to {saved}")
+        n = sum(1 for c in changes if c.action in ("M", "D"))
+        ui.info(f"  {n} items about to be overwritten or removed were backed up to {saved}")
     args = ["apply", "--exclude", "externals", "--force", "--no-tty"]
     if chez.cz_live(*args, *([] if not targets else ["--", *map(str, targets)])) != 0:
         raise DeployError("chezmoi apply failed")

@@ -164,7 +164,7 @@ def check_dotfiles(o: Options) -> tuple[str, str]:
 
 
 def run_dotfiles(o: Options) -> None:
-    deploy.deploy()     # rehearsal -> backup of files about to be overwritten -> chezmoi apply
+    deploy.deploy()     # rehearsal -> backup of files about to be overwritten or removed -> chezmoi apply
 
 
 # ---------------------------------------------------------------- system config (Linux /etc)

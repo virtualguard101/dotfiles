@@ -241,3 +241,24 @@ def test_install_hint_offers_release_binary(monkeypatch):
     assert "apt repo" in hint and "~/.local/bin" in hint and "github.com/cli/cli/releases" in hint
     assert doctor.install_hint("zsh") == "sudo apt install zsh"
     assert doctor.install_hint("pre-commit") == "uv tool install pre-commit"
+
+
+def test_deploy_backs_up_removed_targets(tmp_path, monkeypatch):
+    """Targets apply removes (.chezmoiremove, status D) are copied like overwritten ones; a removed
+    directory is copied whole."""
+    from dotfiles.utils import platforms
+    from dotfiles.utils.common import deploy
+    home, state = tmp_path / "home", tmp_path / "state"
+    (home / ".config/app").mkdir(parents=True)
+    (home / ".zimrc").write_text("zim\n", encoding="utf-8")
+    (home / ".config/app/a.conf").write_text("a\n", encoding="utf-8")
+    (home / ".bashrc").write_text("old\n", encoding="utf-8")
+    monkeypatch.setattr(deploy, "home", lambda: home)
+    monkeypatch.setattr(platforms, "xdg_state", lambda: state)
+    changes = [deploy.Change(" ", "D", ".zimrc"), deploy.Change(" ", "D", ".config/app"),
+               deploy.Change(" ", "M", ".bashrc"), deploy.Change(" ", "A", ".new"),
+               deploy.Change(" ", "D", ".already-gone")]
+    saved = deploy.save_overwritten(changes)
+    assert (saved / ".zimrc").read_text(encoding="utf-8") == "zim\n"
+    assert (saved / ".config/app/a.conf").read_text(encoding="utf-8") == "a\n"
+    assert (saved / ".bashrc").is_file() and not (saved / ".new").exists()
