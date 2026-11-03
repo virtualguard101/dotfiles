@@ -45,6 +45,7 @@ linux = [
   ".config/systemd/user/zeroclaw.service",
   ".config/user-dirs.dirs",
   ".config/zellij",
+  ".config/zsh/secrets.zsh",
   ".local/share/fcitx5/rime/default.custom.yaml",
   ".local/share/konsole/Sweet-Ambar-Blue.colorscheme",
   ".local/share/konsole/Sweet-Mars.colorscheme",
