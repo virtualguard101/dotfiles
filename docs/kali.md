@@ -16,7 +16,6 @@
 | 标签 | `kali`、`debian`、`gnome`。没有 `arch`、`kde`、`zeroclaw`、`taskdog` |
 | sudo | 需要密码。agent 在非交互 shell 里用不了 sudo，需要 sudo 的步骤要你自己在终端里运行 |
 | gh | 没有登录（`gh auth status` 失败），agent 不能开 PR。dev 分支改完后直接在本地 `git merge --no-ff` 合并 |
-| Arch 分区 | 挂载在 `/mnt/arch`（`@` 和 `@home`），Arch 家目录是 `/mnt/arch/home/virtualguard`。**只读取，不写入**，可以用来核对 Arch 的实际状态 |
 
 ## 2. 仓库中哪些内容在 Kali 上部署
 
