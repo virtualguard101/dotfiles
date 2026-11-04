@@ -4,7 +4,7 @@ Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](do
 
 ## 1. 需要你在终端里做的（sudo 或外部服务）
 
-- [ ] **Kali**：拉取 0.5.4 后运行一次 `uv run dotfiles backup -n`，确认 `crypttab`、`sudoers`、`sudoers.d/*` 不再被重新加密。
+- [ ] **Kali**：确认 `/etc` 备份不再重复加密。2026-11-04 在没有 sudo 的情况下验证了一部分：0.5.4 之后 `backup -n` 处理的 10 个文件都没有变化，包括 0644 的 `crypttab`（umask 002 的情况已修好）。还没验证的是只有 root 能读的 `sudoers`、`sudoers.d/*`（0440）和 WiFi 连接文件，要在终端里运行 `uv run dotfiles backup -n`（会要 sudo 密码），应当显示 `0 new or changed`。
 - [ ] **作废旧的 PyPI token**：修剪时从 `secrets.zsh` 删掉的那个注释掉的旧 `UV_PUBLISH_TOKEN`，曾以加密形式存在于仓库历史中。如果它在 PyPI 上还没有作废，去作废它。
 
 ## 2. 工具和规则的改进（走 dev，有需要时再做）
@@ -16,7 +16,7 @@ Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](do
 
 ## 3. 可选
 
-- [ ] Kali：合并或删除 3 个 `.dpkg-new` / `.dpkg-old` 文件（`dotfiles status` 会列出来）。
+- [ ] `dotfiles status` 的 "dpkg / ucf leftovers" 在 Kali 上列出 9 个文件，都不需要处理（见 kali.md 第 3 节），属于噪音。要消除的话：跳过有 diversion 的文件，以及 `ca-certificates.conf.dpkg-old`。
 
 ## 4. 已完成（摘要，细节见 git 历史）
 

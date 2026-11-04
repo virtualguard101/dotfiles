@@ -47,7 +47,7 @@
 - 4 个 `apt.conf.d` 文件已加入 `etc.exclude`：`00CDMountPoint`、`00trustcdrom`、`00aptitude` 是安装程序生成的，`02autoremove-postgresql` 由 postgresql-common 自动生成。
 - **冗余但不能排除**：`sudoers`、两个 `sudoers.d` 文件、`zsh/zshrc`、`sddm.conf.d/kde_settings.conf` 在 Kali 上和软件包里的版本完全相同。`kde_settings.conf` 是 kali-themes 的 diversion，而 Kali 上没有装 sddm，用的是 gdm3。它们在 `etc.extra` / `etc.secret` 里是为 Arch 列的，而 `etc.exclude` 两个发行版共用，排除会影响 Arch。冗余但无害；改进的办法（跳过和软件包原样一致的文件）记在待办中。
 - **重复加密**（0.5.4 已修复）：第二次 backup（ce6efa3）把内容没变的 `crypttab`、`sudoers` 和两个 `sudoers.d` 文件重新加密了一遍。原因已确认：0.5.2 靠 `chezmoi status` 判断是否变化，而 0440 用属性表示不出来，umask 002 又让 0644 被算成 0664。现在只比较解密后的内容和属性。
-- dpkg 留下的 `.dpkg-new` / `.dpkg-old` 文件有 3 个（plymouth、xfce 菜单等），`dotfiles status` 会列出来。需要的话手动合并，不合并也没有影响。
+- `dotfiles status` 会列出 9 个 `.dpkg-new` / `.dpkg-old` 文件，**都不需要合并**：8 个是 kali-themes / kali-menu 通过 diversion 换掉的软件包原版文件（plymouth、xfce 菜单和 xfconf 等，现用的是 Kali 的版本），1 个是 `update-ca-certificates` 重写 `ca-certificates.conf` 后留下的旧版本。保留它们没有影响。
 
 ## 4. 与 Arch 不同、需要特别处理的地方
 
