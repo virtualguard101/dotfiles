@@ -47,12 +47,47 @@
 
 这是 Windows 对应 Linux `/etc` 备份的部分（reference 3.9）：第二个 chezmoi 实例，源目录是 `system/windows/`，**需要在 `dotfiles.toml` 的 `[windows] registry` 里列出键才会运行**。目前只支持注册表键（每个键一个 `.reg` 文件，存成 UTF-8、LF，方便 git diff）；不支持复制文件或导出计划任务。
 
-2026-11-04 加入了两个键，都是 HKCU，不需要管理员：
+选择方法：2026-11-04 把本机 HKCU 和 Windows 的默认用户配置文件 `C:\Users\Default\NTUSER.DAT`（每个新用户的 HKCU 都从这里复制）逐值比较，再按常见设置清单检查 HKLM，挑出改过、而且可以整键导出的项。比较用的脚本和结果在本机的 `~/.local/state/dotfiles/registry-review-20261104/`（不在仓库中）。
+
+目前备份的 18 个键（`dotfiles.toml` 的 `[windows] registry`）：
 
 | 键 | 内容 |
 |---|---|
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` | 深色主题（应用和系统都是深色）、透明效果 |
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced` | 显示文件扩展名、任务栏左对齐、时钟显示秒、隐藏小组件、资源管理器打开到"此电脑"、显示电池百分比 |
+| `HKCU\...\Themes\Personalize` | 应用使用深色模式 |
+| `HKCU\...\Explorer\Advanced` | 显示扩展名、任务栏图标靠左、隐藏小组件、时钟显示秒、资源管理器打开"此电脑"、显示电池百分比、Alt+Tab 不显示 Edge 标签页、关闭"速览桌面" |
+| `HKCU\...\Explorer\HideDesktopIcons` | 桌面显示"此电脑"和"控制面板"，隐藏 OneDrive 和 WPS 云盘 |
+| `HKCU\...\Explorer\ConflictResolutionDialog` | 复制文件冲突时跳过日期和大小相同的文件 |
+| `HKCU\...\Start` | 开始菜单不显示常用应用 |
+| `HKCU\...\AdvertisingInfo`、`HKCU\...\Privacy` | 关闭广告 ID 和"个性化体验" |
+| `HKCU\...\StorageSense\Parameters\StoragePolicy` | 存储感知开启，清理临时文件，在磁盘空间不足时运行 |
+| `HKCU\Software\Microsoft\Clipboard` | 剪贴板历史开启 |
+| `HKCU\Software\Microsoft\InputMethod\Settings\CHS` | 微软拼音：云候选、自学习、动态候选排序开启，动态表情关闭 |
+| `HKCU\Control Panel\Keyboard` | 登录时 NumLock 关闭 |
+| `HKCU\Control Panel\Quick Actions\Control Center` | 快速设置面板的按钮布局 |
+| `HKCU\Control Panel\International\User Profile`、`HKCU\Keyboard Layout\Preload`、`HKCU\Software\Microsoft\CTF\SortOrder\Language` | 输入语言顺序：英语（美国）→ 中文（简体）→ 日语 |
+| `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem` | 开启长路径支持 |
+| `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System` | UAC：管理员提权不提示（`ConsentPromptBehaviorAdmin=0`），不切换到安全桌面。**降低了安全性**，恢复到新机器时也是这样 |
+| `HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings` | 更新最多可暂停 10000 天。**里面还有当前的暂停状态：功能更新和质量更新都暂停到 2046-02-21**，恢复到新机器时同样会暂停更新 |
+
+（`...` 是 `Software\Microsoft\Windows\CurrentVersion`。）
+
+恢复：
+
+- 新机器上先装好日语语言包（设置 → 时间和语言 → 语言和区域），再恢复输入语言的三个键，否则导入的语言列表和实际安装的组件不一致。也可以不恢复这三个键，用 `Set-WinUserLanguageList` 重新设置。
+- 三个 HKLM 键要在提权终端里运行 `dotfiles system-restore --apply`。在普通终端里，只要有 HKLM 键要导入，就什么都不导入并列出这些键（0.6.2）；只恢复 HKCU 键时，在命令行上写出它们，写法和 `dotfiles.toml` 相同。
+- `Start` 键里有会话 ID（`LaunchSessionId`），`Clipboard`、`InputMethod\Settings\CHS`、`UX\Settings` 里有时间戳或计数。backup 在设置没变时也可能产生这几个键的改动，直接提交即可。
+- `StoragePolicy` 下有一个 WPS 云盘的子键，名字里带本机用户的 SID。新机器上用不上，无害。
+
+改过、但**不适合整键导出**（键里有大量状态或历史记录，或者含家目录路径），重装后手动设置：
+
+| 设置 | 在哪里改 |
+|---|---|
+| 任务栏搜索显示为搜索框 | 设置 → 个性化 → 任务栏 → 搜索 |
+| 开始菜单不显示推荐 | 设置 → 个性化 → 开始 |
+| 锁屏关闭 Windows 聚焦和提示；锁屏图片由 Wallpaper Engine 设置 | 设置 → 个性化 → 锁屏界面 |
+| 关闭 OneDrive 的通知和"启动应用"提示 | 设置 → 系统 → 通知 |
+| 桌面壁纸（家目录下的图片） | 设置 → 个性化 → 背景 |
+| 开机启动项：禁用 CC Switch | 设置 → 应用 → 启动 |
 
 检查过、**决定不备份**的内容：
 
@@ -61,18 +96,16 @@
 | 用户环境变量和用户 `Path`（34 项） | `JAVA_HOME`、`PNPM_HOME`、`C_INCLUDE_PATH` 是 scoop 装软件时设的，`scoop import` 会重新生成；值里写死了家目录，提交检查会拦下 |
 | `Internet Settings` 的系统代理 | mihomo-party 开关代理时写入的运行状态，备份下来会过期 |
 | `Run` 开机启动项（HKCU 12 项、HKLM 2 项） | 都是程序自己写的，装回来会恢复 |
-| `HKLM\SOFTWARE\Policies\Microsoft\Windows` | 看过内容：全是空键和 Windows 默认模板，没有手工设置的策略 |
-| `HKCU\Control Panel\Desktop` | 含壁纸的家目录路径 |
-| `Control Panel\International`、键盘、鼠标、控制台配色、电源计划 | 都是默认值 |
-| `LongPathsEnabled`（`HKLM\...\Control\FileSystem`，值为 1） | 是 HKLM，见下面的限制；重装后用管理员终端 `reg add` 或在组策略里重新打开 |
+| `HKLM\SOFTWARE\Policies` | 全是 Windows 自带的模板，没有手工设置的策略；也没有本地组策略文件 |
+| 诊断数据只发送必需数据（`AllowTelemetry=1`）、蓝屏小内存转储（`CrashDumpEnabled=3`） | 前者是安装时的选择，后者可能是厂商预设，都没有选入 |
+| 首次登录时 Windows 自己改写的值 | 系统声音和鼠标指针的路径、按 DPI 重算的窗口字体和尺寸、强调色等，重装后会自动生成 |
 | 计划任务 | 除了 `cua-driver-serve` 以外都是程序自己创建的（OneDrive、WPS、NVIDIA、Quark 等）。工具不能导出计划任务 |
 | `hosts`（1 条自定义记录）、WSL 里的 `/etc/wsl.conf`、Git 的系统 `gitconfig`、防火墙规则（72 条未分组的启用规则） | 工具不备份文件；Git 的 `gitconfig` 由安装器生成；防火墙规则基本是程序安装时添加的 |
 
 注意：
 
-- **HKLM 键会让整个 `system-restore --apply` 要求管理员**：检查的是清单里是否有 HKLM / HKCR 键，不是命令行上指定的键。所以清单里现在只放 HKCU 键。要加 HKLM 键，要接受之后 `system-restore --apply` 总要在提权终端里运行；更好的办法是把检查改成只针对要恢复的键（见第 7 节的待办）。
 - 导入是**合并**：备份之后新增的值不会被删掉。回滚用 git 历史里的旧版 `.reg`，再 `system-restore`。
-- `Explorer\Advanced` 里有 `TaskbarStateLastRun` 这类带时间戳的值。连续导出两次（间隔 2 秒）没有差异，但跨重启没有验证过。如果 backup 在没改设置的情况下出现这个键的改动，可以直接提交，或者从清单里去掉这个键。
+- `reg export` 导出整个键，包括所有子键，所以只有子键里没有大量状态的键适合加入清单。
 - 在 Git Bash 里手动运行 `reg export 键 文件 /y` 会失败：MSYS 把 `/y` 当成路径改写。用 PowerShell，或者设 `MSYS2_ARG_CONV_EXCL='*'`。`dotfiles` 自己通过 Python 调用 `reg`，不受影响。
 
 ## 4. 与 Linux 不同、需要特别处理的地方
@@ -134,7 +167,7 @@
 - **清理**：`dotfiles clean scan`（约 17 秒）→ `dotfiles clean run` 预览默认档 → `dotfiles clean run --apply` 执行。默认档目前约 4.6 GB（含当前被跳过的）。opt 档要单独指定：网易云音乐的缓存（`AppData\Local\NetEase` 共约 20 GB，其中播放缓存约 18 GB）、回收站（约 700 MB）、nuget 全局包等。`scan` 末尾列出的残留：`~\AppData\Roaming\Cursor`（2.3 GB，Cursor 已卸载，确认没用后手动删除）。
 - **分支**：日常备份直接提交到 `main`（workflows 2.1）。工具或规则的改动在主检出中 `git switch dev`，完成后切回 `main` 再 `git merge --no-ff dev`。停在 `dev` 上时不要 `apply --apply` 或做日常 backup，因为主检出就是 chezmoi 生效中的源目录。
 - **推送**：远端是 HTTPS，要代理在运行。`pre-commit install-hooks` 下载 gitleaks 时如果超时，设 `HTTPS_PROXY=http://127.0.0.1:7897`。
-- **测试**：`uv run --with pytest python -m pytest tests`，当前 146 个通过，24 个跳过（都是 Linux 专属的 `/etc` 备份测试）。
+- **测试**：`uv run --with pytest python -m pytest tests`，当前 148 个通过，24 个跳过（都是 Linux 专属的 `/etc` 备份测试）。
 
 ## 7. 2026-11-04 在本机上的核对结果
 
@@ -146,13 +179,17 @@
 - **加密的注册表键在预览里被显示内容**：`system-restore` 靠字符串判断一个文件是不是加密的，Windows 上路径分隔符不一样，永远判断为"不是"，于是 diff 把 token 打印到了终端。改成 `Path` 比较，原来的测试 `test_restore_never_shows_the_content_of_an_encrypted_key` 现在通过。
 - **测试夹具在 Windows 上不可用**：写 TOML 时把 Windows 路径放进双引号字符串，`\U` 是非法转义，chezmoi 配置解析失败（改用正斜杠）；`os.symlink` 需要特权（改用联接）；`/home/alice` 的测试在 Windows 上被转成反斜杠路径（改用 `PurePosixPath`）；Linux 专属的 `/etc` 测试在 Windows 上跳过。改动前是 24 个失败、7 个错误，现在全部通过或跳过。
 
+以上是 0.6.1。加入 HKLM 键之前又修了一处（0.6.2）：
+
+- **清单里只要有一个 HKLM 键，恢复任何键都要管理员**：现在只看有差异、将要导入的键；要导入 HKLM 键而当前没有提权时，在导入任何键之前就拒绝，并列出这些键。另外，命令行上用 `dotfiles.toml` 中的短写法（`HKCU\...`）指定键，原来永远匹配不上（文件里是 `HKEY_CURRENT_USER\...`），现在也能匹配。
+
 未处理的事项：
 
-- `system-restore --apply` 只要清单里有 HKLM 键就要求管理员，应该改成只检查要恢复的键（`winsys.cmd_restore`）。改了之后才适合把 `LongPathsEnabled` 这类 HKLM 键加进清单。
 - `~/.wakatime.cfg` 对 `CodexSandboxUsers` 可读（4.2）。
 - VS Code 的 `settings.json` 因家目录路径没有备份（第 2 节）。
 - `clean run --apply` 没有执行过，默认档的预览是正常的。
 - `hosts`、WSL 的 `wsl.conf`、`cua-driver-serve` 计划任务：需要工具支持备份文件和导出计划任务才能收入 `system/windows`。
+- 注册表备份的 HKLM 键和"恢复后会暂停更新到 2046 年"的影响，还没有在一台新机器上实际恢复过。
 
 ## 8. 备份和回滚的位置
 

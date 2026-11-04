@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings]
+"FlightSettingsMaxPauseDays"=dword:00002710
+"PauseFeatureUpdatesStartTime"="2026-07-08T15:45:29Z"
+"PauseFeatureUpdatesEndTime"="2046-02-21T15:45:29Z"
+"PauseQualityUpdatesStartTime"="2026-07-08T15:45:29Z"
+"PauseQualityUpdatesEndTime"="2046-02-21T15:45:29Z"
+"PauseUpdatesStartTime"="2026-07-08T15:45:29Z"
+"PauseUpdatesExpiryTime"="2046-02-21T15:45:29Z"
+"ActiveHoursStart"=dword:0000000a
+"ActiveHoursEnd"=dword:00000003
+

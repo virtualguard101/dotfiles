@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Microsoft\Clipboard]
+"ShellHotKeyUsed"=dword:00000001
+"EnableClipboardHistory"=dword:00000001
+"HistoryOldItemsLastCleanupTimestamp"=hex(b):2f,1f,02,89,75,6b,dd,01
+

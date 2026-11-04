@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Microsoft\InputMethod\Settings\CHS]
+"Enable Dynamic Candidate Ranking"=dword:00000001
+"Enable Cloud Candidate"=dword:00000001
+"EnableExtraDomainType"=dword:00000001
+"SmartFuzzyPairTriggerCount"="1 2 1 0 0 1 20 0 8 0"
+"Enable self-learning"=dword:00000001
+"EnableSmartSelfLearning"=dword:00000001
+"EnableLiveSticker"=dword:00000000
+"Enable EUDP"=dword:00000001
+

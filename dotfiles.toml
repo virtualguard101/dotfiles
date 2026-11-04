@@ -170,6 +170,24 @@ hardware_bound = [
 # `dotfiles system-restore` shows the diff against the live key and --apply imports it (merging).
 # Empty = nothing happens. Example: "HKCU\\Control Panel\\Desktop" (a hive and a subkey)
 registry = [
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+  "HKCU\\Control Panel\\Keyboard",
+  "HKCU\\Software\\Microsoft\\Clipboard",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Privacy",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\StorageSense\\Parameters\\StoragePolicy",
+  "HKCU\\Software\\Microsoft\\InputMethod\\Settings\\CHS",
+  "HKCU\\Control Panel\\International\\User Profile",
+  "HKCU\\Keyboard Layout\\Preload",
+  "HKCU\\Software\\Microsoft\\CTF\\SortOrder\\Language",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ConflictResolutionDialog",
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Start",
+  "HKCU\\Control Panel\\Quick Actions\\Control Center",
+  "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+  "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+  "HKLM\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings",
 ]
 
 # ---------------------------------------------------------------- cache cleanup (dotfiles clean)

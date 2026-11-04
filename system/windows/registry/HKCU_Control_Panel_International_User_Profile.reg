@@ -1,0 +1,24 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Control Panel\International\User Profile]
+"Languages"=hex(7):65,00,6e,00,2d,00,55,00,53,00,00,00,7a,00,68,00,2d,00,48,00,\
+  61,00,6e,00,73,00,2d,00,43,00,4e,00,00,00,6a,00,61,00,00,00,00,00
+"ShowAutoCorrection"=dword:00000001
+"ShowTextPrediction"=dword:00000001
+"ShowCasing"=dword:00000001
+"ShowShiftLock"=dword:00000001
+"WindowsOverride"="zh-Hans-CN"
+
+[HKEY_CURRENT_USER\Control Panel\International\User Profile\en-US]
+"0409:00000409"=dword:00000001
+"CachedLanguageName"="@Winlangdb.dll,-1121"
+
+[HKEY_CURRENT_USER\Control Panel\International\User Profile\ja]
+"CachedLanguageName"="@Winlangdb.dll,-1230"
+"0411:{03B5835F-F03C-411B-9CE2-AA23E1171E36}{A76C93D9-5523-4E90-AAFA-4DB112F9AC76}"=dword:00000001
+"FeaturesToInstall"=dword:000006ff
+
+[HKEY_CURRENT_USER\Control Panel\International\User Profile\zh-Hans-CN]
+"0804:{81D4E9C9-1D3B-41BC-9E6C-4B40BF79E35E}{FA550B04-5AD7-411F-A5AC-CA038EC515D7}"=dword:00000001
+"CachedLanguageName"="@Winlangdb.dll,-1650"
+
