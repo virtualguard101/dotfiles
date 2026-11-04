@@ -73,7 +73,14 @@ ZSH_THEME="robbyrussell"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+# The first two ship with oh-my-zsh itself, so this stays the same on Arch and Kali.
+plugins=(git zsh-autosuggestions)
+# Kali's apt repositories have no zsh-completions package; there it is a clone in
+# $ZSH/custom/plugins (docs/kali.md 4.3). Arch installs it from pacman into
+# /usr/share/zsh/site-functions, which is already on fpath, so it is skipped there.
+[[ -d $ZSH/custom/plugins/zsh-completions ]] && plugins+=(zsh-completions)
+# Must stay last: it wraps the line editor the other plugins hook into.
+plugins+=(zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
