@@ -243,9 +243,9 @@ dotfiles config path                 文件位置
 Windows 上与 `/etc`（3.6）对应的功能：第二个 chezmoi 实例，源目录是 `system/windows/`。**需要主动开启**：`dotfiles.toml` 的 `[windows] registry` 列出要备份的项（一个 hive 加子项，例如 `HKCU\Control Panel\Desktop`），默认是空的，所以不添加就什么都不会发生（`dotfiles config add windows.registry 'HKCU\Control Panel\Desktop'`）。
 
 - `backup` 用 `reg export` 把每个项导出到 `system/windows/registry/<项>.reg`（`HKCU_Control_Panel_Desktop.reg`），保存为 UTF-8 文本、LF 换行，方便 git 比较。含有密钥扫描命中内容的项加密保存。内容和加密方式都没有变的文件保持不动，所以不会重复加密。导出失败的项只给警告；从清单里去掉的项对应的文件只提示，从不删除。
-- `system-restore` 显示每个已保存的项和当前注册表的差异（加密的项只报告有差异）；`--apply` 用 `reg import` 导入。导入是**合并**：备份之后新增的值和子项会保留。导入 `HKLM` / `HKCR` 需要管理员权限的 shell。在命令行上写出项（或文件名），就只恢复这些。
+- `system-restore` 显示每个已保存的项和当前注册表的差异（加密的项只报告有差异）；`--apply` 用 `reg import` 导入。导入是**合并**：备份之后新增的值和子项会保留。导入 `HKLM` / `HKCR` 需要管理员权限的 shell；只看有差异、将要导入的项，所以清单里有 `HKLM` 项时，`HKCU` 项仍可以在普通 shell 中恢复。在普通 shell 中要导入 `HKLM` / `HKCR` 项时，不导入任何项，并列出这些项。在命令行上写出项（写法和 `dotfiles.toml` 相同，例如 `HKCU\Control Panel\Keyboard`）或文件名，就只恢复这些。
 - `status` 列出这些项以及各自是否已备份；`backup -n` 预览。
-- 2026-11-04 在一台真实的 Windows 上运行过（一个含 Unicode、二进制和多字符串值的临时键走完了备份、修改、预览、导入、复核）；实际使用的键见 [win.md](win.md) 第 3 节。一个限制：清单里只要有一个 `HKLM` / `HKCR` 键，`system-restore --apply` 就对**所有**键要求管理员，即使命令行上只指定了 `HKCU` 键。
+- 2026-11-04 在一台真实的 Windows 上运行过（一个含 Unicode、二进制和多字符串值的临时键走完了备份、修改、预览、导入、复核）；实际使用的键见 [win.md](win.md) 第 3 节。
 
 ---
 

@@ -239,3 +239,8 @@ access to SYSTEM and Administrators only), `restrict_acl` refuses and `audit` ab
 unknown; `system-restore` tells an encrypted registry file apart by `Path` (chezmoi prints forward
 slashes, so the string comparison never matched and an encrypted key's content showed up in the diff).
 The tests run on Windows: directory links are junctions there, and the `/etc` tests are skipped.
+
+0.6.2: `system-restore` collects the registry keys that differ first and asks for elevation only when
+one about to be imported is under `HKLM` / `HKCR` (before, a single `HKLM` key in the list made every
+restore need it), refusing before anything is imported; keys on the command line may use the short form
+from `dotfiles.toml` (`HKCU\...`).
