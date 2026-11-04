@@ -70,6 +70,14 @@
 
 - Kali 的 `~/.zprofile` 会用 `emulate sh` 加载 `.profile`。在 POSIX 模式下，`.` 一个不存在的文件会让登录 shell 直接退出，GDM 登录可能因此失败。所以共用的 shell 启动文件里，每个 `.` / `source` 都要先检查文件是否存在（cargo、asdf、go 等工具 Kali 上不一定有）。
 - `.zshrc` 是明文。token 在加密的 `~/.config/zsh/secrets.zsh` 中，`.zshrc` 加载它之前也会先检查它是否存在。
+- 插件：`zsh-autosuggestions` 和 `zsh-syntax-highlighting` 用 oh-my-zsh 自带的（`.zshrc` 的 `plugins` 里启用），apt 装的那两个包不会被自动加载，留着无害。`zsh-completions` 的 Kali/Debian 源里没有这个包，要克隆到 `~/.oh-my-zsh/custom/plugins/zsh-completions`：
+
+  ```zsh
+  git clone --depth=1 https://github.com/zsh-users/zsh-completions \
+    ~/.oh-my-zsh/custom/plugins/zsh-completions
+  ```
+
+  `.zshrc` 用 `[[ -d ... ]]` 判断目录存在才启用，所以 Arch 上不会报 `plugin not found`（Arch 的补全由 pacman 包放进 `/usr/share/zsh/site-functions`，本来就在 `fpath` 里）。
 
 ### 4.4 权限
 
@@ -88,6 +96,7 @@
 | IDA Pro 9.5 | `~/.local/share/ida-pro-9.5`、`~/.idapro`、`~/.local/bin/idapro`，以及 .desktop 文件。路径已改为 Kali 的家目录；IDAPython 用 `idapyswitch` 指向了 `libpython3.14`。遗留问题：`ida.reg` 中的许可证路径仍指向 Arch，每次启动都会提示一次。在 GUI 中通过 Help → License manager 重新选择一次许可证文件即可消除 |
 | GNOME 设置 | 清空了 `switch-input-source` / `-backward`；启用 kimpanel；等宽字体 JetBrainsMono Nerd Font Mono 10；`caps:swapescape` 是 Kali 原有的设置。夜灯开过，现在是关闭的 |
 | gnome-terminal | "Arch Konsole" 配置方案，见 4.2 |
+| `zsh-completions` | `~/.oh-my-zsh/custom/plugins/zsh-completions`，用 `git clone --depth=1 https://github.com/zsh-users/zsh-completions` 创建。apt 源里没有这个包，见 4.3 |
 | age 私钥 | `~/.config/chezmoi/key.txt`（600）。不在仓库中，要离线保存 |
 
 ## 6. 在 Kali 上的日常操作
