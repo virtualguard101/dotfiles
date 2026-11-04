@@ -13,7 +13,7 @@
 | 桌面 | KDE Plasma 6，Wayland |
 | 用户 | 用户名和家目录与 Kali 不同，uid 相同（1000），umask 是 **022**（Kali 是 002） |
 | 语言 | 系统 locale 是 `en_US.UTF-8`；KDE 会话通过 `~/.config/plasma-localerc` 设为中文：`LANG=zh_CN.UTF-8`，`LANGUAGE=zh_CN:en_US` |
-| 标签 | `arch`、`kde`、`taskdog`、`zeroclaw`。没有 `gnome`（找不到 gnome-shell），否则 Kali 的 fcitx5 自启动项会部署到这里 |
+| 标签 | `arch`、`kde`、`konsole`、`taskdog`、`zeroclaw`。没有 `gnome`（找不到 gnome-shell），否则 Kali 的 fcitx5 自启动项会部署到这里。`konsole` 是 0.6.0 新增的：拉取之后要重新运行 `chezmoi init`（`dotfiles restore --apply --only config`），在那之前 Konsole 的配置被暂时忽略（文件不会被删除），`doctor` 会提示 |
 | 终端 | Konsole，默认配置方案"配置方案 1"：Sweet-Ambar-Blue 配色，JetBrainsMono Nerd Font Mono 10 Medium Italic，150x40 |
 | sudo | 需要密码。agent 在非交互 shell 里用不了 sudo，读取 root 才能读的 `/etc` 文件、装卸软件包要你自己在终端里运行 |
 | gh | 已登录，可以开 PR；不开 PR 时在本地 `git merge --no-ff dev` 合并 |
@@ -25,7 +25,8 @@
 
 | 规则 | 对 Arch 的影响 |
 |---|---|
-| `[requires] kde` | KDE 和 Konsole 的配置只在这里部署：kdeglobals、kwinrc、kglobalshortcutsrc、kxkbrc、konsolerc、dolphinrc、mimeapps.list、konsole 配色和配置方案、`kwallet_auto_unlock.service` |
+| `[requires] kde` | KDE 的配置只在这里部署：kdeglobals、kwinrc、kglobalshortcutsrc、kxkbrc、dolphinrc、mimeapps.list、`kwallet_auto_unlock.service` |
+| `[requires] konsole` | Konsole 的配置：konsolerc、konsole 配色和配置方案 |
 | `[requires] arch` | `.config/user-dirs.dirs`（Kali 保留自己的版本） |
 | `[requires] zeroclaw` / `taskdog` | `zeroclaw.service`、`taskdog-server.service`，两个都已 enable。标签按 `~/.cargo/bin/zeroclaw`、`~/.local/bin/taskdog-server` 是否存在检测；卸载其中一个程序后重新运行 `chezmoi init`，对应的单元就不再部署 |
 | `[requires] gnome` | 不部署 `.config/autostart/org.fcitx.Fcitx5.desktop` |
@@ -44,11 +45,11 @@
 
 ### 3.2 终端和剪贴板
 
-- Konsole 的配置随 `kde` 标签部署。zellij 在这里不加 `copy_command`（模板只在 `gnome` 标签加 `wl-copy`），复制走 OSC 52。Konsole 26.08 是否放行 OSC 52 写剪贴板，本文档编写时没有在终端里核实；如果在 zellij 中选中后粘贴不出来，在 Konsole 配置方案的"高级"中检查剪贴板相关的设置，或者像 Kali 一样让模板在这里也加上 `copy_command "wl-copy"`。
+- Konsole 的配置随 `konsole` 标签部署。zellij 在这里不加 `copy_command`（模板只在 `gnome` 标签加 `wl-copy`），复制走 OSC 52。Konsole 26.08 是否放行 OSC 52 写剪贴板，本文档编写时没有在终端里核实；如果在 zellij 中选中后粘贴不出来，在 Konsole 配置方案的"高级"中检查剪贴板相关的设置，或者像 Kali 一样让模板在这里也加上 `copy_command "wl-copy"`。
 
 ### 3.3 `/etc`
 
-- `etc.extra` / `etc.secret` 中的大部分条目是为 Arch 列的。Kali 上不存在的条目不收入；但 Kali 上存在、内容和软件包原样一致的（sudoers、`zsh/zshrc` 等）也会收进 `system/kali/etc`，见 kali.md 第 3 节。
+- `etc.extra` / `etc.secret` 中的大部分条目是为 Arch 列的。Kali 上不存在的条目不收入。列出的文件如果和软件包原样一致，就不再备份（0.6.0）：`system/arch/etc` 中这样的条目会在下一次 `backup` 时清理。从 Kali 只读核对过：`/etc/environment` 和 filesystem 软件包里的版本一致，会被清理；`crypttab`、`sudoers`、`mihomo/config.yaml` 只有 root 能读，要在终端里用 sudo 运行 `backup` 才能验证，是软件包原样才清理，改过的保留。其余 15 个被改过、24 个不由 pacman 管理的条目都保留。
 - 不要为了 Kali 往 `etc.exclude` 里加 Arch 也有的路径：`exclude` 两边共用。
 - `sudoers` 是 0440。0.5.4 之前，每次 backup 都会把它和其他 0440 / 0640 文件重新加密一遍，0.5.4 修复了这个问题。
 

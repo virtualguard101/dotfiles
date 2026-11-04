@@ -152,6 +152,82 @@ def dpkg_modified(admin: Path, root: Path = Path("/")) -> list[str]:
     return sorted(modified)
 
 
+# ---------------------------------------------------------------- files identical to the package's
+
+PACMAN_DB = Path("/var/lib/pacman")
+
+
+def pacman_backups(db: Path) -> dict[str, str]:
+    """The md5 pacman recorded for every backup file (its conffiles): <db>/local/*/files, section
+    %BACKUP%, lines `etc/foo.conf<TAB><md5>`. This is what pacman -Qii compares `[modified]` with."""
+    out: dict[str, str] = {}
+    for files in (db / "local").glob("*/files"):
+        try:
+            lines = files.read_text(encoding="utf-8", errors="surrogateescape").splitlines()
+        except OSError:
+            continue
+        if "%BACKUP%" not in lines:
+            continue
+        for line in lines[lines.index("%BACKUP%") + 1:]:
+            if not line.strip():
+                break
+            name, _, digest = line.partition("\t")
+            if re.fullmatch(r"[0-9a-f]{32}", digest):
+                out["/" + name] = digest
+    return out
+
+
+def dpkg_digests(admin: Path, wanted: set[str]) -> dict[str, str]:
+    """The md5 dpkg recorded for these files: conffiles from <admin>/status, others from
+    <admin>/info/<package>.md5sums (`<md5>  <path without the leading />`)."""
+    try:
+        div = (admin / "diversions").read_text(encoding="utf-8", errors="replace") if (admin / "diversions").is_file() else ""
+        out = {p: d for p, d in dpkg_conffiles((admin / "status").read_text(encoding="utf-8", errors="replace"),
+                                               dpkg_diversions(div)).items() if p in wanted}
+    except OSError:
+        out = {}
+    rest = {p[1:] for p in wanted - out.keys()}
+    if rest:
+        for sums in (admin / "info").glob("*.md5sums"):
+            try:
+                text = sums.read_text(encoding="utf-8", errors="surrogateescape")
+            except OSError:
+                continue
+            for line in text.splitlines():
+                digest, _, name = line.partition("  ")
+                if name in rest and re.fullmatch(r"[0-9a-f]{32}", digest):
+                    out["/" + name] = digest
+    return out
+
+
+def package_original(paths, root: Path = Path("/")) -> set[str]:
+    """Of these /etc files, the ones verified to be exactly what their package installed. Only a
+    verified match counts: no record (not a package file, or pacman does not track it), a missing
+    file, or a root-only file that cannot be hashed (no sudo) all leave a file out."""
+    wanted = set(paths)
+    if not wanted:
+        return set()
+    if platforms.have("pacman"):
+        recorded = {p: d for p, d in pacman_backups(PACMAN_DB).items() if p in wanted}
+    elif platforms.have("dpkg-query"):
+        recorded = dpkg_digests(DPKG_ADMIN, wanted)
+    else:
+        return set()
+    original, unreadable = set(), []
+    for path, digest in recorded.items():
+        actual = _md5(root / path.lstrip("/"))
+        if actual == "":
+            unreadable.append(path)
+        elif actual == digest:
+            original.add(path)
+    if unreadable and root == Path("/") and Sudo.ensure():
+        for line in platforms.run(["sudo", "md5sum", "--", *unreadable]).stdout.splitlines():
+            digest, _, path = line.partition("  ")
+            if recorded.get(path) == digest:
+                original.add(path)
+    return original
+
+
 def _files_under(path: str) -> list[str]:
     p = Path(path)
     if p.is_file() and not p.is_symlink():
@@ -169,7 +245,7 @@ def _files_under(path: str) -> list[str]:
 
 
 def collect_targets() -> dict[str, str]:
-    """path -> plain | secret."""
+    """path -> plain | secret. Files identical to their package's version are left out."""
     owned = _owned_by_packages()
     exclude = _list("exclude")
     out: dict[str, str] = {}
@@ -186,7 +262,33 @@ def collect_targets() -> dict[str, str]:
         for f in _files_under(p):
             if not _match(f, exclude):
                 out[f] = "secret"
+    # a listed file that is exactly the package's own is restored by the package: nothing to back up
+    for f in package_original(out):
+        del out[f]
     return dict(sorted(out.items()))
+
+
+DPKG_LEFTOVERS = (".dpkg-dist", ".dpkg-new", ".dpkg-old", ".ucf-dist", ".ucf-new", ".ucf-old")
+# rewritten by update-ca-certificates on every run: its .dpkg-old is an old generated copy, nothing to merge
+TOOL_GENERATED = {"/etc/ca-certificates.conf"}
+
+
+def find_leftovers(root: Path, suffixes: tuple[str, ...], skip_bases: set[str]) -> tuple[list[str], int]:
+    """Files under root ending in one of the suffixes -> (the ones worth a look, how many were
+    left out). Left out: leftovers of a path in skip_bases (stock files another package diverted:
+    Kali's kali-themes / kali-menu keep the original there; files a tool regenerates), which are
+    never your edit to merge."""
+    found, hidden = [], 0
+    for dirpath, _, files in sorted(os.walk(root, onerror=lambda e: None)):
+        for name in sorted(files):
+            if not name.endswith(suffixes):
+                continue
+            path = os.path.join(dirpath, name)
+            if path.rsplit(".", 1)[0] in skip_bases:
+                hidden += 1
+            else:
+                found.append(path)
+    return found, hidden
 
 
 def status() -> None:
@@ -194,16 +296,24 @@ def status() -> None:
     for path, kind in collect_targets().items():
         ui.info(f"  {ui.pad(path, 56)}{kind}")
     ui.section("/etc pending items")
+    skip: set[str] = set()
     if platforms.have("pacman"):
         ui.info("pacnew / pacsave (merge with pacdiff):")
         suffixes: tuple[str, ...] = (".pacnew", ".pacsave")
     else:
         ui.info("dpkg / ucf leftovers (new or old package versions of a conffile you changed; merge by hand):")
-        suffixes = (".dpkg-dist", ".dpkg-new", ".dpkg-old", ".ucf-dist", ".ucf-new", ".ucf-old")
-    for dirpath, _, files in sorted(os.walk("/etc", onerror=lambda e: None)):
-        for name in sorted(files):
-            if name.endswith(suffixes):
-                ui.info(f"  {os.path.join(dirpath, name)}")
+        suffixes = DPKG_LEFTOVERS
+        try:
+            skip = set(dpkg_diversions((DPKG_ADMIN / "diversions").read_text(encoding="utf-8", errors="replace"))) | TOOL_GENERATED
+        except OSError:
+            skip = set(TOOL_GENERATED)
+    found, hidden = find_leftovers(Path("/etc"), suffixes, skip)
+    for path in found:
+        ui.info(f"  {path}")
+    if not found:
+        ui.info("  none")
+    if hidden:
+        ui.dim(f"  ({hidden} more not listed: stock files another package diverted, or copies of a file a tool regenerates)")
     if platforms.have("etckeeper") and not Path("/etc/.git").exists():
         ui.info("etckeeper is installed but not initialized: /etc is backed up in system/; consider removing etckeeper to avoid duplication")
 
@@ -274,7 +384,8 @@ def backup(run) -> None:
 
     n = changed = 0
     with _Stage() as stage:
-        for path, kind in collect_targets().items():
+        targets = collect_targets()
+        for path, kind in targets.items():
             dst = stage.dir / path.lstrip("/")
             dst.parent.mkdir(parents=True, exist_ok=True)
             if os.access(path, os.R_OK):
@@ -312,7 +423,34 @@ def backup(run) -> None:
                     ui.warn(f"chezmoi secret scan hit; switching to encrypted: {path}")
                     stage.cz(*flags, "add", "--encrypt", "--", str(dst))
             changed += 1
-    ui.ok(f"processed {n} /etc files, {changed} new or changed (staging area was on tmpfs; now removed)")
+        dropped = _drop_stale(stage, run, targets)
+    ui.ok(f"processed {n} /etc files, {changed} new or changed, {dropped} dropped "
+          "(staging area was on tmpfs; now removed)")
+
+
+def _drop_stale(stage: _Stage, run, targets: dict[str, str]) -> int:
+    """Entries in system/<distro> that this run no longer collects. A file that is now exactly its
+    package's own is removed (the package restores it); any other entry stays, with a note: it may
+    be excluded or deleted on purpose, or just unreadable without sudo."""
+    r = stage.cz("managed", "--include", "files", "--path-style", "absolute")
+    prefix = str(stage.dir)
+    stale = sorted("/" + t[len(prefix):].lstrip("/") for t in r.stdout.splitlines() if t.startswith(prefix))
+    stale = [t for t in stale if t not in targets]
+    original = package_original(stale)
+    dropped = 0
+    for path in stale:
+        if path not in original:
+            ui.note(f"in system/ but not collected this run (excluded, deleted, or unreadable without sudo): {path}")
+            continue
+        ui.info(f"  drop     {path} (identical to the package's version)")
+        dst = stage.dir / path.lstrip("/")
+        if stage.cz(*run.flags, "forget", "--force", "--", str(dst)).ok:
+            dropped += 1
+            src = stage.source
+            for parent in sorted({p for p in src.rglob("*") if p.is_dir()}, key=lambda p: len(p.parts), reverse=True):
+                if not any(parent.iterdir()):
+                    parent.rmdir()
+    return dropped
 
 
 def available_distros() -> list[str]:

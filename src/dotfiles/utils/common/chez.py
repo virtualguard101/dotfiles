@@ -28,13 +28,16 @@ def source_state_dir() -> Path:
 
 def system_root() -> Path:
     """system/: system configuration outside ~, one subdirectory per distro (system/<distro>/etc);
-    system/windows/ is reserved for Windows system settings."""
+    system/windows/ holds Windows system settings (registry keys)."""
     return repo() / "system"
 
 
 def system_source_dir(distro: str | None = None) -> Path:
-    """Source dir of the separate chezmoi instance for /etc on this distro (or the given one)."""
+    """Source dir of the separate chezmoi instance for system config: /etc on this distro (or the
+    given one), or the registry keys on Windows."""
     if distro is None:
+        if platforms.IS_WINDOWS:
+            return system_root() / "windows"
         from dotfiles.utils.platforms import linux as linplat
         distro = linplat.distro()
     return system_root() / distro
@@ -198,6 +201,28 @@ def register_platform(target: str, platform: str, dry: bool) -> bool:
 
 
 _TAG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def local_tags_file() -> Path:
+    """Tags set by hand for this machine; read by .chezmoi.toml.tmpl at `chezmoi init`."""
+    return platforms.home() / ".config" / "chezmoi" / "tags"
+
+
+def read_local_tags(path: Path | None = None) -> tuple[list[str], list[str]]:
+    """The local tags file -> (tags the template accepts, lines it ignores). The same rules as the
+    template: trimmed, lowercased, blank lines and # comments skipped."""
+    path = path or local_tags_file()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return [], []
+    tags, ignored = [], []
+    for line in lines:
+        line = line.strip().lower()
+        if not line or line.startswith("#"):
+            continue
+        (tags if _TAG.match(line) else ignored).append(line)
+    return tags, ignored
 
 
 def check_platforms() -> list[str]:

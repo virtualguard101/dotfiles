@@ -69,6 +69,7 @@ SCHEMA: list[Key] = [
     Key("etc", "secret", "list", "/etc paths always encrypted"),
     Key("etc", "exclude", "list", "/etc paths and globs never backed up (account databases, host keys, generated files)"),
     Key("etc", "hardware_bound", "list", "restore shows a diff only; installed only when named on the command line"),
+    Key("windows", "registry", "list", "Windows: registry keys (HKCU\\Software\\..., a hive and a subkey) exported into system/windows/registry by backup"),
     Key("clean", "disabled", "list", "cleanup target ids that are never run or listed"),
     Key("clean", "opt", "list", "target ids moved from the default tier to opt (run only when named)"),
     Key("clean", "paths", "tables", "extra path-only targets: id, tier (default|opt), desc, paths (~/ allowed), optional os",

@@ -100,7 +100,7 @@ Existing machines therefore never need to move their key. When written: Linux pe
 
 4. **Add candidates**: unmanaged files from the current platform's candidate list are added to chezmoi and registered under the current platform in `platforms.toml`.
 
-5. **/etc** (Linux, skipped with `--no-system`): see [3.6](#36-linux-etc).
+5. **System config** (skipped with `--no-system`): `/etc` on Linux, see [3.6](#36-linux-etc); registry keys on Windows, see [3.9](#39-windows-registry-keys).
 
 6. **Package manifests**: Arch-like Linux writes `packages/archpkg.txt` (`pacman -Qqe`), Debian-like Linux `packages/aptpkg.txt` (`apt-mark showmanual`, sorted); Windows writes `scoopfile.json`, `winget.json` (normalized so they only change when the package set changes) and `winget-unavailable.txt`.
 
@@ -153,10 +153,11 @@ Within one OS, machines still differ: a KDE config has no business on a GNOME ma
 
 ```toml
 [requires]
-kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
+kde = [".config/kwinrc", ".config/kdeglobals"]
+konsole = [".config/konsolerc", ".local/share/konsole"]
 ```
 
-- **A machine's tags** are detected at `chezmoi init` by `home/.chezmoi.toml.tmpl` and written to the config as `[data] tags`: the os-release `ID` and `ID_LIKE` words (e.g. `arch`; `kali`, `debian`), `kde` when `plasmashell` is on `PATH`, `gnome` when `gnome-shell` is, and a **program tag** when the binary a target runs exists (`zeroclaw`: `~/.cargo/bin/zeroclaw`, `taskdog`: `~/.local/bin/taskdog-server`, the `ExecStart` of their user units). `dotfiles doctor` shows them. Rerun `chezmoi init` (or `dotfiles restore --apply --only config`) after installing or removing a desktop environment or one of those programs.
+- **A machine's tags** are detected at `chezmoi init` by `home/.chezmoi.toml.tmpl` and written to the config as `[data] tags`: the os-release `ID` and `ID_LIKE` words (e.g. `arch`; `kali`, `debian`), `kde` when `plasmashell` is on `PATH`, `gnome` when `gnome-shell` is, `xfce` when `xfce4-session` is, `konsole` when `konsole` is, and a **program tag** when the binary a target runs exists (`zeroclaw`: `~/.cargo/bin/zeroclaw`, `taskdog`: `~/.local/bin/taskdog-server`, the `ExecStart` of their user units). Tags of your own go in `~/.config/chezmoi/tags`, one per line (lowercase letters, digits and hyphens; blank lines and `#` comments are ignored); that file stays on the machine, outside the repo. `dotfiles doctor` shows all of them, and warns about lines of the tags file that are not valid tags and so are ignored. Rerun `chezmoi init` (or `dotfiles restore --apply --only config`) after installing or removing a desktop environment or one of those programs, or after editing the tags file.
 - Targets not listed in `[requires]` deploy on every machine of their OS, so most targets need no tag. A target with a tag the machine lacks is ignored like another platform's target (including parent directories used only by such targets).
 - A config written before tags existed applies no `[requires]` filtering; `doctor` reports it until the config is regenerated.
 - `check` validates tag names (`[a-z0-9-]`) and that each entry overlaps an entry in `[platforms]`.
@@ -200,7 +201,11 @@ Collected targets (lists in `dotfiles.toml` `[etc]`):
 
 - paths in `secret`, always encrypted; files not world-readable and files matching secret patterns are encrypted too. A file that already matches its backup (the decrypted content, plus the attributes `chezmoi add` would record: encryption, `private_`, `readonly_`, `executable_`) is left as it is. Exact modes are not compared: attributes cannot express 0440 or 0640, and chezmoi derives the rest from the umask (0664 under umask 002). Otherwise age output differs on every encryption, so re-adding it would show every encrypted file as modified after each backup;
 
+- a listed file (`extra` or `secret`) that is **exactly what its package installed** is not collected: the package restores it. Only a verified match counts. pacman: a backup file whose md5 equals the one in `/var/lib/pacman/local/*/files`. dpkg: a conffile (`/var/lib/dpkg/status`) or a file in `info/*.md5sums` with the same md5. A file with no such record, a missing file, and a root-only file that cannot be hashed without `sudo` all stay in the backup. `backup` removes entries of this kind that are already in `system/<distro>/`; any other entry that is no longer collected (excluded, deleted, unreadable without sudo) only gets a note and is never deleted. One exception is Kali's `kali-themes`, which ships its `/etc` files under `/usr/share/kali-themes/etc/` and copies them, so dpkg has no md5 for the `/etc` path and `sddm.conf.d/kde_settings.conf` is still backed up;
+
 - everything in `exclude` is excluded: account databases, `machine-id`, SSH host keys, `*.pacnew`, `*.dpkg-dist` and the other dpkg / ucf leftovers, `*.bak`, etc. Entries that do not exist on a distro (sddm, mkinitcpio, pacman hooks on Kali; `/etc/apt` on Arch) contribute nothing, so one list serves every distro.
+
+`dotfiles status` ends with the pending items: `.pacnew` / `.pacsave` files, or on dpkg systems the `.dpkg-*` / `.ucf-*` leftovers. Leftovers of stock files another package diverted (Kali's `kali-themes` / `kali-menu`) and of `ca-certificates.conf`, which `update-ca-certificates` rewrites, are never your edits to merge, so they are left out and only counted.
 
 Restore (`system-restore`, and restore's `system` step):
 
@@ -237,6 +242,15 @@ Writes edit the file line by line: arrays stay one item per line, hand-written c
 are kept, and the result is re-parsed and validated before it replaces the file. Arrays of tables
 (`[[clean.paths]]`, `[[clean.<os>.leftovers]]`) are edited by hand. The file is shared by both
 platforms; commit it like any other data change ([workflows.md](workflows.md)).
+
+### 3.9 Windows registry keys
+
+The Windows counterpart of `/etc` (3.6): a second chezmoi instance whose source dir is `system/windows/`. It is **opt-in**: `dotfiles.toml` `[windows] registry` lists the keys (a hive and a subkey, e.g. `HKCU\Control Panel\Desktop`) and is empty by default, so nothing happens until you add one (`dotfiles config add windows.registry 'HKCU\Control Panel\Desktop'`).
+
+- `backup` exports each key with `reg export` into `system/windows/registry/<key>.reg` (`HKCU_Control_Panel_Desktop.reg`), as UTF-8 text with LF line ends so git can diff it. A key holding something the secret scan flags is stored encrypted. A file whose content and encryption did not change is left alone, so nothing is re-encrypted. A key that cannot be exported is a warning; a file whose key was taken off the list gets a note and is never deleted.
+- `system-restore` shows a diff between each stored key and the live one (an encrypted one only reports that it differs); `--apply` imports it with `reg import`. Import **merges**: values and subkeys added since the backup stay. Importing into `HKLM` / `HKCR` needs an elevated shell. Name keys (or file names) on the command line to restore only those.
+- `status` lists the keys and whether each is backed up; `backup -n` previews.
+- Not yet run on a real Windows machine, see [8](#8-known-limitations).
 
 ---
 
@@ -606,6 +620,8 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 - **The Python version has never actually run on Windows**: the Windows cleanup targets, backup (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the original PowerShell scripts (or written fresh) and are only tested at the filesystem level on Linux, plus syntax parsing. The original scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`, `status` and `restore` (without `--apply`) to confirm the results.
 
 - **scoop comes from its official installer script**: there is no winget package. `bootstrap.ps1 --apply` downloads the installer to a temporary file, prints its path so you can read it, and runs it only after you confirm (`--yes` skips the question); it refuses an administrator session, as scoop does. restore's packages step stops with instructions while scoop is missing.
+
+- **The registry backup ([3.9](#39-windows-registry-keys)) has only run against a fake `reg`**: the export and import calls, the UTF-16 handling and the elevation check follow `reg`'s documented behaviour. Try it with one harmless key first: add it, then `backup -n`, `backup`, and `system-restore` without `--apply`.
 
 - **One `/etc` backup per distro**: two machines with the same distro share `system/<distro>/`. Back up `/etc` on one of them only (use `backup --no-system` on the other).
 

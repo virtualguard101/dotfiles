@@ -208,6 +208,10 @@ def check_chezmoi(rep: Report) -> None:
                 ", ".join(tags) or "(none)",
                 "" if want is None or sorted(tags) == sorted(want)
                 else f"detected now: {', '.join(want)}; rerun chezmoi init (dotfiles restore --apply --only config)")
+    mine, ignored = chez.read_local_tags()
+    if mine or ignored:
+        rep.add(s, "local tags", "warn" if ignored else "ok", f"{chez.local_tags_file()}: {', '.join(mine) or '(none)'}",
+                f"ignored, not a valid tag (lowercase letters, digits, hyphens): {', '.join(ignored)}" if ignored else "")
     rep.add(s, "encryption", "ok" if cfg.get("encryption") == "age" else "fail", cfg.get("encryption", "not set"))
     identity = Path((cfg.get("age") or {}).get("identity") or (exp or {}).get("age", {}).get("identity", ""))
     if not identity.name:

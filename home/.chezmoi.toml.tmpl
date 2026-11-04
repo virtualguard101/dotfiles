@@ -16,9 +16,23 @@
 {{- end -}}
 {{- if lookPath "plasmashell" }}{{ $tags = append $tags "kde" }}{{ end -}}
 {{- if lookPath "gnome-shell" }}{{ $tags = append $tags "gnome" }}{{ end -}}
+{{- if lookPath "xfce4-session" }}{{ $tags = append $tags "xfce" }}{{ end -}}
+{{- if lookPath "konsole" }}{{ $tags = append $tags "konsole" }}{{ end -}}
 {{- /* program tags: the binary a target runs (a user unit's ExecStart, relative to ~) exists */ -}}
 {{- range $tag, $bin := dict "zeroclaw" ".cargo/bin/zeroclaw" "taskdog" ".local/bin/taskdog-server" -}}
 {{-   if stat (joinPath $.chezmoi.homeDir $bin) }}{{ $tags = append $tags $tag }}{{ end -}}
+{{- end -}}
+{{- /*
+  Tags you set by hand: ~/.config/chezmoi/tags (one per line, lowercase letters, digits and
+  hyphens; blank lines and # comments are ignored, so are lines that are not a valid tag).
+  The file stays on this machine, outside the repo.
+*/ -}}
+{{- $local := joinPath .chezmoi.homeDir ".config" "chezmoi" "tags" -}}
+{{- if stat $local -}}
+{{-   range splitList "\n" (include $local) -}}
+{{-     $line := . | trim | lower -}}
+{{-     if regexMatch "^[a-z0-9][a-z0-9-]*$" $line }}{{ $tags = append $tags $line }}{{ end -}}
+{{-   end -}}
 {{- end -}}
 {{- $identity := joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt" -}}
 {{- range list (joinPath .chezmoi.homeDir "secret" "chezmoi_age_key.txt") (joinPath .chezmoi.homeDir "vg101" "secret" "chezmoi_age_key.txt") -}}

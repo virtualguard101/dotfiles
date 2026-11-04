@@ -13,7 +13,7 @@
 | 桌面 | GNOME，Wayland（另外装了 XFCE，没有在用） |
 | 用户 | 用户名和家目录与 Arch 不同，uid 相同（1000），umask 是 **002**（Arch 是 022） |
 | 语言 | 系统 locale 是 `en_HK.UTF-8`，没有生成 zh_CN locale |
-| 标签 | `kali`、`debian`、`gnome`。没有 `arch`、`kde`、`zeroclaw`、`taskdog` |
+| 标签 | `kali`、`debian`、`gnome`、`xfce`（装了 XFCE，目前没有目标用到它）。没有 `arch`、`kde`、`konsole`、`zeroclaw`、`taskdog`。自己的标签可以写在 `~/.config/chezmoi/tags`（每行一个），`doctor` 会显示 |
 | sudo | 需要密码。agent 在非交互 shell 里用不了 sudo，需要 sudo 的步骤要你自己在终端里运行 |
 | gh | 没有登录（`gh auth status` 失败），agent 不能开 PR。dev 分支改完后直接在本地 `git merge --no-ff` 合并 |
 
@@ -23,7 +23,8 @@
 
 | 规则 | 对 Kali 的影响 |
 |---|---|
-| `[requires] kde` | KDE 和 Konsole 的配置**不部署**（kdeglobals、kwinrc、kglobalshortcutsrc、kxkbrc、konsolerc、dolphinrc、mimeapps.list、konsole 配色、kwallet_auto_unlock.service） |
+| `[requires] kde` | KDE 的配置**不部署**（kdeglobals、kwinrc、kglobalshortcutsrc、kxkbrc、dolphinrc、mimeapps.list、kwallet_auto_unlock.service） |
+| `[requires] konsole` | Konsole 的配置（konsolerc、配色和配置方案）**不部署**，因为没装 konsole，见 4.2 |
 | `[requires] arch` | `.config/user-dirs.dirs` **不部署**。Kali 保留自己的版本，因为 Kali 上 Templates、Public、Music、Videos 指向 `~` |
 | `[requires] gnome` | **只在 Kali 上部署**：`.config/autostart/org.fcitx.Fcitx5.desktop`，见 4.1 |
 | `[requires] zeroclaw` / `taskdog` | 两个用户单元**不部署**（Kali 上没有这两个程序）。原来部署过的单元文件已移到 `~/.local/state/dotfiles/kali-20261104-011810/` |
@@ -45,9 +46,9 @@
 排除和已知问题：
 
 - 4 个 `apt.conf.d` 文件已加入 `etc.exclude`：`00CDMountPoint`、`00trustcdrom`、`00aptitude` 是安装程序生成的，`02autoremove-postgresql` 由 postgresql-common 自动生成。
-- **冗余但不能排除**：`sudoers`、两个 `sudoers.d` 文件、`zsh/zshrc`、`sddm.conf.d/kde_settings.conf` 在 Kali 上和软件包里的版本完全相同。`kde_settings.conf` 是 kali-themes 的 diversion，而 Kali 上没有装 sddm，用的是 gdm3。它们在 `etc.extra` / `etc.secret` 里是为 Arch 列的，而 `etc.exclude` 两个发行版共用，排除会影响 Arch。冗余但无害；改进的办法（跳过和软件包原样一致的文件）记在待办中。
+- **软件包原样的文件不再收集**（0.6.0）：`zsh/zshrc` 和软件包里的版本完全一致，所以不再备份，`system/kali` 里原有的条目会在下一次 `backup` 时清理。`sudoers` 和两个 `sudoers.d` 文件只有 root 能读，要在终端里用 sudo 运行 `backup`，才能验证它们是不是软件包原样：是就清理，不是（或者验证不了）就保留。`sddm.conf.d/kde_settings.conf` 仍会备份（23 字节，无害）：kali-themes 把原版放在 `/usr/share/kali-themes/etc/` 下再复制过去，dpkg 里没有 `/etc` 路径对应的 md5。下面是 0.6.0 之前对这几个文件的记录：`sudoers`、两个 `sudoers.d` 文件、`zsh/zshrc`、`sddm.conf.d/kde_settings.conf` 在 Kali 上和软件包里的版本完全相同。`kde_settings.conf` 是 kali-themes 的 diversion，而 Kali 上没有装 sddm，用的是 gdm3。它们在 `etc.extra` / `etc.secret` 里是为 Arch 列的，而 `etc.exclude` 两个发行版共用，排除会影响 Arch。冗余但无害；改进的办法（跳过和软件包原样一致的文件）记在待办中。
 - **重复加密**（0.5.4 已修复）：第二次 backup（ce6efa3）把内容没变的 `crypttab`、`sudoers` 和两个 `sudoers.d` 文件重新加密了一遍。原因已确认：0.5.2 靠 `chezmoi status` 判断是否变化，而 0440 用属性表示不出来，umask 002 又让 0644 被算成 0664。现在只比较解密后的内容和属性。
-- `dotfiles status` 会列出 9 个 `.dpkg-new` / `.dpkg-old` 文件，**都不需要合并**：8 个是 kali-themes / kali-menu 通过 diversion 换掉的软件包原版文件（plymouth、xfce 菜单和 xfconf 等，现用的是 Kali 的版本），1 个是 `update-ca-certificates` 重写 `ca-certificates.conf` 后留下的旧版本。保留它们没有影响。
+- 有 9 个 `.dpkg-new` / `.dpkg-old` 文件，**都不需要合并**（0.6.0 起 `dotfiles status` 不再列出它们，只在末尾给出数量）：8 个是 kali-themes / kali-menu 通过 diversion 换掉的软件包原版文件（plymouth、xfce 菜单和 xfconf 等，现用的是 Kali 的版本），1 个是 `update-ca-certificates` 重写 `ca-certificates.conf` 后留下的旧版本。保留它们没有影响。
 
 ## 4. 与 Arch 不同、需要特别处理的地方
 
@@ -63,7 +64,7 @@
 
 - 终端是 **gnome-terminal**，默认配置方案 "Arch Konsole"（gsettings 设置，不在仓库中）。它复刻了 Konsole 的字体（JetBrainsMono Nerd Font Mono Medium Italic 10）、Sweet-Ambar-Blue 配色和 150x40 窗口大小，没有透明效果。
 - gnome-terminal（VTE）**不支持 OSC 52**。zellij 默认用 OSC 52 写剪贴板，开启 mouse_mode 后选区又属于 zellij，结果 Ctrl+Shift+C 复制不到内容。现在 zellij 配置里有 `copy_command "wl-copy"`：鼠标拖选、松开即复制；按住 Shift 拖选时用的是 gnome-terminal 自己的选区。其他依赖 OSC 52 的程序（tmux、nvim 远程复制）也要配置 `wl-copy`。
-- 想换回 Konsole 的话：需要一个按 konsole 检测的标签（记在待办中）。
+- 想换回 Konsole 的话：安装 `konsole`，然后重新运行 `chezmoi init`（`dotfiles restore --apply --only config`），得到 `konsole` 标签后，仓库里的 Konsole 配置（配色和配置方案）就会部署。GNOME 里 `Ctrl+Alt+T` 要打开 konsole 的话，另外在 gsettings 里设置自定义快捷键。
 
 ### 4.3 shell
 

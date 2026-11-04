@@ -33,6 +33,7 @@ src/dotfiles/
 │   ├── backup.py            `backup` `status` `check`   ~ -> 仓库，以及提交前的安全检查
 │   ├── audit.py             `audit`           敏感文件权限
 │   ├── etc.py               `system-restore`  Linux /etc，通过第二个 chezmoi 实例（backup 也会用到）
+│   ├── winsys.py            `system-restore`  Windows 注册表项（system/windows/），同样的机制，需主动开启
 │   ├── config.py            `config`          查看 / 编辑 dotfiles.toml
 │   └── clean/               `clean`
 │       ├── __init__.py      基于目标表的 scan / list / run / leftovers
@@ -124,7 +125,7 @@ commit-msg）是第二个扩展维度：在 `git.py` 中加一个来源、在 `c
 | 每个托管目标的平台归属（`[platforms]`）、目标所需的环境标签（`[requires]`） | `home/.chezmoidata/platforms.toml` | `backup`（登记没有归属的目标）、你（`shared`、`[requires]`） |
 | 本机的环境标签 | chezmoi 配置中的 `[data] tags` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 检测 |
 | dotfiles（源状态） | `home/`（`.chezmoiroot`） | chezmoi（`add`、`re-add`、`edit`），经由 `backup` |
-| /etc 备份 | `system/<发行版>/`（os-release 的 `ID`；`system/windows/` 预留） | `backup`，通过第二个 chezmoi 实例 |
+| /etc 备份 | `system/<发行版>/`（os-release 的 `ID`；`system/windows/` 保存注册表项，需主动开启） | `backup`，通过第二个 chezmoi 实例 |
 | 软件包清单 | `packages/`（每个包管理器一份：`archpkg.txt`、`aptpkg.txt`；Windows：scoop、winget） | `backup` |
 | 提交检查规则（必须加密的类别、密钥特征） | `utils/common/guard/checks.py` | 代码，有意为之（第 4 节） |
 | chezmoi 配置 | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init`，由 `home/.chezmoi.toml.tmpl` 生成 |
@@ -203,3 +204,9 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 0.5.4：`/etc` 备份比较解密后的内容和 `chezmoi add` 会记录的属性，不再使用 `chezmoi status`（它把属性表示不了的权限
 （0440、0640）和按 umask 推算的权限也算作变化）；`apply` 部署了 fcitx5 的配置文件后，会让正在运行的 fcitx5 重新加载它们
 （D-Bus 的 `ReloadConfig` / `ReloadAddonConfig`），fcitx5 退出时不会再把旧配置写回。
+
+0.6.0：`/etc` 备份不再收集可以验证为软件包原样的文件（pacman 的 `%BACKUP%` md5，dpkg 的 conffile 和 `md5sums` 记录），
+并把 `system/<发行版>` 中这样的条目删除；dpkg 系统上被 divert 的原版文件留下的副本不再列出。新增标签 `konsole` 和 `xfce`，
+以及配置模板读取的每台机器自己的标签文件 `~/.config/chezmoi/tags`。`cli/winsys.py` 通过 `system/windows/` 上的第二个
+chezmoi 实例，备份和恢复 `dotfiles.toml` 的 `[windows] registry` 中列出的注册表项，复用 `cli/etc.py` 的暂存区和不重复写入的
+逻辑；所有 `reg` 调用都经过同一个函数，测试替换它即可。

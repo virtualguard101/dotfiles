@@ -86,11 +86,14 @@ kde = [
   ".config/dolphinrc",
   ".config/kdeglobals",
   ".config/kglobalshortcutsrc",
-  ".config/konsolerc",
   ".config/kwinrc",
   ".config/kxkbrc",
   ".config/mimeapps.list",
   ".config/systemd/user/kwallet_auto_unlock.service",
+]
+# Konsole, wherever it is installed (the Kali GNOME desktop can have it too)
+konsole = [
+  ".config/konsolerc",
   ".local/share/konsole",
 ]
 # programs: user units whose ExecStart binary is installed per machine (see .chezmoi.toml.tmpl)

@@ -36,6 +36,7 @@ src/dotfiles/
 │   ├── backup.py            `backup` `status` `check`   ~ -> repo, plus the commit gate
 │   ├── audit.py             `audit`           permissions of sensitive files
 │   ├── etc.py               `system-restore`  Linux /etc via a second chezmoi instance (also used by backup)
+│   ├── winsys.py            `system-restore`  Windows registry keys (system/windows/), same mechanism; opt-in
 │   ├── config.py            `config`          show / edit dotfiles.toml
 │   └── clean/               `clean`
 │       ├── __init__.py      scan / list / run / leftovers over the target tables
@@ -135,7 +136,7 @@ The interface is constrained on purpose:
 | Platform owner of every managed target (`[platforms]`), environment tags a target requires (`[requires]`) | `home/.chezmoidata/platforms.toml` | `backup` (registers unowned targets), you (`shared`, `[requires]`) |
 | This machine's environment tags | `[data] tags` in the chezmoi config | `chezmoi init`, detected by `home/.chezmoi.toml.tmpl` |
 | Dotfiles (source state) | `home/` (`.chezmoiroot`) | chezmoi (`add`, `re-add`, `edit`), via `backup` |
-| /etc backup | `system/<distro>/` (os-release `ID`; `system/windows/` reserved) | `backup` through a second chezmoi instance |
+| /etc backup | `system/<distro>/` (os-release `ID`; `system/windows/` holds registry keys, opt-in) | `backup` through a second chezmoi instance |
 | Package manifests | `packages/` (one per package manager: `archpkg.txt`, `aptpkg.txt`; Windows: scoop, winget) | `backup` |
 | Commit-check rules (must-encrypt, secret patterns) | `utils/common/guard/checks.py` | code, on purpose (section 4) |
 | chezmoi config | `~/.config/chezmoi/chezmoi.toml` | `chezmoi init` from `home/.chezmoi.toml.tmpl` |
@@ -223,3 +224,11 @@ them, so a backup no longer rewrites every encrypted `/etc` file.
 `chezmoi status`, which also flagged modes attributes cannot express (0440, 0640) and umask-derived
 ones; `apply` makes a running fcitx5 reload the config files it deployed (D-Bus `ReloadConfig` /
 `ReloadAddonConfig`), so fcitx5 no longer writes its old config back on exit.
+
+0.6.0: `/etc` backup does not collect a listed file that is verifiably the package's own (pacman's
+`%BACKUP%` md5s, dpkg's conffile and `md5sums` records) and drops such entries from `system/<distro>`;
+dpkg leftovers of diverted stock files are not listed. New tags `konsole` and `xfce`, and a per-machine
+tags file `~/.config/chezmoi/tags` read by the config template. `cli/winsys.py` backs up and restores
+registry keys listed in `dotfiles.toml` `[windows] registry` through a second chezmoi instance over
+`system/windows/`, reusing the staging and no-churn logic of `cli/etc.py`; every `reg` call goes through
+one function so tests replace it.
