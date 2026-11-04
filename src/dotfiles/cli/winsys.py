@@ -25,6 +25,15 @@ from dotfiles.utils.common import config as dotconf
 _KEY = re.compile(r"^(HKCU|HKLM|HKCR|HKU|HKCC|HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE|HKEY_CLASSES_ROOT|HKEY_USERS|HKEY_CURRENT_CONFIG)\\[^\\].*$",
                   re.I)
 _NEEDS_ADMIN = re.compile(r"^(HKLM|HKCR|HKEY_LOCAL_MACHINE|HKEY_CLASSES_ROOT)\\", re.I)
+_HIVES = {"HKCU": "HKEY_CURRENT_USER", "HKLM": "HKEY_LOCAL_MACHINE", "HKCR": "HKEY_CLASSES_ROOT",
+          "HKU": "HKEY_USERS", "HKCC": "HKEY_CURRENT_CONFIG"}
+
+
+def long_key(key: str) -> str:
+    """HKCU\\Software\\Foo -> HKEY_CURRENT_USER\\Software\\Foo, the form `reg export` writes in its key lines;
+    anything else (a long key, a file name) comes back unchanged."""
+    hive, sep, rest = key.partition("\\")
+    return _HIVES.get(hive.upper(), hive) + sep + rest
 
 
 def reg(*args: str) -> platforms.Result:
@@ -138,12 +147,10 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
     source = chez.system_source_dir()
     if not (source / "registry").is_dir():
         raise ui.Abort("no registry backup in system/windows/; run dotfiles backup first", 2)
-    if apply and not platforms.is_admin() and any(_NEEDS_ADMIN.match(k) for k in registry_keys()):
-        raise ui.Abort("importing into HKLM / HKCR needs an elevated (administrator) shell", 2)
     from dotfiles.cli import etc
 
-    wanted = [f.lower() for f in filters]
-    changed = 0
+    wanted = [long_key(f).lower() for f in filters]
+    pending: list[tuple[str, str]] = []     # (key, stored text) that differ from the live registry
     ui.info("source: system/windows")
     with etc._Stage(source) as stage:
         r = stage.cz("apply", "--force", "--no-tty")
@@ -162,22 +169,30 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
             live = export_key(key) or ""
             if live == stored:
                 continue
-            changed += 1
+            pending.append((key, stored))
             ui.section(key)
             if f in encrypted:
                 ui.info("(encrypted file; the content diff is not shown in the terminal)")
             else:
                 diff = difflib.unified_diff(live.splitlines(), stored.splitlines(), "live", "backup", lineterm="", n=2)
                 ui.info("\n".join(diff).rstrip() or "(differs only in line endings)")
-            if not apply:
-                continue
-            with tempfile.TemporaryDirectory(dir=platforms.runtime_dir()) as d:
-                tmp = Path(d) / "import.reg"
-                tmp.write_bytes(encode_reg(stored))
-                if not reg("import", str(tmp)).ok:
-                    ui.warn(f"reg import failed: {key}")
-    if not changed:
+    if not pending:
         ui.ok("the registry matches the backup")
-    elif not apply:
+        return 0
+    if not apply:
         ui.info("this was a preview; add --apply to import (merges: values added since the backup stay)")
+        return 0
+    # only the keys about to be imported decide whether elevation is needed, so HKCU keys can be
+    # restored from a normal shell while the list also holds HKLM ones
+    elevated = [k for k, _ in pending if _NEEDS_ADMIN.match(k)]
+    if elevated and not platforms.is_admin():
+        raise ui.Abort("importing into HKLM / HKCR needs an elevated (administrator) shell; nothing was imported:\n  "
+                       + "\n  ".join(elevated)
+                       + "\nrerun in an elevated shell, or name only the other keys on the command line", 2)
+    for key, stored in pending:
+        with tempfile.TemporaryDirectory(dir=platforms.runtime_dir()) as d:
+            tmp = Path(d) / "import.reg"
+            tmp.write_bytes(encode_reg(stored))
+            if not reg("import", str(tmp)).ok:
+                ui.warn(f"reg import failed: {key}")
     return 0

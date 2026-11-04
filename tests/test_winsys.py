@@ -23,7 +23,7 @@ class FakeReg:
 
     @staticmethod
     def norm(key: str) -> str:
-        return key.replace("HKCU\\", "HKEY_CURRENT_USER\\", 1).lower()
+        return winsys.long_key(key).lower()
 
     def __call__(self, *args: str) -> platforms.Result:
         if args[0] == "export":
@@ -140,6 +140,9 @@ def test_restore_filters_by_key_or_file_name(registry):
     assert fake.imported == []
     winsys.cmd_restore(apply=True, filters=["hkcu_software_test_app.reg"])
     assert fake.imported == [LONG]
+    fake.keys[fake.norm(KEY)] = TEXT.replace('"dark"', '"light"')
+    winsys.cmd_restore(apply=True, filters=[KEY])                       # the short form used in dotfiles.toml
+    assert fake.imported == [LONG, LONG]
 
 
 def test_restore_never_shows_the_content_of_an_encrypted_key(registry, capsys):
@@ -154,12 +157,46 @@ def test_restore_never_shows_the_content_of_an_encrypted_key(registry, capsys):
     assert "encrypted file" in out and FAKE_TOKEN not in out
 
 
-def test_restore_needs_a_backup_and_admin_for_hklm(registry, monkeypatch):
-    source, _ = registry
+HKLM_KEY = r"HKLM\SOFTWARE\Test Policy"
+HKLM_LONG = r"HKEY_LOCAL_MACHINE\SOFTWARE\Test Policy"
+HKLM_TEXT = f'Windows Registry Editor Version 5.00\n\n[{HKLM_LONG}]\n"Level"=dword:00000001\n'
+
+
+def test_restore_needs_a_backup(registry):
     with pytest.raises(Exception, match="no registry backup"):
         winsys.cmd_restore(apply=False, filters=[])
+
+
+def test_restore_asks_for_admin_only_when_an_hklm_key_is_imported(registry, monkeypatch):
+    source, fake = registry
+    fake.keys[fake.norm(HKLM_KEY)] = HKLM_TEXT
+    monkeypatch.setattr(winsys, "registry_keys", lambda: [KEY, HKLM_KEY])
     winsys.backup(Runner(dry=False))
-    monkeypatch.setattr(winsys, "registry_keys", lambda: ["HKLM\\SOFTWARE\\Policies\\Foo"])
     monkeypatch.setattr(platforms, "is_admin", lambda: False)
-    with pytest.raises(Exception, match="elevated"):
+
+    # only the HKCU key drifted: a normal shell restores it although the list also holds an HKLM key
+    fake.keys[fake.norm(KEY)] = TEXT.replace('"dark"', '"light"')
+    assert winsys.cmd_restore(apply=True, filters=[]) == 0
+    assert fake.imported == [LONG]
+
+    # the HKLM key drifted too: refused up front, nothing imported (not even the HKCU key)
+    fake.keys[fake.norm(KEY)] = TEXT.replace('"dark"', '"light"')
+    fake.keys[fake.norm(HKLM_KEY)] = HKLM_TEXT.replace("00000001", "00000000")
+    with pytest.raises(Exception, match="elevated") as e:
         winsys.cmd_restore(apply=True, filters=[])
+    assert HKLM_LONG in str(e.value)
+    assert fake.imported == [LONG]
+
+    # naming the HKCU key leaves the HKLM one out; an elevated shell imports the rest
+    winsys.cmd_restore(apply=True, filters=[KEY])
+    assert fake.imported == [LONG, LONG]
+    monkeypatch.setattr(platforms, "is_admin", lambda: True)
+    winsys.cmd_restore(apply=True, filters=[])
+    assert fake.imported == [LONG, LONG, HKLM_LONG]
+
+
+def test_long_key():
+    assert winsys.long_key(r"HKCU\Software\Foo") == r"HKEY_CURRENT_USER\Software\Foo"
+    assert winsys.long_key(r"hklm\SYSTEM\Foo") == r"HKEY_LOCAL_MACHINE\SYSTEM\Foo"
+    assert winsys.long_key(r"HKEY_USERS\x") == r"HKEY_USERS\x"
+    assert winsys.long_key("HKCU_Software_Foo.reg") == "HKCU_Software_Foo.reg"
