@@ -61,12 +61,12 @@ def test_temp_keeps_recent_and_dirs_with_recent_children(env):
     assert names == {"old.tmp", "staledir"}
 
 
-def test_scoop_old_versions_and_stale_cache(env):
+def test_scoop_old_versions_and_stale_cache(env, link_dir):
     home = env[0]
     app = home / "scoop" / "apps" / "git"
     for v in ("2.40", "2.41"):
         (app / v).mkdir(parents=True)
-    os.symlink(app / "2.41", app / "current", target_is_directory=True)
+    link_dir(app / "current", app / "2.41")
     (app / "2.41" / "manifest.json").write_text('{"version": "2.41"}')
     cache = home / "scoop" / "cache"
     cache.mkdir()

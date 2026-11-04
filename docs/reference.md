@@ -250,7 +250,7 @@ The Windows counterpart of `/etc` (3.6): a second chezmoi instance whose source 
 - `backup` exports each key with `reg export` into `system/windows/registry/<key>.reg` (`HKCU_Control_Panel_Desktop.reg`), as UTF-8 text with LF line ends so git can diff it. A key holding something the secret scan flags is stored encrypted. A file whose content and encryption did not change is left alone, so nothing is re-encrypted. A key that cannot be exported is a warning; a file whose key was taken off the list gets a note and is never deleted.
 - `system-restore` shows a diff between each stored key and the live one (an encrypted one only reports that it differs); `--apply` imports it with `reg import`. Import **merges**: values and subkeys added since the backup stay. Importing into `HKLM` / `HKCR` needs an elevated shell. Name keys (or file names) on the command line to restore only those.
 - `status` lists the keys and whether each is backed up; `backup -n` previews.
-- Not yet run on a real Windows machine, see [8](#8-known-limitations).
+- Run on a real Windows machine on 2026-11-04 (a temporary key with Unicode, binary and multi-string values went through backup, change, preview, import and verify); see [win.md](win.md) 3 for the keys in use. One limit: a single `HKLM` / `HKCR` key in the list makes `system-restore --apply` require an elevated shell for **all** keys, even when only `HKCU` keys are named.
 
 ---
 
@@ -617,11 +617,11 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 ## 8. Known limitations
 
-- **The Python version has never actually run on Windows**: the Windows cleanup targets, backup (scoop/winget export, ACL audit), the recovery flow and `bootstrap.ps1` were ported from the original PowerShell scripts (or written fresh) and are only tested at the filesystem level on Linux, plus syntax parsing. The original scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`). On first Windows use, run `doctor`, `clean scan`, `status` and `restore` (without `--apply`) to confirm the results.
+- **Windows: run for real once, on 2026-11-04**: `doctor`, `apply`, `backup`, `restore` (without `--apply`), `clean scan`, `clean run` (preview), `audit` and `system-restore` all ran on a physical machine; what turned up is in [win.md](win.md) 7. Still unexercised there: `clean run --apply`, `audit --apply`, `bootstrap.ps1 --apply` and a restore onto a fresh Windows. The original PowerShell scripts are in commit `a15c9b5` (`git show a15c9b5:scripts/clean.ps1`).
 
 - **scoop comes from its official installer script**: there is no winget package. `bootstrap.ps1 --apply` downloads the installer to a temporary file, prints its path so you can read it, and runs it only after you confirm (`--yes` skips the question); it refuses an administrator session, as scoop does. restore's packages step stops with instructions while scoop is missing.
 
-- **The registry backup ([3.9](#39-windows-registry-keys)) has only run against a fake `reg`**: the export and import calls, the UTF-16 handling and the elevation check follow `reg`'s documented behaviour. Try it with one harmless key first: add it, then `backup -n`, `backup`, and `system-restore` without `--apply`.
+- **Windows commands that find a program by name use the first match on `PATH`**: from Git Bash, Git's `usrin` comes before `System32`, so a bare `whoami` is GNU's (no `/user`). Use absolute paths for a Windows program whose name Git also ships (`whoami` already does); `chezmoi managed -p absolute` prints forward slashes, so compare paths as `Path`, not as strings.
 
 - **One `/etc` backup per distro**: two machines with the same distro share `system/<distro>/`. Back up `/etc` on one of them only (use `backup --no-system` on the other).
 

@@ -36,17 +36,22 @@ ALLOWED_SIDS_EXTRA = ("S-1-5-18", "S-1-5-32-544")   # SYSTEM, Administrators
 
 
 def current_sid() -> str:
-    out = run(["whoami", "/user", "/fo", "csv", "/nh"]).stdout.strip()
+    """SID of the current user, "" when it cannot be determined. whoami is called by absolute path:
+    Git for Windows puts its own GNU whoami (which has no /user) ahead of System32 on PATH."""
+    exe = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "whoami.exe"
+    out = run([str(exe), "/user", "/fo", "csv", "/nh"]).stdout.strip()
     m = re.search(r'"(S-1-[\d-]+)"', out)
     return m.group(1) if m else ""
 
 
 def restrict_acl(path: Path, is_dir: bool) -> bool:
-    """Windows: drop inheritance; only the current user, SYSTEM and Administrators keep access."""
+    """Windows: drop inheritance; only the current user, SYSTEM and Administrators keep access.
+    Refuses (False, nothing changed) when the current user is unknown: the result would lock them out."""
+    me = current_sid()
+    if not me:
+        return False
     inh = "(OI)(CI)" if is_dir else ""
-    sids = [current_sid(), *ALLOWED_SIDS_EXTRA]
     args = ["icacls", str(path), "/inheritance:r"]
-    for sid in sids:
-        if sid:
-            args += ["/grant:r", f"*{sid}:{inh}F"]
+    for sid in (me, *ALLOWED_SIDS_EXTRA):
+        args += ["/grant:r", f"*{sid}:{inh}F"]
     return run([*args, "/q"]).ok

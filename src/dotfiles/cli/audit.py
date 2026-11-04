@@ -64,7 +64,10 @@ def _audit_windows(path: Path, is_dir: bool, apply: bool) -> None:
         sids = set(win.powershell(script).stdout.split())
     finally:
         os.environ.pop("DOTFILES_AUDIT_PATH", None)
-    allowed = {win.current_sid(), *win.ALLOWED_SIDS_EXTRA}
+    me = win.current_sid()
+    if not me:
+        raise ui.Abort("cannot determine the current user's SID (whoami /user failed); nothing was changed", 2)
+    allowed = {me, *win.ALLOWED_SIDS_EXTRA}
     extra = sorted(sids - allowed)
     if not extra:
         return

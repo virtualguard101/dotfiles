@@ -6,13 +6,13 @@ from dotfiles.utils import fsutil, ui
 
 
 @pytest.fixture
-def tree(tmp_path):
+def tree(tmp_path, link_dir):
     root = tmp_path / "home"
     (root / "cache" / "a").mkdir(parents=True)
     (root / "cache" / "a" / "f").write_bytes(b"x" * 100)
     (root / "keep").mkdir()
     (root / "keep" / "important").write_bytes(b"y" * 1000)
-    os.symlink(root / "keep", root / "cache" / "link")      # a link pointing outside the cache
+    link_dir(root / "cache" / "link", root / "keep")      # a link pointing outside the cache
     return root
 
 

@@ -205,3 +205,23 @@ def test_config_template_adds_the_local_tags_file(tmp_path):
     base = rendered()
     tags_file.write_text("# comment\nLab\nbad tag\n\nwork-laptop\n", encoding="utf-8")
     assert rendered() == [*base, "lab", "work-laptop"]
+
+
+def test_restrict_acl_never_drops_the_current_user(tmp_path, monkeypatch):
+    # Git for Windows puts GNU whoami (no /user) ahead of System32: the SID came back empty and
+    # restrict_acl then granted access to SYSTEM / Administrators only, locking the user out.
+    from dotfiles.utils.platforms import windows as win
+
+    calls = []
+    monkeypatch.setattr(win, "run", lambda args, **kw: (calls.append(args), platforms.Result(0, '"vg","S-1-5-21-1-2-3-1001"\n', ""))[1])
+    assert win.current_sid() == "S-1-5-21-1-2-3-1001"
+    assert calls[0][0].lower().endswith("whoami.exe") and len(calls[0][0]) > len("whoami.exe")   # absolute, not via PATH
+
+    assert win.restrict_acl(tmp_path / "f", is_dir=False)
+    assert "*S-1-5-21-1-2-3-1001:F" in calls[-1]
+
+    calls.clear()
+    monkeypatch.setattr(win, "run", lambda args, **kw: (calls.append(args), platforms.Result(1, "", "extra operand"))[1])
+    assert win.current_sid() == ""
+    assert not win.restrict_acl(tmp_path / "f", is_dir=False)
+    assert not any(a[0] == "icacls" for a in calls)     # refused before touching the ACL

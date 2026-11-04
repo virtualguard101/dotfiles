@@ -245,7 +245,7 @@ Windows 上与 `/etc`（3.6）对应的功能：第二个 chezmoi 实例，源�
 - `backup` 用 `reg export` 把每个项导出到 `system/windows/registry/<项>.reg`（`HKCU_Control_Panel_Desktop.reg`），保存为 UTF-8 文本、LF 换行，方便 git 比较。含有密钥扫描命中内容的项加密保存。内容和加密方式都没有变的文件保持不动，所以不会重复加密。导出失败的项只给警告；从清单里去掉的项对应的文件只提示，从不删除。
 - `system-restore` 显示每个已保存的项和当前注册表的差异（加密的项只报告有差异）；`--apply` 用 `reg import` 导入。导入是**合并**：备份之后新增的值和子项会保留。导入 `HKLM` / `HKCR` 需要管理员权限的 shell。在命令行上写出项（或文件名），就只恢复这些。
 - `status` 列出这些项以及各自是否已备份；`backup -n` 预览。
-- 还没有在真正的 Windows 上运行过，见 [8](#8-已知限制)。
+- 2026-11-04 在一台真实的 Windows 上运行过（一个含 Unicode、二进制和多字符串值的临时键走完了备份、修改、预览、导入、复核）；实际使用的键见 [win.md](win.md) 第 3 节。一个限制：清单里只要有一个 `HKLM` / `HKCR` 键，`system-restore --apply` 就对**所有**键要求管理员，即使命令行上只指定了 `HKCU` 键。
 
 ---
 
@@ -610,11 +610,11 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 
 ## 8. 已知限制
 
-- **Windows 上尚未实际运行过 Python 版本**：Windows 的清理目标、备份（scoop/winget 导出、ACL 审计）、恢复流程与 `bootstrap.ps1` 是从原 PowerShell 脚本移植或新写的，只在 Linux 上做过文件系统层面的测试与语法解析。原脚本可在提交 `a15c9b5` 中找到（`git show a15c9b5:scripts/clean.ps1`）。首次在 Windows 上使用时，先运行`doctor`、`clean scan`、`status`、`restore`（不加 `--apply`）确认结果。
+- **Windows：2026-11-04 在真机上运行过一次**：`doctor`、`apply`、`backup`、`restore`（不加 `--apply`）、`clean scan`、`clean run`（预览）、`audit` 和 `system-restore` 都在一台实体机上跑过，发现的问题见 [win.md](win.md) 第 7 节。仍然没有实际执行过的：`clean run --apply`、`audit --apply`、`bootstrap.ps1 --apply`，以及在一台全新的 Windows 上做恢复。原 PowerShell 脚本可在提交 `a15c9b5` 中找到（`git show a15c9b5:scripts/clean.ps1`）。
 
 - **scoop 通过它的官方安装脚本安装**：winget 中没有 scoop。`bootstrap.ps1 --apply` 会把安装脚本下载到临时文件并打印路径，方便你先阅读，确认后才执行（`--yes` 跳过询问）；和 scoop 本身一样，它拒绝在管理员会话中安装。缺少 scoop 时，restore 的 packages 步骤会停下并给出说明。
 
-- **注册表备份（[3.9](#39-windows-注册表项)）只用假的 `reg` 测试过**：导出和导入的调用、UTF-16 处理和管理员权限检查，都是按 `reg` 文档中的行为写的。先用一个无害的项试一下：添加它，然后依次 `backup -n`、`backup`、不带 `--apply` 的 `system-restore`。
+- **按名字查找程序的 Windows 命令取 `PATH` 里的第一个匹配**：在 Git Bash 里，Git 的 `usrin` 排在 `System32` 前面，所以直接写 `whoami` 得到的是 GNU 版（不支持 `/user`）。Git 也自带同名程序时，Windows 的那个要用绝对路径（`whoami` 已经这样做）；`chezmoi managed -p absolute` 输出正斜杠，比较路径时要转成 `Path`，不能比较字符串。
 
 - **每个发行版只有一份 `/etc` 备份**：同一发行版的两台机器共用 `system/<发行版>/`。只在其中一台上备份 `/etc`（另一台用 `backup --no-system`）。
 
