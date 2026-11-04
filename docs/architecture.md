@@ -232,3 +232,10 @@ tags file `~/.config/chezmoi/tags` read by the config template. `cli/winsys.py` 
 registry keys listed in `dotfiles.toml` `[windows] registry` through a second chezmoi instance over
 `system/windows/`, reusing the staging and no-churn logic of `cli/etc.py`; every `reg` call goes through
 one function so tests replace it.
+
+0.6.1: fixes from the first run on a real Windows machine. `current_sid()` calls `System32\whoami.exe`
+by absolute path (from Git Bash, GNU `whoami` on PATH has no `/user`; with no SID, `restrict_acl` granted
+access to SYSTEM and Administrators only), `restrict_acl` refuses and `audit` aborts when the SID is
+unknown; `system-restore` tells an encrypted registry file apart by `Path` (chezmoi prints forward
+slashes, so the string comparison never matched and an encrypted key's content showed up in the diff).
+The tests run on Windows: directory links are junctions there, and the `/etc` tests are skipped.

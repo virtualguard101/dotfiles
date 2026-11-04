@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -83,11 +83,11 @@ def test_scan_exit_codes(tmp_path):
     ("~/x", False),
 ])
 def test_home_path_only_matches_this_user(text, hit):
-    assert bool(guard.home_path_rx(Path("/home/alice")).search(text.encode())) is hit, text
+    assert bool(guard.home_path_rx(PurePosixPath("/home/alice")).search(text.encode())) is hit, text
 
 
 def test_home_path_rule_ignores_examples_but_flags_this_home(monkeypatch):
-    monkeypatch.setattr(guard.checks, "_this_home_rx", lambda: guard.home_path_rx(Path("/home/alice")))
+    monkeypatch.setattr(guard.checks, "_this_home_rx", lambda: guard.home_path_rx(PurePosixPath("/home/alice")))
     def rules(data: bytes) -> list[str]:
         return [f.rule for f in guard.check_content("src/x.py", data)]
     assert "absolute-home-path" not in rules(b'# says "set by /home/username/file"\n')

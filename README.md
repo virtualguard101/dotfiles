@@ -21,7 +21,7 @@ docs/reference.md         detailed reference: command behavior, encryption and p
                           cleanup targets, commit checks
 docs/workflows.md         branch roles and which path each kind of change takes
 docs/architecture.md      how the tool is organized, layering rules, where to extend it
-docs/arch.md, kali.md     per-machine notes for the two Linux machines (Chinese)
+docs/arch.md, kali.md, win.md  per-machine notes for the three machines (Chinese)
 ```
 
 Tool files at the repo top are not inside `home/`, so `chezmoi apply` never deploys them into the home directory.

@@ -210,3 +210,8 @@ commit   pre-commit -> guard staged | pre-push -> guard push   （对每个文�
 以及配置模板读取的每台机器自己的标签文件 `~/.config/chezmoi/tags`。`cli/winsys.py` 通过 `system/windows/` 上的第二个
 chezmoi 实例，备份和恢复 `dotfiles.toml` 的 `[windows] registry` 中列出的注册表项，复用 `cli/etc.py` 的暂存区和不重复写入的
 逻辑；所有 `reg` 调用都经过同一个函数，测试替换它即可。
+
+0.6.1：第一次在真实的 Windows 上运行后的修复。`current_sid()` 用 `System32\whoami.exe` 的绝对路径（Git Bash 里 PATH 上的
+GNU `whoami` 不支持 `/user`，SID 取不到时 `restrict_acl` 会只给 SYSTEM 和 Administrators 授权），取不到 SID 时 `restrict_acl`
+拒绝执行、`audit` 报错退出；`system-restore` 用 `Path` 判断一个注册表文件是否加密（chezmoi 输出正斜杠，按字符串比较永远不相等，
+加密键的内容会出现在 diff 里）。测试可以在 Windows 上运行：目录链接在 Windows 上用联接，`/etc` 的测试在 Windows 上跳过。

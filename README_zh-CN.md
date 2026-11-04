@@ -21,7 +21,7 @@ bootstrap.sh / .ps1       新机器引导：装好 git、chezmoi、uv 并克隆�
 docs/reference.md         详细参考：各命令的行为、加密与平台归属规则、清理目标、提交检查
 docs/workflows.md         工作流：各分支的用途，不同类型的改动各走哪条路径
 docs/architecture.md      架构：工具的组织方式、分层规则、如何扩展
-docs/arch.md, kali.md     两台 Linux 机器各自的说明
+docs/arch.md, kali.md, win.md  三台机器各自的说明
 ```
 
 根目录下的工具文件不在 `home/` 里，不会被 `chezmoi apply` 部署到家目录。

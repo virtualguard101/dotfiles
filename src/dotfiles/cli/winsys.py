@@ -149,7 +149,8 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
         r = stage.cz("apply", "--force", "--no-tty")
         if not r.ok:
             raise ui.Abort(f"failed to decrypt system/windows: {r.stderr.strip()[:300]}")
-        encrypted = set(stage.cz("managed", "-i", "encrypted", "-p", "absolute").stdout.splitlines())
+        # compared as Paths: chezmoi prints C:/x/y, Path(...) iterates as C:\x\y (a str comparison never matches)
+        encrypted = {Path(p) for p in stage.cz("managed", "-i", "encrypted", "-p", "absolute").stdout.splitlines()}
         for f in sorted((stage.dir / "registry").glob("*.reg")):
             stored = f.read_text(encoding="utf-8")
             key = header_key(stored)
@@ -163,7 +164,7 @@ def cmd_restore(apply: bool, filters: list[str]) -> int:
                 continue
             changed += 1
             ui.section(key)
-            if str(f) in encrypted:
+            if f in encrypted:
                 ui.info("(encrypted file; the content diff is not shown in the terminal)")
             else:
                 diff = difflib.unified_diff(live.splitlines(), stored.splitlines(), "live", "backup", lineterm="", n=2)
