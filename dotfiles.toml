@@ -163,6 +163,15 @@ hardware_bound = [
   "/etc/modprobe.d/*",
 ]
 
+# ---------------------------------------------------------------- Windows system settings (system/windows/)
+
+[windows]
+# registry keys exported by `dotfiles backup` into system/windows/registry, one .reg file per key;
+# `dotfiles system-restore` shows the diff against the live key and --apply imports it (merging).
+# Empty = nothing happens. Example: "HKCU\\Control Panel\\Desktop" (a hive and a subkey)
+registry = [
+]
+
 # ---------------------------------------------------------------- cache cleanup (dotfiles clean)
 # disabled: target ids never run or listed;  opt: ids moved from the default tier to opt
 # Thresholds can be overridden per run with the environment variable named in `dotfiles config list`.

@@ -100,7 +100,7 @@ dotfiles restore [--apply] [--only 步骤,…] [--skip 步骤,…] [--key-file �
 
 4. **添加候选**：把本平台候选清单中尚未托管的文件加入 chezmoi，并登记到 `platforms.toml` 的当前平台。
 
-5. **/etc**（Linux，`--no-system` 时跳过）：见 [3.6](#36-linux-etc)。
+5. **系统配置**（`--no-system` 时跳过）：Linux 是 `/etc`，见 [3.6](#36-linux-etc)；Windows 是注册表项，见 [3.9](#39-windows-注册表项)。
 
 6. **软件包清单**：Arch 系 Linux 写入 `packages/archpkg.txt`（`pacman -Qqe`），Debian 系写入 `packages/aptpkg.txt`（`apt-mark showmanual`，排序后）；Windows 写入 `scoopfile.json`、`winget.json`（归一化后只在软件包增减时变化）与 `winget-unavailable.txt`。
 
@@ -149,10 +149,11 @@ uv run dotfiles backup --commit                    # 登记到 linux 并提交
 
 ```toml
 [requires]
-kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
+kde = [".config/kwinrc", ".config/kdeglobals"]
+konsole = [".config/konsolerc", ".local/share/konsole"]
 ```
 
-- **机器的标签**由 `home/.chezmoi.toml.tmpl` 在 `chezmoi init` 时检测，写入配置的 `[data] tags`：os-release 的 `ID` 与 `ID_LIKE` 中的各项（例如 `arch`；`kali`、`debian`），`PATH` 中有 `plasmashell` 时加 `kde`，有 `gnome-shell` 时加 `gnome`；目标所运行的程序存在时，加上对应的**程序标签**（`zeroclaw`：`~/.cargo/bin/zeroclaw`，`taskdog`：`~/.local/bin/taskdog-server`，即这两个用户单元的 `ExecStart`）。`dotfiles doctor` 会显示它们。安装或移除桌面环境，或者上述程序之后，重新运行 `chezmoi init`（或 `dotfiles restore --apply --only config`）。
+- **机器的标签**由 `home/.chezmoi.toml.tmpl` 在 `chezmoi init` 时检测，写入配置的 `[data] tags`：os-release 的 `ID` 与 `ID_LIKE` 中的各项（例如 `arch`；`kali`、`debian`），`PATH` 中有 `plasmashell` 时加 `kde`，有 `gnome-shell` 时加 `gnome`，有 `xfce4-session` 时加 `xfce`，有 `konsole` 时加 `konsole`；目标所运行的程序存在时，加上对应的**程序标签**（`zeroclaw`：`~/.cargo/bin/zeroclaw`，`taskdog`：`~/.local/bin/taskdog-server`，即这两个用户单元的 `ExecStart`）。自己的标签写在 `~/.config/chezmoi/tags` 中，每行一个（小写字母、数字和连字符；空行和 `#` 注释会被忽略），这个文件只在本机，不进仓库。`dotfiles doctor` 会显示全部标签，并提醒标签文件中因为不是合法标签而被忽略的行。安装或移除桌面环境或者上述程序之后，或者改了标签文件之后，重新运行 `chezmoi init`（或 `dotfiles restore --apply --only config`）。
 - 没有列在 `[requires]` 中的目标会部署到同一系统的所有机器上，所以大多数目标不需要标签。本机缺少所需标签的目标，会像另一平台的目标一样被忽略（包括只被这类目标使用的父目录）。
 - 在标签功能出现之前生成的配置不做 `[requires]` 过滤；在重新生成配置之前，`doctor` 会一直提示。
 - `check` 会校验标签名（`[a-z0-9-]`），以及每个条目都与 `[platforms]` 中的某个条目有重叠。
@@ -196,7 +197,11 @@ kde = [".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"]
 
 - `secret` 中的路径，一律加密；非所有人可读的文件以及匹配密钥特征的文件同样加密。与备份一致的文件（解密后的内容相同，`chezmoi add` 会记录的属性也相同：是否加密、`private_`、`readonly_`、`executable_`）保持不动。不比较精确的权限：属性表示不了 0440、0640，其余的权限 chezmoi 按 umask 推算（umask 002 下是 0664）。否则age 每次加密的输出都不同，重新加入会让每个加密文件在每次备份后都显示为已修改；
 
+- 列在 `extra` 或 `secret` 中的文件，如果**和软件包安装的完全一致**，就不收集：软件包自己会恢复它。只有验证过才算。pacman：备份文件的 md5 与 `/var/lib/pacman/local/*/files` 中记录的相同。dpkg：conffile（`/var/lib/dpkg/status`）或 `info/*.md5sums` 中的文件，md5 相同。没有这种记录的文件、不存在的文件，以及没有 `sudo` 就算不出校验和的 root 专属文件，都继续留在备份里。`backup` 会删除 `system/<发行版>/` 中已经属于这一类的条目；其他不再被收集的条目（被排除、被删除、没有 sudo 读不了），只会提示，从不删除。一个例外是 Kali 的 `kali-themes`：它把 `/etc` 文件放在 `/usr/share/kali-themes/etc/` 下再复制过去，dpkg 里没有 `/etc` 路径对应的 md5，所以 `sddm.conf.d/kde_settings.conf` 仍会被备份；
+
 - 排除 `exclude` 中的路径：账户数据库、`machine-id`、SSH 主机密钥、`*.pacnew`、`*.dpkg-dist` 等 dpkg / ucf 遗留文件、`*.bak` 等。某个发行版上不存在的条目（Kali 上的 sddm、mkinitcpio、pacman hook；Arch 上的 `/etc/apt`）不贡献任何文件，所以一份清单可以给所有发行版共用。
+
+`dotfiles status` 最后列出待处理的项：`.pacnew` / `.pacsave` 文件，dpkg 系统上则是 `.dpkg-*` / `.ucf-*` 遗留文件。其他软件包 divert 掉的原版文件（Kali 的 `kali-themes` / `kali-menu`），以及 `update-ca-certificates` 每次重写的 `ca-certificates.conf` 留下的副本，都不是你要合并的修改，所以不列出，只统计数量。
 
 恢复（`system-restore` 与 restore 的 `system` 步骤）：
 
@@ -232,6 +237,15 @@ dotfiles config path                 文件位置
 写入是逐行编辑：数组保持每行一项，手写的注释和顺序都会保留；结果会先重新解析并校验，通过后才替换原文件。
 表数组（`[[clean.paths]]`、`[[clean.<os>.leftovers]]`）需要手动编辑。两个平台共用这个文件，像其他数据改动
 一样提交即可（[workflows_zh-CN.md](workflows_zh-CN.md)）。
+
+### 3.9 Windows 注册表项
+
+Windows 上与 `/etc`（3.6）对应的功能：第二个 chezmoi 实例，源目录是 `system/windows/`。**需要主动开启**：`dotfiles.toml` 的 `[windows] registry` 列出要备份的项（一个 hive 加子项，例如 `HKCU\Control Panel\Desktop`），默认是空的，所以不添加就什么都不会发生（`dotfiles config add windows.registry 'HKCU\Control Panel\Desktop'`）。
+
+- `backup` 用 `reg export` 把每个项导出到 `system/windows/registry/<项>.reg`（`HKCU_Control_Panel_Desktop.reg`），保存为 UTF-8 文本、LF 换行，方便 git 比较。含有密钥扫描命中内容的项加密保存。内容和加密方式都没有变的文件保持不动，所以不会重复加密。导出失败的项只给警告；从清单里去掉的项对应的文件只提示，从不删除。
+- `system-restore` 显示每个已保存的项和当前注册表的差异（加密的项只报告有差异）；`--apply` 用 `reg import` 导入。导入是**合并**：备份之后新增的值和子项会保留。导入 `HKLM` / `HKCR` 需要管理员权限的 shell。在命令行上写出项（或文件名），就只恢复这些。
+- `status` 列出这些项以及各自是否已备份；`backup -n` 预览。
+- 还没有在真正的 Windows 上运行过，见 [8](#8-已知限制)。
 
 ---
 
@@ -599,6 +613,8 @@ chezmoi --source ~/.local/share/chezmoi --override-data '{"chezmoi":{"os":"windo
 - **Windows 上尚未实际运行过 Python 版本**：Windows 的清理目标、备份（scoop/winget 导出、ACL 审计）、恢复流程与 `bootstrap.ps1` 是从原 PowerShell 脚本移植或新写的，只在 Linux 上做过文件系统层面的测试与语法解析。原脚本可在提交 `a15c9b5` 中找到（`git show a15c9b5:scripts/clean.ps1`）。首次在 Windows 上使用时，先运行`doctor`、`clean scan`、`status`、`restore`（不加 `--apply`）确认结果。
 
 - **scoop 通过它的官方安装脚本安装**：winget 中没有 scoop。`bootstrap.ps1 --apply` 会把安装脚本下载到临时文件并打印路径，方便你先阅读，确认后才执行（`--yes` 跳过询问）；和 scoop 本身一样，它拒绝在管理员会话中安装。缺少 scoop 时，restore 的 packages 步骤会停下并给出说明。
+
+- **注册表备份（[3.9](#39-windows-注册表项)）只用假的 `reg` 测试过**：导出和导入的调用、UTF-16 处理和管理员权限检查，都是按 `reg` 文档中的行为写的。先用一个无害的项试一下：添加它，然后依次 `backup -n`、`backup`、不带 `--apply` 的 `system-restore`。
 
 - **每个发行版只有一份 `/etc` 备份**：同一发行版的两台机器共用 `system/<发行版>/`。只在其中一台上备份 `/etc`（另一台用 `backup --no-system`）。
 

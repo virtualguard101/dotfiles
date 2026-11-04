@@ -70,9 +70,10 @@ def test_register_platform_keeps_header(tmp_path, monkeypatch):
     assert chez.load_platforms()["linux"].count(".config/dotfiles-test/never-registered.conf") == 1
 
 
-KDE = {".config/kwinrc", ".config/kdeglobals", ".local/share/konsole"}
+KDE = {".config/kwinrc", ".config/kdeglobals"}
+KONSOLE = {".config/konsolerc", ".local/share/konsole"}     # [requires] konsole: wherever Konsole is installed
 UNITS = {".config/systemd/user/zeroclaw.service", ".config/systemd/user/taskdog-server.service"}
-ARCH_TAGS = ["arch", "kde", "taskdog", "zeroclaw"]     # this Arch machine, with both programs installed
+ARCH_TAGS = ["arch", "kde", "konsole", "taskdog", "zeroclaw"]     # this Arch machine, with both programs installed
 
 
 @needs_chezmoi
@@ -87,6 +88,11 @@ def test_requires_ignores_targets_whose_tag_is_missing():
     # program tags: a user unit deploys only where the binary its ExecStart runs is installed
     assert UNITS <= kali and UNITS <= render_ignore("linux", ["arch", "kde"])
     assert KDE <= kali and not KDE & arch
+    # Konsole config follows the program, not the desktop: Kali has no konsole, a Kali with it gets the files,
+    # and a KDE machine without it (no konsole tag) does not
+    with_konsole = render_ignore("linux", ["kali", "debian", "gnome", "konsole"])
+    assert KONSOLE <= kali and not KONSOLE & arch and not KONSOLE & with_konsole and KDE <= with_konsole
+    assert KONSOLE <= render_ignore("linux", ["arch", "kde"]) and not KDE & render_ignore("linux", ["arch", "kde"])
     # parents shared with targets this machine keeps stay managed
     assert ".config" not in kali
     # ...and a parent left with only ignored targets is ignored with them: Kali has no user units,
@@ -170,3 +176,32 @@ def test_retired_targets_are_not_owned_or_managed():
     assert not [t for t in retired if chez.owner_of(t, owners)]
     managed = set(chez.managed(include="files,symlinks,externals", exclude="", os_override="linux", tags=ARCH_TAGS))
     assert not set(retired) & managed
+
+
+# ---------------------------------------------------------------- tags detected at chezmoi init
+
+def test_read_local_tags_follows_the_template_rules(tmp_path):
+    f = tmp_path / "tags"
+    f.write_text("# my machine\nLab\r\n  work-laptop  \n\nbad tag\nUNDER_score\n-leading\nok-2\n", encoding="utf-8")
+    assert chez.read_local_tags(f) == (["lab", "work-laptop", "ok-2"], ["bad tag", "under_score", "-leading"])
+    assert chez.read_local_tags(tmp_path / "missing") == ([], [])
+
+
+@needs_chezmoi
+@pytest.mark.skipif(platforms.IS_WINDOWS, reason="HOME is how the home directory is found on Linux")
+def test_config_template_adds_the_local_tags_file(tmp_path):
+    """The same file read by .chezmoi.toml.tmpl at `chezmoi init`: valid lines become tags."""
+    (tmp_path / ".config" / "chezmoi").mkdir(parents=True)
+    tags_file = tmp_path / ".config" / "chezmoi" / "tags"
+    tmpl = chez.source_state_dir() / ".chezmoi.toml.tmpl"
+
+    def rendered() -> list[str]:
+        r = platforms.run(["chezmoi", "--source", str(chez.repo()), "execute-template", "--init", "--file", str(tmpl)],
+                          env={"HOME": str(tmp_path)})
+        assert r.ok, r.stderr
+        import tomllib
+        return tomllib.loads(r.stdout)["data"]["tags"]
+
+    base = rendered()
+    tags_file.write_text("# comment\nLab\nbad tag\n\nwork-laptop\n", encoding="utf-8")
+    assert rendered() == [*base, "lab", "work-laptop"]

@@ -39,9 +39,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="backup state: drift, unmanaged candidates, package manifests, permissions (read-only)")
 
-    s = sub.add_parser("backup", help="re-add managed files -> add candidates -> system config -> package manifests -> check")
+    s = sub.add_parser("backup", help="re-add managed files -> add candidates -> system config (/etc, registry keys) -> package manifests -> check")
     s.add_argument("-n", "--dry-run", action="store_true", help="show what would change")
-    s.add_argument("--no-system", action="store_true", help="skip /etc (Linux); no sudo needed")
+    s.add_argument("--no-system", action="store_true", help="skip system config (/etc on Linux, registry keys on Windows); no sudo needed on Linux")
     s.add_argument("--commit", action="store_true", help="commit after the check passes (no push)")
 
     sub.add_parser("check", help="security check: plaintext secrets / .age format / must-encrypt targets / platform ownership")
@@ -49,9 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("audit", help="sensitive-file permissions (Linux 600/700, Windows ACL)")
     s.add_argument("--apply", action="store_true", help="tighten permissions")
 
-    s = sub.add_parser("system-restore", help="Linux: compare system/ backups with the current /etc; --apply installs")
-    s.add_argument("--apply", action="store_true", help="actually install (needs sudo)")
-    s.add_argument("paths", nargs="*", metavar="/etc/PATH", help="only these paths; hardware-bound files must be named explicitly")
+    s = sub.add_parser("system-restore", help="compare the system/ backup with the live system (/etc on Linux, registry keys on Windows); --apply installs")
+    s.add_argument("--apply", action="store_true", help="actually install (Linux: needs sudo; Windows: an elevated shell for HKLM keys)")
+    s.add_argument("paths", nargs="*", metavar="/etc/PATH", help="only these paths (Windows: registry keys or file names); Linux hardware-bound files must be named explicitly")
     s.add_argument("--distro", metavar="NAME", help="restore from system/NAME instead of this distro's backup")
 
     s = sub.add_parser("clean", help="cache cleanup (preview by default)")
@@ -102,8 +102,11 @@ def dispatch(a: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         from dotfiles.cli import audit
         return audit.cmd_audit(apply=a.apply)
     if a.cmd == "system-restore":
+        if platforms.IS_WINDOWS:
+            from dotfiles.cli import winsys
+            return winsys.cmd_restore(apply=a.apply, filters=a.paths)
         if not platforms.IS_LINUX:
-            raise ui.Abort("system-restore is Linux-only", 2)
+            raise ui.Abort("system-restore supports Linux and Windows only", 2)
         from dotfiles.cli import etc
         return etc.cmd_restore(apply=a.apply, filters=a.paths, distro=a.distro)
     if a.cmd == "clean":

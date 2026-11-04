@@ -186,6 +186,9 @@ def cmd_status() -> int:
     if platforms.IS_LINUX:
         from dotfiles.cli import etc
         etc.status()
+    elif platforms.IS_WINDOWS:
+        from dotfiles.cli import winsys
+        winsys.status()
 
     ui.section("Permission audit")
     from dotfiles.cli import audit
@@ -557,6 +560,9 @@ def cmd_backup(dry: bool, with_system: bool, commit: bool) -> int:
     if with_system and platforms.IS_LINUX:
         from dotfiles.cli import etc
         etc.backup(run)
+    elif with_system and platforms.IS_WINDOWS:
+        from dotfiles.cli import winsys
+        winsys.backup(run)
     backup_packages(dry)
     passed = gate(pending)
     ui.section("Repo status")
