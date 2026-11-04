@@ -2,11 +2,6 @@
 
 Kali 迁移已在 2026-11-04 收尾。两台机器的说明见 [docs/arch.md](docs/arch.md) 和 [docs/kali.md](docs/kali.md)；两台 Linux 共用的同步规则在 [workflows_zh-CN.md](docs/workflows_zh-CN.md) 第 6 节，常见陷阱在 [reference_zh-CN.md](docs/reference_zh-CN.md) 6.5。本文件只记录还没做的事，处理完后删除。
 
-## 1. 需要你在终端里做的（sudo 或外部服务）
-
-- [ ] **Kali**：确认 `/etc` 备份不再重复加密。2026-11-04 在没有 sudo 的情况下验证了一部分：0.5.4 之后 `backup -n` 处理的 10 个文件都没有变化，包括 0644 的 `crypttab`（umask 002 的情况已修好）。还没验证的是只有 root 能读的 `sudoers`、`sudoers.d/*`（0440）和 WiFi 连接文件，要在终端里运行 `uv run dotfiles backup -n`（会要 sudo 密码），应当显示 `0 new or changed`。
-- [ ] **作废旧的 PyPI token**：修剪时从 `secrets.zsh` 删掉的那个注释掉的旧 `UV_PUBLISH_TOKEN`，曾以加密形式存在于仓库历史中。如果它在 PyPI 上还没有作废，去作废它。
-
 ## 2. 工具和规则的改进（走 dev，有需要时再做）
 
 - [ ] **`/etc` 备份跳过和软件包原样一致的文件**：`extra` / `secret` 中直接列出的文件，如果属于某个软件包且没有被改过（pacman 没有 `[modified]` 标记；dpkg 的 md5 相同），就跳过。现在 Kali 会收入 5 个这样的文件（kali.md 第 3 节）。注意：只有 root 可读、没能核对校验和的文件必须当作"已修改"保留；已经在 `system/<发行版>` 中的条目不会自动消失，要另外列清单删除。
