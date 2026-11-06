@@ -45,6 +45,7 @@ linux = [
   ".config/user-dirs.dirs",
   ".config/zellij",
   ".config/zsh/secrets.zsh",
+  ".config/uv/uv.toml",
   ".local/share/konsole/Sweet-Ambar-Blue.colorscheme",
   ".local/share/konsole/Sweet-Mars.colorscheme",
   ".local/share/konsole/Sweet.colorscheme",
